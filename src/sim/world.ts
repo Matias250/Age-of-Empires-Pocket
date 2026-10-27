@@ -14,10 +14,13 @@ import { Rng } from './rng.js';
 export type Order =
   | { t: 'move'; x: number; y: number }
   | { t: 'attackMove'; x: number; y: number; sub?: number }
-  | { t: 'attack'; target: number }
+  | { t: 'attack'; target: number; auto?: boolean }
   | { t: 'gather'; target: number; res: Res; phase: 'go' | 'return' }
   | { t: 'build'; target: number }
   | { t: 'heal'; target: number };
+
+export type Stance = 'agg' | 'def' | 'pas';
+export const STANCE_NAME: Record<Stance, string> = { agg: 'Agresiva', def: 'Neutral', pas: 'Pasiva' };
 
 export interface Entity {
   id: number;
@@ -26,6 +29,8 @@ export interface Entity {
   owner: number;
   x: number; y: number;
   tx: number; ty: number; size: number;
+  /** huella en casillas (ancho y alto); el portón puede ser 3×1 o 1×3 */
+  fw: number; fh: number;
   hp: number; maxHp: number;
   radius: number;
   // unidades
@@ -39,7 +44,14 @@ export interface Entity {
   acquireAt: number;
   facing: number;
   lastNode: number;
+  stance: Stance;
+  /** órdenes en cola (como mantener Shift en el AoE) */
+  cmdQueue: Order[];
+  lastAtk: number;
+  home?: { x: number; y: number };
   // edificios
+  locked?: boolean;
+  techQueue: TechType[];
   progress: number;
   queue: UnitType[]; trainT: number; ageT: number;
   tech?: TechType; techT: number;
@@ -59,17 +71,19 @@ export interface Player {
   defeated: boolean;
   gatherMult: number;
   explored: Uint8Array; visible: Uint8Array;
-  stats: { gathered: ResBag; kills: number; lost: number; trained: number; built: number };
+  stats: { gathered: ResBag; kills: number; lost: number; trained: number; built: number; killValue: number; techValue: number };
   lastPopMsg: number; lastAttackMsg: number;
 }
 
 export type Command =
-  | { t: 'move'; p: number; ids: number[]; x: number; y: number }
-  | { t: 'attackMove'; p: number; ids: number[]; x: number; y: number }
-  | { t: 'target'; p: number; ids: number[]; target: number }
-  | { t: 'build'; p: number; ids: number[]; b: BuildingType; tx: number; ty: number }
+  | { t: 'move'; p: number; ids: number[]; x: number; y: number; queue?: boolean }
+  | { t: 'attackMove'; p: number; ids: number[]; x: number; y: number; queue?: boolean }
+  | { t: 'target'; p: number; ids: number[]; target: number; queue?: boolean }
+  | { t: 'build'; p: number; ids: number[]; b: BuildingType; tx: number; ty: number; vertical?: boolean; queue?: boolean }
+  | { t: 'stance'; p: number; ids: number[]; stance: Stance }
+  | { t: 'gateLock'; p: number; bid: number }
   | { t: 'train'; p: number; bid: number; u: UnitType }
-  | { t: 'cancel'; p: number; bid: number }
+  | { t: 'cancel'; p: number; bid: number; what?: 'tech' | 'unit' }
   | { t: 'age'; p: number; bid: number }
   | { t: 'rally'; p: number; bid: number; x: number; y: number }
   | { t: 'research'; p: number; bid: number; tech: TechType }
@@ -118,7 +132,7 @@ export class World implements Grid {
   private ownBuildings: Entity[][] = [];
   private popCache: number[] = [];
   private capCache: number[] = [];
-  private farmUsers = new Set<number>();
+  private farmClaim = new Map<number, number>();
   private buckets = new Map<number, Entity[]>();
   private allBuildings: Entity[] = [];
 
@@ -138,7 +152,7 @@ export class World implements Grid {
       id: this.players.length, team, name, color, isAI, civ, mods,
       res: { ...START_RES }, age: 1, techs: new Set(mods.freeTechs ?? []), defeated: false, gatherMult: 1,
       explored: new Uint8Array(this.w * this.h), visible: new Uint8Array(this.w * this.h),
-      stats: { gathered: { food: 0, wood: 0, gold: 0, stone: 0 }, kills: 0, lost: 0, trained: 0, built: 0 },
+      stats: { gathered: { food: 0, wood: 0, gold: 0, stone: 0 }, kills: 0, lost: 0, trained: 0, built: 0, killValue: 0, techValue: 0 },
       lastPopMsg: -999, lastAttackMsg: -999,
     };
     for (const r of RES_LIST) p.res[r] += mods.startBonus?.[r] ?? 0;
@@ -149,9 +163,9 @@ export class World implements Grid {
 
   private blank(cat: Entity['cat'], type: Entity['type'], owner: number): Entity {
     return {
-      id: this.nextId++, cat, type, owner, x: 0, y: 0, tx: 0, ty: 0, size: 0, hp: 1, maxHp: 1, radius: 0,
+      id: this.nextId++, cat, type, owner, x: 0, y: 0, tx: 0, ty: 0, size: 0, fw: 0, fh: 0, hp: 1, maxHp: 1, radius: 0,
       path: [], pathKey: '', repathAt: 0, carry: 0, gatherAcc: 0, cooldown: 0, lastHitBy: 0, acquireAt: 0,
-      facing: 0, lastNode: 0, progress: 1, queue: [], trainT: 0, ageT: -1, techT: 0, amount: 0,
+      facing: 0, lastNode: 0, stance: 'agg', cmdQueue: [], lastAtk: -999, techQueue: [], progress: 1, queue: [], trainT: 0, ageT: -1, techT: 0, amount: 0,
     };
   }
 
@@ -172,7 +186,7 @@ export class World implements Grid {
       if (this.terrain[i] !== 1 || this.occ[i]) return null;
     } else if (!this.areaFree(tx, ty, 1)) return null;
     const e = this.blank('node', type, -1);
-    e.tx = tx; e.ty = ty; e.size = 1;
+    e.tx = tx; e.ty = ty; e.size = 1; e.fw = 1; e.fh = 1;
     e.x = (tx + 0.5) * TILE; e.y = (ty + 0.5) * TILE;
     e.amount = NODES[type].amount;
     e.radius = 12;
@@ -181,11 +195,18 @@ export class World implements Grid {
     return e;
   }
 
-  placeBuilding(owner: number, type: BuildingType, tx: number, ty: number, complete: boolean): Entity {
+  /** Huella de un edificio: el portón mide 3 de largo (horizontal o vertical) */
+  footprint(type: BuildingType, vertical = false): [number, number] {
+    if (type === 'gate') return vertical ? [1, 3] : [3, 1];
+    const s = BUILDINGS[type].size; return [s, s];
+  }
+
+  placeBuilding(owner: number, type: BuildingType, tx: number, ty: number, complete: boolean, vertical = false): Entity {
     const d = BUILDINGS[type];
     const e = this.blank('building', type, owner);
-    e.tx = tx; e.ty = ty; e.size = d.size;
-    e.x = (tx + d.size / 2) * TILE; e.y = (ty + d.size / 2) * TILE;
+    const [fw, fh] = this.footprint(type, vertical);
+    e.tx = tx; e.ty = ty; e.size = Math.max(fw, fh); e.fw = fw; e.fh = fh;
+    e.x = (tx + fw / 2) * TILE; e.y = (ty + fh / 2) * TILE;
     e.maxHp = Math.round(d.hp * this.buildingHpMult(owner, type));
     e.progress = complete ? 1 : 0;
     e.hp = complete ? e.maxHp : Math.max(1, e.maxHp * 0.05);
@@ -212,7 +233,7 @@ export class World implements Grid {
     this.solid[i] = t === 1 || (o && o.type !== 'farm') ? 1 : 0;
     this.nav.solid[i] = t === 0 || o ? 1 : 0;
     // las puertas se abren solo para su equipo
-    const gateTeam = o && o.type === 'gate' && o.owner >= 0 ? this.players[o.owner]?.team : undefined;
+    const gateTeam = o && o.type === 'gate' && o.owner >= 0 && !o.locked ? this.players[o.owner]?.team : undefined;
     for (const [team, g] of this.teamGrids) g.solid[i] = gateTeam !== undefined && gateTeam === team ? 0 : this.solid[i];
   }
 
@@ -225,15 +246,16 @@ export class World implements Grid {
     if (!g) {
       g = { w: this.w, h: this.h, solid: this.solid.slice() };
       for (const e of this.entities.values())
-        if (e.type === 'gate' && e.owner >= 0 && this.players[e.owner].team === team) g.solid[e.ty * this.w + e.tx] = 0;
+        if (e.type === 'gate' && e.owner >= 0 && !e.locked && this.players[e.owner].team === team)
+          for (let y = e.ty; y < e.ty + e.fh; y++) for (let x = e.tx; x < e.tx + e.fw; x++) g.solid[y * this.w + x] = 0;
       this.teamGrids.set(team, g);
     }
     return g;
   }
 
   private occupy(e: Entity, on: boolean) {
-    for (let y = e.ty; y < e.ty + e.size; y++)
-      for (let x = e.tx; x < e.tx + e.size; x++) {
+    for (let y = e.ty; y < e.ty + e.fh; y++)
+      for (let x = e.tx; x < e.tx + e.fw; x++) {
         const i = y * this.w + x;
         this.occ[i] = on ? e.id : 0;
         this.refreshCell(i);
@@ -386,7 +408,7 @@ export class World implements Grid {
     return CARRY + (this.hasTech(u.owner, 'wheelbarrow') ? 5 : 0);
   }
   isResearching(p: number, t?: TechType): boolean {
-    for (const b of this.buildingsOf(p)) if (b.tech && (!t || b.tech === t)) return true;
+    for (const b of this.buildingsOf(p)) if ((b.tech && (!t || b.tech === t)) || (t ? b.techQueue.includes(t) : b.techQueue.length)) return true;
     return false;
   }
   /** ¿Puede `u` atacar a `t`? (p. ej. la infantería no alcanza a los barcos) */
@@ -400,15 +422,21 @@ export class World implements Grid {
     return true;
   }
 
-  canPlace(p: number, type: BuildingType, tx: number, ty: number): string | null {
+  canPlace(p: number, type: BuildingType, tx: number, ty: number, vertical = false): string | null {
     const d = BUILDINGS[type];
     const pl = this.players[p];
+    const [fw, fh] = this.footprint(type, vertical);
     if (pl.age < d.age) return `Requiere la ${AGE_NAME[d.age]}`;
     if (d.onWater) { if (!this.dockSpotOk(tx, ty)) return 'El muelle va en el agua, pegado a la costa'; }
-    else if (d.onWall && this.ownWallAt(p, tx, ty)) { /* reemplaza el tramo de muralla */ }
-    else if (!this.areaFree(tx, ty, d.size)) return d.onWall ? 'La puerta va sobre tu muralla o en un lugar libre' : 'No se puede construir ahí';
-    for (let y = ty; y < ty + d.size; y++)
-      for (let x = tx; x < tx + d.size; x++) if (!pl.explored[y * this.w + x]) return 'Terreno sin explorar';
+    else if (d.onWall) {
+      for (let y = ty; y < ty + fh; y++)
+        for (let x = tx; x < tx + fw; x++) {
+          if (this.ownWallAt(p, x, y)) continue;
+          if (!this.areaFree(x, y, 1)) return 'El portón va sobre tu muralla o en un lugar libre';
+        }
+    } else if (!this.areaFree(tx, ty, d.size)) return 'No se puede construir ahí';
+    for (let y = ty; y < ty + fh; y++)
+      for (let x = tx; x < tx + fw; x++) if (!pl.explored[y * this.w + x]) return 'Terreno sin explorar';
     return null;
   }
 
@@ -440,7 +468,6 @@ export class World implements Grid {
     this.ownBuildings = Array.from({ length: n }, () => []);
     this.popCache = new Array(n).fill(0);
     this.capCache = new Array(n).fill(0);
-    this.farmUsers.clear();
     this.buckets.clear();
     this.allBuildings = [];
     for (const e of this.entities.values()) {
@@ -448,7 +475,6 @@ export class World implements Grid {
       if (e.cat === 'unit') {
         this.ownUnits[e.owner].push(e);
         this.popCache[e.owner]++;
-        if (e.order?.t === 'gather') this.farmUsers.add(e.order.target);
         const k = Math.floor(e.x / CELL) * 4096 + Math.floor(e.y / CELL);
         let b = this.buckets.get(k); if (!b) this.buckets.set(k, (b = [])); b.push(e);
       } else if (e.cat === 'building') {
@@ -490,7 +516,7 @@ export class World implements Grid {
 
   edgeDist(u: Entity, t: Entity): number {
     if (t.cat === 'unit') return Math.hypot(u.x - t.x, u.y - t.y) - u.radius - t.radius;
-    const x0 = t.tx * TILE, y0 = t.ty * TILE, x1 = x0 + t.size * TILE, y1 = y0 + t.size * TILE;
+    const x0 = t.tx * TILE, y0 = t.ty * TILE, x1 = x0 + t.fw * TILE, y1 = y0 + t.fh * TILE;
     const cx = Math.max(x0, Math.min(u.x, x1)), cy = Math.max(y0, Math.min(u.y, y1));
     return Math.hypot(u.x - cx, u.y - cy) - u.radius;
   }
@@ -527,31 +553,44 @@ export class World implements Grid {
         const slots = formation(us.length);
         us.forEach((u, i) => {
           const x = c.x + slots[i][0], y = c.y + slots[i][1];
-          this.setOrder(u, c.t === 'move' ? { t: 'move', x, y } : { t: 'attackMove', x, y });
+          this.give(u, c.t === 'move' ? { t: 'move', x, y } : { t: 'attackMove', x, y }, c.queue);
         });
         break;
       }
       case 'stop':
-        for (const u of own(c.ids)) this.setOrder(u, undefined);
+        for (const u of own(c.ids)) { u.cmdQueue = []; this.setOrder(u, undefined); }
         break;
       case 'target': {
         const t = this.entities.get(c.target);
         if (!t) return;
-        for (const u of own(c.ids)) this.orderOnTarget(u, t);
+        for (const u of own(c.ids)) this.give(u, this.orderFor(u, t), c.queue);
+        break;
+      }
+      case 'stance':
+        for (const u of own(c.ids)) { u.stance = c.stance; u.home = undefined; if (c.stance === 'pas' && u.order?.t === 'attack' && u.order.auto) this.setOrder(u, undefined); }
+        break;
+      case 'gateLock': {
+        const b = this.entities.get(c.bid);
+        if (!b || b.owner !== c.p || b.type !== 'gate') return;
+        b.locked = !b.locked;
+        for (let y = b.ty; y < b.ty + b.fh; y++) for (let x = b.tx; x < b.tx + b.fw; x++) this.refreshCell(y * this.w + x);
+        msg(b.locked ? 'Portón bloqueado' : 'Portón abierto para tu equipo');
         break;
       }
       case 'build': {
         const us = own(c.ids).filter((u) => u.type === 'villager');
         if (!us.length) return;
-        const why = this.canPlace(c.p, c.b, c.tx, c.ty);
+        const why = this.canPlace(c.p, c.b, c.tx, c.ty, c.vertical);
         if (why) { msg(why); return; }
         const cost = this.buildingCost(c.p, c.b);
         if (!this.canAfford(c.p, cost)) { msg('Recursos insuficientes'); return; }
         this.pay(c.p, cost);
-        const old = BUILDINGS[c.b].onWall ? this.ownWallAt(c.p, c.tx, c.ty) : undefined;
-        if (old) this.remove(old.id);
-        const b = this.placeBuilding(c.p, c.b, c.tx, c.ty, false);
-        for (const u of us) this.setOrder(u, { t: 'build', target: b.id });
+        if (BUILDINGS[c.b].onWall) {
+          const [fw, fh] = this.footprint(c.b, c.vertical);
+          for (let y = c.ty; y < c.ty + fh; y++) for (let x = c.tx; x < c.tx + fw; x++) { const old = this.ownWallAt(c.p, x, y); if (old) this.remove(old.id); }
+        }
+        const b = this.placeBuilding(c.p, c.b, c.tx, c.ty, false, c.vertical);
+        for (const u of us) this.give(u, { t: 'build', target: b.id }, c.queue);
         break;
       }
       case 'train': {
@@ -571,15 +610,20 @@ export class World implements Grid {
       case 'cancel': {
         const b = this.entities.get(c.bid);
         if (!b || b.owner !== c.p) return;
-        if (b.ageT >= 0) { b.ageT = -1; this.refund(c.p, this.ageCost(c.p, (pl.age + 1) as 2 | 3 | 4)); return; }
-        if (b.tech) { this.refund(c.p, this.techCost(c.p, b.tech)); b.tech = undefined; b.techT = 0; return; }
+        if (c.what === 'tech') {
+          const q = b.techQueue.pop();
+          if (q) { this.refund(c.p, this.techCost(c.p, q)); return; }
+          if (b.tech) { this.refund(c.p, this.techCost(c.p, b.tech)); b.tech = undefined; b.techT = 0; }
+          return;
+        }
+        if (b.ageT >= 0 && !b.queue.length) { b.ageT = -1; this.refund(c.p, this.ageCost(c.p, (pl.age + 1) as 2 | 3 | 4)); return; }
         const u = b.queue.pop();
         if (u) { this.refund(c.p, this.unitCost(c.p, u)); if (!b.queue.length) b.trainT = 0; this.dirty = true; }
         break;
       }
       case 'age': {
         const b = this.entities.get(c.bid);
-        if (!b || b.owner !== c.p || b.type !== 'towncenter' || b.progress < 1 || b.tech) return;
+        if (!b || b.owner !== c.p || b.type !== 'towncenter' || b.progress < 1) return;
         if (pl.age >= 4 || this.isResearchingAge(c.p)) return;
         const cost = this.ageCost(c.p, (pl.age + 1) as 2 | 3 | 4);
         if (!this.canAfford(c.p, cost)) { msg('Recursos insuficientes'); return; }
@@ -589,7 +633,7 @@ export class World implements Grid {
       }
       case 'research': {
         const b = this.entities.get(c.bid);
-        if (!b || b.owner !== c.p || b.cat !== 'building' || b.progress < 1 || b.tech || b.ageT >= 0) return;
+        if (!b || b.owner !== c.p || b.cat !== 'building' || b.progress < 1 || b.techQueue.length >= 5) return;
         const td = TECHS[c.tech];
         if (!BUILDINGS[b.type as BuildingType].research?.includes(c.tech)) return;
         if (pl.techs.has(c.tech) || this.isResearching(c.p, c.tech)) return;
@@ -597,7 +641,7 @@ export class World implements Grid {
         const cost = this.techCost(c.p, c.tech);
         if (!this.canAfford(c.p, cost)) { msg('Recursos insuficientes'); return; }
         this.pay(c.p, cost);
-        b.tech = c.tech; b.techT = 0;
+        if (!b.tech) { b.tech = c.tech; b.techT = 0; } else b.techQueue.push(c.tech);
         break;
       }
       case 'trade': {
@@ -623,53 +667,77 @@ export class World implements Grid {
     }
   }
 
+  /** Puntuación al estilo AoE */
+  score(p: number) {
+    const st = this.players[p].stats;
+    const eco = Math.floor((st.gathered.food + st.gathered.wood + st.gathered.gold + st.gathered.stone) / 10);
+    const mil = Math.floor(st.killValue / 5);
+    const tech = Math.floor(st.techValue / 5);
+    return { eco, mil, tech, total: eco + mil + tech };
+  }
+
   isResearchingAge(p: number): boolean {
     for (const b of this.buildingsOf(p, 'towncenter')) if (b.ageT >= 0) return true;
     return false;
   }
 
+  /** Da una orden; con `queue` se agrega al final de la cola */
+  give(u: Entity, o: Order | undefined, queue?: boolean) {
+    u.home = undefined;
+    if (queue && (u.order || u.cmdQueue.length)) { if (o) u.cmdQueue.push(o); return; }
+    u.cmdQueue = [];
+    this.setOrder(u, o);
+  }
+
+  /** ¿La granja está libre para este aldeano? (una granja, un aldeano) */
+  farmFree(f: Entity, u: Entity): boolean {
+    const c = this.farmClaim.get(f.id);
+    if (!c || c === u.id) return true;
+    const cu = this.entities.get(c);
+    return !cu || cu.hp <= 0 || cu.order?.t !== 'gather' || cu.order.target !== f.id;
+  }
+
   /** Orden contextual: recolectar, construir, atacar o moverse según el objetivo. */
-  orderOnTarget(u: Entity, t: Entity) {
+  orderOnTarget(u: Entity, t: Entity) { this.setOrder(u, this.orderFor(u, t)); }
+
+  orderFor(u: Entity, t: Entity): Order | undefined {
     const d = UNITS[u.type as UnitType];
     const isVill = u.type === 'villager';
-    const moveNear = () => this.setOrder(u, { t: 'move', x: t.x, y: t.y + (t.cat === 'building' ? t.size * TILE * 0.5 + 12 : TILE) });
-    if (d.heals) {
-      if (t.cat === 'unit' && !this.isEnemy(u.owner, t.owner) && t.id !== u.id) this.setOrder(u, { t: 'heal', target: t.id });
-      else moveNear();
-      return;
-    }
+    const near: Order = { t: 'move', x: t.x, y: t.y + (t.cat === 'building' ? t.fh * TILE * 0.5 + 12 : TILE) };
+    if (d.heals) return t.cat === 'unit' && !this.isEnemy(u.owner, t.owner) && t.id !== u.id ? { t: 'heal', target: t.id } : near;
     if (t.cat === 'node') {
       const isFish = t.type === 'fish';
-      if ((isVill && !isFish) || (d.gathers && isFish)) this.setOrder(u, { t: 'gather', target: t.id, res: NODES[t.type as NodeType].res, phase: 'go' });
-      else moveNear();
-      return;
+      if ((isVill && !isFish) || (d.gathers && isFish)) return { t: 'gather', target: t.id, res: NODES[t.type as NodeType].res, phase: 'go' };
+      return near;
     }
-    if (this.isEnemy(u.owner, t.owner)) {
-      if (!this.canTarget(u, t)) { moveNear(); return; }
-      this.setOrder(u, { t: 'attack', target: t.id });
-      return;
-    }
+    if (this.isEnemy(u.owner, t.owner)) return this.canTarget(u, t) ? { t: 'attack', target: t.id } : near;
     if (t.cat === 'building' && isVill && this.players[t.owner].team === this.players[u.owner].team) {
-      if (t.progress < 1 || t.hp < t.maxHp) { this.setOrder(u, { t: 'build', target: t.id }); return; }
-      if (t.type === 'farm' && t.owner === u.owner) { this.setOrder(u, { t: 'gather', target: t.id, res: 'food', phase: 'go' }); return; }
+      if (t.progress < 1 || t.hp < t.maxHp) return { t: 'build', target: t.id };
+      if (t.type === 'farm' && t.owner === u.owner) {
+        if (this.farmFree(t, u)) return { t: 'gather', target: t.id, res: 'food', phase: 'go' };
+        const other = this.findNode(u, 'food', 8 * TILE, true);
+        if (other) return { t: 'gather', target: other.id, res: 'food', phase: 'go' };
+        this.events.push({ t: 'msg', p: u.owner, text: 'Esa granja ya tiene un granjero' });
+        return near;
+      }
       const drop = BUILDINGS[t.type as BuildingType].drop;
       if (u.carry > 0 && u.carryRes && drop?.includes(u.carryRes) && t.owner === u.owner && t.type !== 'dock') {
         const node = this.entities.get(u.lastNode);
-        this.setOrder(u, { t: 'gather', target: node ? node.id : 0, res: u.carryRes, phase: 'return' });
-        return;
+        return { t: 'gather', target: node ? node.id : 0, res: u.carryRes, phase: 'return' };
       }
     }
-    if (t.cat === 'building' && t.type === 'dock' && d.gathers && t.owner === u.owner && u.carry > 0) {
-      this.setOrder(u, { t: 'gather', target: u.lastNode, res: 'food', phase: 'return' });
-      return;
-    }
-    moveNear();
+    if (t.cat === 'building' && t.type === 'dock' && d.gathers && t.owner === u.owner && u.carry > 0) return { t: 'gather', target: u.lastNode, res: 'food', phase: 'return' };
+    return near;
   }
 
   setOrder(u: Entity, o: Order | undefined) {
+    if (!o && u.cmdQueue?.length) o = u.cmdQueue.shift();
     u.order = o;
     u.path = []; u.pathKey = ''; u.repathAt = 0;
-    if (o?.t === 'gather') this.farmUsers.add(o.target);
+    if (o?.t === 'gather') {
+      const f = this.entities.get(o.target);
+      if (f && f.type === 'farm') this.farmClaim.set(f.id, u.id);
+    }
   }
 
   // ------------------------------------------------------------ simulación
@@ -706,6 +774,7 @@ export class World implements Grid {
   private finishTech(p: number, t: TechType) {
     const pl = this.players[p];
     pl.techs.add(t);
+    pl.stats.techValue += sumCost(this.techCost(p, t));
     if (t === 'masonry' || t === 'architecture') {
       for (const b of this.buildingsOf(p)) { b.maxHp = Math.round(b.maxHp * 1.1); b.hp *= 1.1; }
     }
@@ -718,6 +787,8 @@ export class World implements Grid {
     if (b.progress < 1) return;
     const bd = BUILDINGS[b.type as BuildingType];
     const pl = this.players[b.owner];
+    // las investigaciones corren en paralelo al entrenamiento, una tras otra por edificio
+    if (!b.tech && b.techQueue.length) { b.tech = b.techQueue.shift(); b.techT = 0; }
     if (b.tech) {
       b.techT += DT;
       if (b.techT >= TECHS[b.tech].time) {
@@ -725,11 +796,13 @@ export class World implements Grid {
         b.tech = undefined; b.techT = 0;
         this.finishTech(b.owner, t);
       }
-    } else if (b.ageT >= 0) {
+    }
+    if (b.ageT >= 0) {
       b.ageT += DT;
       const next = (pl.age + 1) as 2 | 3 | 4;
       if (b.ageT >= AGE_UPS[next].time) {
         b.ageT = -1; pl.age = next;
+        pl.stats.techValue += sumCost(this.ageCost(b.owner, next));
         this.events.push({ t: 'age', p: b.owner, age: next });
         this.events.push({ t: 'msg', p: b.owner, text: `¡Avanzaste a la ${AGE_NAME[next]}!` });
       }
@@ -824,7 +897,11 @@ export class World implements Grid {
       tp.lastAttackMsg = this.tick;
       this.events.push({ t: 'attacked', p: t.owner, x: t.x, y: t.y });
     }
-    if (t.hp <= 0 && src.owner >= 0) this.players[src.owner].stats.kills++;
+    if (t.hp <= 0 && src.owner >= 0) {
+      const st = this.players[src.owner].stats;
+      st.kills++;
+      st.killValue += sumCost(t.cat === 'unit' ? UNITS[t.type as UnitType].cost : BUILDINGS[t.type as BuildingType].cost);
+    }
   }
 
   // ---------------------------------------------------------- unidades
@@ -857,6 +934,11 @@ export class World implements Grid {
       case 'attack': {
         const t = this.get(o.target);
         if (!t || t.hp <= 0) { this.setOrder(u, undefined); break; }
+        // modo neutral: no perseguir lejos de su puesto
+        if (o.auto && u.stance === 'def' && u.home && Math.hypot(u.x - u.home.x, u.y - u.home.y) > 6 * TILE) {
+          this.setOrder(u, { t: 'move', x: u.home.x, y: u.home.y });
+          break;
+        }
         if (!this.attackStep(u, d, t)) this.setOrder(u, undefined);
         break;
       }
@@ -880,6 +962,8 @@ export class World implements Grid {
     if (this.tick < u.acquireAt) return;
     u.acquireAt = this.tick + 10;
     if (u.type === 'villager' || d.gathers) return;
+    if (u.stance === 'pas' && !d.heals) return;
+    if (u.stance === 'def' && !u.home) u.home = { x: u.x, y: u.y };
     if (d.heals) {
       let best: Entity | undefined, bd = d.sight * TILE;
       this.forUnitsNear(u.x, u.y, bd, (e) => {
@@ -890,14 +974,16 @@ export class World implements Grid {
       if (best) this.setOrder(u, { t: 'heal', target: (best as Entity).id });
       return;
     }
+    const reach = u.stance === 'def' ? Math.min(d.sight * TILE, this.rangeOf(u) + 3 * TILE) : Math.max(d.sight * TILE, this.rangeOf(u));
     const hitter = this.get(u.lastHitBy);
-    if (hitter && hitter.hp > 0 && this.isEnemy(u.owner, hitter.owner) && this.canTarget(u, hitter)) {
-      this.setOrder(u, { t: 'attack', target: hitter.id });
+    if (hitter && hitter.hp > 0 && this.isEnemy(u.owner, hitter.owner) && this.canTarget(u, hitter) && (u.stance === 'agg' || this.edgeDist(u, hitter) < reach + TILE)) {
+      this.setOrder(u, { t: 'attack', target: hitter.id, auto: true });
       u.lastHitBy = 0;
       return;
     }
-    const e = this.findEnemy(u, Math.max(d.sight * TILE, this.rangeOf(u)));
-    if (e) this.setOrder(u, { t: 'attack', target: e.id });
+    const e = this.findEnemy(u, reach);
+    if (e) this.setOrder(u, { t: 'attack', target: e.id, auto: true });
+    else if (u.stance === 'def' && u.home && Math.hypot(u.x - u.home.x, u.y - u.home.y) > TILE) this.setOrder(u, { t: 'move', x: u.home.x, y: u.home.y });
   }
 
   findEnemy(u: Entity, range: number): Entity | undefined {
@@ -930,6 +1016,7 @@ export class World implements Grid {
       u.facing = Math.atan2(t.y - u.y, t.x - u.x);
       if (u.cooldown <= 0) {
         u.cooldown = this.cooldownOf(u);
+        u.lastAtk = this.tick;
         const atk = this.attackOf(u);
         this.dealDamage(u, t, atk, d.atkType, d.bonus);
         if (d.projectile && d.projectile !== 'fire') this.events.push({ t: 'shot', x1: u.x, y1: u.y, x2: t.x, y2: t.y, kind: d.projectile });
@@ -978,11 +1065,14 @@ export class World implements Grid {
     const open = base.slice();
     let any = false;
     for (const b of this.allBuildings)
-      if (this.isWallLike(b) && this.isEnemy(u.owner, b.owner)) { open[b.ty * this.w + b.tx] = 0; any = true; }
+      if (this.isWallLike(b) && this.isEnemy(u.owner, b.owner)) {
+        for (let y = b.ty; y < b.ty + b.fh; y++) for (let x = b.tx; x < b.tx + b.fw; x++) open[y * this.w + x] = 0;
+        any = true;
+      }
     if (!any) return undefined;
     const goalR = range + TILE * 0.75;
     const x0 = t.cat === 'unit' ? t.x : t.tx * TILE, y0 = t.cat === 'unit' ? t.y : t.ty * TILE;
-    const x1 = t.cat === 'unit' ? t.x : x0 + t.size * TILE, y1 = t.cat === 'unit' ? t.y : y0 + t.size * TILE;
+    const x1 = t.cat === 'unit' ? t.x : x0 + t.fw * TILE, y1 = t.cat === 'unit' ? t.y : y0 + t.fh * TILE;
     const tiles = findPath({ w: this.w, h: this.h, solid: open }, Math.floor(u.x / TILE), Math.floor(u.y / TILE), (x, y) => {
       const px = (x + 0.5) * TILE, py = (y + 0.5) * TILE;
       const cx = Math.max(x0, Math.min(px, x1)), cy = Math.max(y0, Math.min(py, y1));
@@ -1023,7 +1113,7 @@ export class World implements Grid {
     }
     let node = this.get(o.target);
     const valid = (n: Entity | undefined) => !!n && n.hp > 0 && n.amount > 0 &&
-      ((n.cat === 'node' && (n.type === 'fish') === naval) || (!naval && n.type === 'farm' && n.owner === u.owner && n.progress >= 1));
+      ((n.cat === 'node' && (n.type === 'fish') === naval) || (!naval && n.type === 'farm' && n.owner === u.owner && n.progress >= 1 && this.farmFree(n, u)));
     if (!valid(node)) {
       node = this.findNode(u, o.res, 10 * TILE);
       if (!node) {
@@ -1032,7 +1122,7 @@ export class World implements Grid {
         return;
       }
       o.target = node.id;
-      this.farmUsers.add(node.id);
+      if (node.type === 'farm') this.farmClaim.set(node.id, u.id);
       u.path = []; u.pathKey = '';
     }
     const n = node!;
@@ -1069,7 +1159,7 @@ export class World implements Grid {
   }
 
   private insideRect(u: Entity, b: Entity): boolean {
-    return u.x >= b.tx * TILE && u.x <= (b.tx + b.size) * TILE && u.y >= b.ty * TILE && u.y <= (b.ty + b.size) * TILE;
+    return u.x >= b.tx * TILE && u.x <= (b.tx + b.fw) * TILE && u.y >= b.ty * TILE && u.y <= (b.ty + b.fh) * TILE;
   }
 
   private buildStep(u: Entity, o: Extract<Order, { t: 'build' }>) {
@@ -1100,7 +1190,12 @@ export class World implements Grid {
   }
 
   private afterBuild(u: Entity, b: Entity) {
-    if (b.type === 'farm' && b.owner === u.owner) { this.setOrder(u, { t: 'gather', target: b.id, res: 'food', phase: 'go' }); return; }
+    if (u.cmdQueue.length) { this.setOrder(u, undefined); return; }
+    if (b.type === 'farm' && b.owner === u.owner) {
+      if (this.farmFree(b, u)) { this.setOrder(u, { t: 'gather', target: b.id, res: 'food', phase: 'go' }); return; }
+      const other = this.findNode(u, 'food', 8 * TILE, true);
+      if (other) { this.setOrder(u, { t: 'gather', target: other.id, res: 'food', phase: 'go' }); return; }
+    }
     const drop = BUILDINGS[b.type as BuildingType].drop;
     if (drop && b.type !== 'towncenter' && b.type !== 'dock') {
       for (const r of drop) {
@@ -1130,7 +1225,7 @@ export class World implements Grid {
     return best;
   }
 
-  findNode(from: Entity, r: Res, range: number): Entity | undefined {
+  findNode(from: Entity, r: Res, range: number, onlyFarms = false): Entity | undefined {
     const naval = this.isNaval(from);
     this.index();
     const bad = from.owner >= 0 ? this.unreachable.get(this.players[from.owner].team) : undefined;
@@ -1139,8 +1234,8 @@ export class World implements Grid {
       if (e.amount <= 0 || bad?.has(e.id)) continue;
       if (Math.abs(e.x - from.x) > bd || Math.abs(e.y - from.y) > bd) continue;
       let ok = false;
-      if (e.cat === 'node') ok = NODES[e.type as NodeType].res === r && (e.type === 'fish') === naval;
-      else if (!naval && r === 'food' && e.type === 'farm' && e.owner === from.owner && e.progress >= 1) ok = !this.farmUsers.has(e.id);
+      if (e.cat === 'node') ok = !onlyFarms && NODES[e.type as NodeType].res === r && (e.type === 'fish') === naval;
+      else if (!naval && r === 'food' && e.type === 'farm' && e.owner === from.owner && e.progress >= 1) ok = this.farmFree(e, from);
       if (!ok) continue;
       const d = Math.hypot(e.x - from.x, e.y - from.y);
       if (d < bd) { bd = d; best = e; }
@@ -1148,7 +1243,7 @@ export class World implements Grid {
     return best;
   }
 
-  farmBusy(f: Entity): boolean { this.index(); return this.farmUsers.has(f.id); }
+  farmBusy(f: Entity): boolean { const c = this.farmClaim.get(f.id); const cu = c ? this.entities.get(c) : undefined; return !!cu && cu.order?.t === 'gather' && cu.order.target === f.id; }
 
   // ---------------------------------------------------------- movimiento
   gridOf(u: Entity): Grid { return this.isNaval(u) ? this.nav : this.teamGrid(this.players[u.owner].team); }
@@ -1162,7 +1257,7 @@ export class World implements Grid {
       const sx = Math.floor(u.x / TILE), sy = Math.floor(u.y / TILE);
       const goalR = Math.max(range, 0) + TILE * 0.75;
       const x0 = t.cat === 'unit' ? t.x : t.tx * TILE, y0 = t.cat === 'unit' ? t.y : t.ty * TILE;
-      const x1 = t.cat === 'unit' ? t.x : x0 + t.size * TILE, y1 = t.cat === 'unit' ? t.y : y0 + t.size * TILE;
+      const x1 = t.cat === 'unit' ? t.x : x0 + t.fw * TILE, y1 = t.cat === 'unit' ? t.y : y0 + t.fh * TILE;
       const tiles = findPath(this.gridOf(u), sx, sy, (x, y) => {
         const px = (x + 0.5) * TILE, py = (y + 0.5) * TILE;
         const cx = Math.max(x0, Math.min(px, x1)), cy = Math.max(y0, Math.min(py, y1));
@@ -1175,8 +1270,8 @@ export class World implements Grid {
     else {
       let px = t.x, py = t.y;
       if (t.cat !== 'unit') {
-        px = Math.max(t.tx * TILE, Math.min(u.x, (t.tx + t.size) * TILE));
-        py = Math.max(t.ty * TILE, Math.min(u.y, (t.ty + t.size) * TILE));
+        px = Math.max(t.tx * TILE, Math.min(u.x, (t.tx + t.fw) * TILE));
+        py = Math.max(t.ty * TILE, Math.min(u.y, (t.ty + t.fh) * TILE));
       }
       this.stepToward(u, px, py);
     }
@@ -1335,6 +1430,8 @@ export class World implements Grid {
     if (aliveTeams.size === 0 && this.winnerTeam < 0) this.winnerTeam = 99;
   }
 }
+
+function sumCost(c: Partial<ResBag>): number { return (c.food ?? 0) + (c.wood ?? 0) + (c.gold ?? 0) + (c.stone ?? 0); }
 
 function scale(c: Partial<ResBag>, k: number): Partial<ResBag> {
   if (k === 1) return c;

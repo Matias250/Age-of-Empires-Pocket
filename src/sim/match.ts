@@ -238,20 +238,25 @@ function makeArena(w: World, bases: Base[]) {
         if (x < 0 || y < 0 || x >= w.w || y >= w.h) continue;
         ring.push({ x, y });
       }
-    // puerta: mirando al centro del mapa
+    // portón de 3 casillas en un tramo recto, mirando al centro del mapa
     const toC = Math.atan2(w.h / 2 - cy, w.w / 2 - cx);
     const gx = Math.round(cx + Math.cos(toC) * r * 1.2), gy = Math.round(cy + Math.sin(toC) * r * 1.2);
-    ring.sort((a, b2) => Math.hypot(a.x - gx, a.y - gy) - Math.hypot(b2.x - gx, b2.y - gy));
-    const g1 = ring[0];
-    const g2 = ring.find((t) => Math.abs(t.x - g1.x) + Math.abs(t.y - g1.y) === 1)!;
+    const isRing = (x: number, y: number) => ring.some((t) => t.x === x && t.y === y);
+    const cands = ring.filter((t) => (isRing(t.x - 1, t.y) && isRing(t.x + 1, t.y)) || (isRing(t.x, t.y - 1) && isRing(t.x, t.y + 1)));
+    cands.sort((a2, b2) => Math.hypot(a2.x - gx, a2.y - gy) - Math.hypot(b2.x - gx, b2.y - gy));
+    const g = cands[0];
+    const vertical = !(isRing(g.x - 1, g.y) && isRing(g.x + 1, g.y));
+    const gateTiles = vertical ? [[g.x, g.y - 1], [g.x, g.y], [g.x, g.y + 1]] : [[g.x - 1, g.y], [g.x, g.y], [g.x + 1, g.y]];
+    const isGate = (t: { x: number; y: number }) => gateTiles.some(([x, y]) => x === t.x && y === t.y);
     for (const t of ring) {
       const i = t.y * w.w + t.x;
       const o = w.get(w.occ[i]);
       if (o && o.cat === 'node') w.remove(o.id);
       else if (o) continue;
       if (w.terrain[i] !== 0) w.setLand(t.x, t.y);
-      w.placeBuilding(p, t === g1 || t === g2 ? 'gate' : 'stonewall', t.x, t.y, true);
+      if (!isGate(t)) w.placeBuilding(p, 'stonewall', t.x, t.y, true);
     }
+    w.placeBuilding(p, 'gate', vertical ? g.x : g.x - 1, vertical ? g.y - 1 : g.y, true, vertical);
     // dos torres de vigía a los costados de la puerta, del lado de adentro
     const px = -Math.sin(toC), py = Math.cos(toC);
     for (const s of [-1, 1]) {

@@ -20,6 +20,10 @@ export class Game {
   placing: BuildingType | null = null;
   ghost: { tx: number; ty: number } | null = null;
   wallStart: { tx: number; ty: number } | null = null;
+  ghostVertical = false;
+  gateRotated = false;
+  /** botón ➕ En cola: las órdenes se suman al final en vez de reemplazar */
+  queueMode = false;
   buildMenu = false;
   paused = false;
   speed = 1;
@@ -143,12 +147,13 @@ export class Game {
     if (this.placing && this.ghost) {
       const d = BUILDINGS[this.placing];
       const tiles = d.line ? this.wallTiles() : [this.ghost];
+      const [fw, fh] = w.footprint(this.placing, this.ghostVertical);
       for (const t of tiles) {
-        const ok = !w.canPlace(this.me, this.placing, t.tx, t.ty);
+        const ok = !w.canPlace(this.me, this.placing, t.tx, t.ty, this.ghostVertical);
         g.fillStyle = ok ? 'rgba(80,220,120,0.35)' : 'rgba(240,80,80,0.4)';
         g.strokeStyle = ok ? '#5ee28a' : '#f05050'; g.lineWidth = 2;
-        g.fillRect(t.tx * TILE, t.ty * TILE, d.size * TILE, d.size * TILE);
-        g.strokeRect(t.tx * TILE, t.ty * TILE, d.size * TILE, d.size * TILE);
+        g.fillRect(t.tx * TILE, t.ty * TILE, fw * TILE, fh * TILE);
+        g.strokeRect(t.tx * TILE, t.ty * TILE, fw * TILE, fh * TILE);
       }
     }
     if (this.box) {
@@ -287,16 +292,36 @@ export class Game {
 
   private ghostUnder(sx: number, sy: number): boolean {
     if (!this.ghost || !this.placing) return false;
-    const w = this.screenToWorld(sx, sy), s = BUILDINGS[this.placing].size;
-    return w.x >= this.ghost.tx * TILE - 16 && w.x <= (this.ghost.tx + s) * TILE + 16 && w.y >= this.ghost.ty * TILE - 16 && w.y <= (this.ghost.ty + s) * TILE + 16;
+    const w = this.screenToWorld(sx, sy);
+    const [fw, fh] = this.world.footprint(this.placing, this.ghostVertical);
+    return w.x >= this.ghost.tx * TILE - 16 && w.x <= (this.ghost.tx + fw) * TILE + 16 && w.y >= this.ghost.ty * TILE - 16 && w.y <= (this.ghost.ty + fh) * TILE + 16;
   }
 
   setGhost(sx: number, sy: number) {
     if (!this.placing) return;
     const p = this.screenToWorld(sx, sy);
-    const s = BUILDINGS[this.placing].size;
-    this.ghost = { tx: Math.round(p.x / TILE - s / 2), ty: Math.round(p.y / TILE - s / 2) };
+    if (this.placing === 'gate' && !this.gateRotated) {
+      // orientar el portón según la muralla que hay debajo
+      const cx = Math.floor(p.x / TILE), cy = Math.floor(p.y / TILE), w = this.world;
+      const wall = (x: number, y: number) => !!w.ownWallAt(this.me, x, y);
+      if (wall(cx, cy - 1) || wall(cx, cy + 1)) this.ghostVertical = !(wall(cx - 1, cy) || wall(cx + 1, cy));
+      else this.ghostVertical = false;
+    }
+    const [fw, fh] = this.world.footprint(this.placing, this.ghostVertical);
+    this.ghost = { tx: Math.round(p.x / TILE - fw / 2), ty: Math.round(p.y / TILE - fh / 2) };
   }
+
+  rotateGhost() {
+    if (this.placing !== 'gate' || !this.ghost) return;
+    const [fw, fh] = this.world.footprint('gate', this.ghostVertical);
+    const cx = this.ghost.tx + fw / 2, cy = this.ghost.ty + fh / 2;
+    this.ghostVertical = !this.ghostVertical; this.gateRotated = true;
+    const [nw, nh] = this.world.footprint('gate', this.ghostVertical);
+    this.ghost = { tx: Math.round(cx - nw / 2), ty: Math.round(cy - nh / 2) };
+  }
+
+  /** ¿Las próximas órdenes se agregan a la cola? (botón ➕ o tecla Shift) */
+  get queuing(): boolean { return this.queueMode || this.keys.has('Shift'); }
 
   /** Casillas de la empalizada entre el primer y el segundo toque */
   wallTiles(): { tx: number; ty: number }[] {
@@ -334,16 +359,17 @@ export class Game {
       const tiles = this.wallTiles().filter((t) => !this.world.canPlace(this.me, b, t.tx, t.ty));
       if (!tiles.length) { this.hud.toast('No se puede construir ahí'); return; }
       // el primer tramo se ordena al final para que los aldeanos arranquen por ahí
-      for (const t of [...tiles].reverse()) this.world.issue({ t: 'build', p: this.me, ids: vills, b, tx: t.tx, ty: t.ty });
+      tiles.forEach((t, i) => this.world.issue({ t: 'build', p: this.me, ids: vills, b, tx: t.tx, ty: t.ty, queue: i > 0 || this.queuing }));
       this.placing = null; this.ghost = null; this.wallStart = null;
       return;
     }
-    const why = this.world.canPlace(this.me, this.placing, this.ghost.tx, this.ghost.ty);
+    const why = this.world.canPlace(this.me, this.placing, this.ghost.tx, this.ghost.ty, this.ghostVertical);
     if (why) { this.hud.toast(why); return; }
     const vills = this.selUnits().filter((u) => u.type === 'villager').map((u) => u.id);
-    this.world.issue({ t: 'build', p: this.me, ids: vills, b: this.placing, tx: this.ghost.tx, ty: this.ghost.ty });
-    const s = BUILDINGS[this.placing].size;
-    this.mark((this.ghost.tx + s / 2) * TILE, (this.ghost.ty + s / 2) * TILE, '#7CFC8A');
+    this.world.issue({ t: 'build', p: this.me, ids: vills, b: this.placing, tx: this.ghost.tx, ty: this.ghost.ty, vertical: this.ghostVertical, queue: this.queuing });
+    const [fw, fh] = this.world.footprint(this.placing, this.ghostVertical);
+    this.mark((this.ghost.tx + fw / 2) * TILE, (this.ghost.ty + fh / 2) * TILE, '#7CFC8A');
+    if (this.queuing) this.hud.toast('Agregado a la cola');
     this.placing = null; this.ghost = null;
   }
 
@@ -373,10 +399,10 @@ export class Game {
     if (units.length && (rightClick || this.shouldCommand(hit, units))) {
       if (!hit) {
         const attack = this.mode === 'attack';
-        w.issue({ t: attack ? 'attackMove' : 'move', p: this.me, ids: units.map((u) => u.id), x: p.x, y: p.y });
+        w.issue({ t: attack ? 'attackMove' : 'move', p: this.me, ids: units.map((u) => u.id), x: p.x, y: p.y, queue: this.queuing });
         this.mark(p.x, p.y, attack ? '#ff6b6b' : '#7CFC8A');
       } else {
-        w.issue({ t: 'target', p: this.me, ids: units.map((u) => u.id), target: hit.id });
+        w.issue({ t: 'target', p: this.me, ids: units.map((u) => u.id), target: hit.id, queue: this.queuing });
         this.mark(hit.x, hit.y, w.isEnemy(this.me, hit.owner) ? '#ff6b6b' : '#ffe08a');
       }
       this.mode = 'normal';
@@ -482,11 +508,24 @@ export class Game {
     const d = BUILDINGS[b];
     if (this.world.players[this.me].age < d.age) { this.hud.toast(`Requiere la ${AGE_NAME[d.age]}`); return; }
     if (!this.world.canAfford(this.me, this.world.buildingCost(this.me, b))) { this.hud.toast('Recursos insuficientes'); return; }
-    this.placing = b; this.buildMenu = false; this.wallStart = null;
+    this.placing = b; this.buildMenu = false; this.wallStart = null; this.ghostVertical = false; this.gateRotated = false;
     if (d.line) { this.ghost = null; this.hud.toast('Tocá dónde empieza la muralla'); return; }
     // fantasma inicial: lugar válido más cercano al centro de la pantalla
     this.setGhost(this.vw / 2, this.vh * 0.42);
     const g0 = this.ghost!;
+    if (b === 'gate') {
+      // buscar el tramo de muralla propia más cercano donde entre el portón
+      for (let r = 0; r < 14; r++)
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const cx = g0.tx + dx, cy = g0.ty + dy;
+          if (!this.world.ownWallAt(this.me, cx, cy)) continue;
+          for (const v of [false, true]) {
+            const tx = v ? cx : cx - 1, ty = v ? cy - 1 : cy;
+            if (!this.world.canPlace(this.me, 'gate', tx, ty, v)) { this.ghost = { tx, ty }; this.ghostVertical = v; return; }
+          }
+        }
+    }
     for (let r = 0; r < (d.onWater ? 24 : 10); r++) {
       for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;

@@ -9,7 +9,9 @@ test('Arena: cada jugador arranca amurallado con 2 puertas y 2 torres', () => {
   const w = m.world;
   for (const p of [0, 1]) {
     assert.ok(w.buildingsOf(p, 'stonewall').length > 40, 'muralla');
-    assert.equal(w.buildingsOf(p, 'gate').length, 2);
+    assert.equal(w.buildingsOf(p, 'gate').length, 1);
+    const g = w.buildingsOf(p, 'gate')[0];
+    assert.equal(g.fw * g.fh, 3, 'portón de 3 casillas');
     assert.equal(w.buildingsOf(p, 'tower').length, 2);
   }
 });
@@ -41,12 +43,25 @@ test('se puede poner una puerta sobre la propia muralla', () => {
   const w = m.world; const p = w.players[0];
   p.age = 2; p.explored.fill(1);
   const wall = w.buildingsOf(0, 'stonewall')[10];
-  assert.equal(w.canPlace(0, 'gate', wall.tx, wall.ty), null);
-  assert.notEqual(w.canPlace(1, 'gate', wall.tx, wall.ty), null, 'no sobre muralla ajena');
+  const vertical = w.canPlace(0, 'gate', wall.tx - 1, wall.ty) !== null;
+  const gx = vertical ? wall.tx : wall.tx - 1, gy = vertical ? wall.ty - 1 : wall.ty;
+  assert.equal(w.canPlace(0, 'gate', gx, gy, vertical), null);
+  assert.notEqual(w.canPlace(1, 'gate', gx, gy, vertical), null, 'no sobre muralla ajena');
   const v = w.unitsOf(0, 'villager').map((u) => u.id);
-  w.issue({ t: 'build', p: 0, ids: v, b: 'gate', tx: wall.tx, ty: wall.ty });
+  w.issue({ t: 'build', p: 0, ids: v, b: 'gate', tx: gx, ty: gy, vertical });
   w.step();
   assert.equal(w.get(w.occ[wall.ty * w.w + wall.tx]).type, 'gate');
+});
+
+test('el portón bloqueado no deja pasar ni a su equipo', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 3, map: 'arena', biome: 'templado' });
+  const w = m.world;
+  const gate = w.buildingsOf(0, 'gate')[0];
+  const i = gate.ty * w.w + gate.tx;
+  w.issue({ t: 'gateLock', p: 0, bid: gate.id }); w.step();
+  assert.equal(w.teamGrid(w.players[0].team).solid[i], 1);
+  w.issue({ t: 'gateLock', p: 0, bid: gate.id }); w.step();
+  assert.equal(w.teamGrid(w.players[0].team).solid[i], 0);
 });
 
 test('tamaños de mapa', () => {

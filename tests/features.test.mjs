@@ -93,3 +93,52 @@ test('las 4 edades se pueden avanzar', () => {
   p.age = 1; p.res = { food: 9999, wood: 9999, gold: 9999, stone: 9999 };
   for (const a of [2, 3, 4]) { w.issue({ t: 'age', p: 0, bid: tc.id }); run(55); assert.equal(p.age, a); }
 });
+
+test('una granja admite un solo aldeano', () => {
+  const { w, tc, run } = setup();
+  const vs = w.unitsOf(0, 'villager').slice(0, 2);
+  let f = null;
+  for (let r = 4; r < 12 && !f; r++) for (let dx = -r; dx <= r && !f; dx++) if (w.areaFree(tc.tx + dx, tc.ty + r, 2, 1)) f = w.placeBuilding(0, 'farm', tc.tx + dx, tc.ty + r, true);
+  w.issue({ t: 'target', p: 0, ids: vs.map((v) => v.id), target: f.id });
+  run(1);
+  const on = vs.filter((v) => v.order?.t === 'gather' && v.order.target === f.id).length;
+  assert.equal(on, 1);
+});
+
+test('cola de órdenes: mover y después construir', () => {
+  const { w, tc, run } = setup();
+  const v = w.unitsOf(0, 'villager')[0];
+  w.issue({ t: 'move', p: 0, ids: [v.id], x: tc.x + 160, y: tc.y + 160 });
+  w.issue({ t: 'move', p: 0, ids: [v.id], x: tc.x - 160, y: tc.y + 160, queue: true });
+  run(0.1);
+  assert.equal(v.cmdQueue.length, 1);
+  run(20);
+  assert.ok(Math.hypot(v.x - (tc.x - 160), v.y - (tc.y + 160)) < 40, 'llegó al segundo punto');
+});
+
+test('actitud pasiva no ataca sola; agresiva sí', () => {
+  const { w, tc, run } = setup();
+  const a = w.spawnUnit(0, 'militia', tc.x + 200, tc.y + 200);
+  const b = w.spawnUnit(0, 'militia', tc.x + 200, tc.y + 230);
+  w.issue({ t: 'stance', p: 0, ids: [a.id], stance: 'pas' });
+  run(0.1);
+  w.spawnUnit(1, 'villager', tc.x + 240, tc.y + 215);
+  run(1);
+  assert.equal(a.order, undefined);
+  assert.equal(b.order?.t, 'attack');
+});
+
+test('investigaciones en cola y en paralelo al entrenamiento', () => {
+  const { w, p, tc, run } = setup();
+  w.issue({ t: 'research', p: 0, bid: tc.id, tech: 'loom' });
+  w.issue({ t: 'research', p: 0, bid: tc.id, tech: 'wheelbarrow' });
+  w.issue({ t: 'train', p: 0, bid: tc.id, u: 'villager' });
+  run(0.1);
+  assert.equal(tc.tech, 'loom');
+  assert.deepEqual(tc.techQueue, ['wheelbarrow']);
+  const v0 = w.unitsOf(0, 'villager').length;
+  run(42);
+  assert.ok(p.techs.has('loom') && p.techs.has('wheelbarrow'));
+  assert.ok(w.unitsOf(0, 'villager').length > v0, 'siguió entrenando aldeanos');
+  assert.ok(w.score(0).tech > 0);
+});

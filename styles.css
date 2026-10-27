@@ -260,3 +260,106 @@ table.players tr.dead { opacity: .45; }
 .setting input:checked + .switch { background: #7a5b1f; border-color: var(--gold); }
 .setting input:checked + .switch::after { transform: translateX(20px); background: #fff3d0; }
 .setting input:focus-visible + .switch { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* =====================================================================
+   v0.5 — Panel inferior que nunca corta botones + celular girado
+   ===================================================================== */
+#res { gap: 10px; flex-wrap: nowrap; overflow: hidden; }
+#res .rs { display: inline-flex; align-items: baseline; gap: 2px; white-space: nowrap; }
+#res sub { font-size: 9.5px; color: var(--dim); background: #0006; border-radius: 6px; padding: 0 4px; margin-left: 2px; vertical-align: baseline; font-variant-numeric: tabular-nums; }
+
+/* Botones de acción: fila desplazable de costado (2 filas), nunca quedan tapados abajo */
+.acts { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, 52px); grid-auto-columns: 74px; gap: 6px;
+  overflow-x: auto; overflow-y: hidden; max-height: none; flex: 1; min-width: 0; align-content: start; flex-wrap: nowrap;
+  touch-action: pan-x; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 3px;
+  -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+.acts::-webkit-scrollbar { height: 4px; } .acts::-webkit-scrollbar-thumb { background: var(--edge); border-radius: 2px; }
+.act { width: 74px; height: 52px; }
+.act.on { border-color: var(--gold); box-shadow: inset 0 0 0 1px #e3b94a88, 0 0 0 2px #e3b94a44; }
+.act.stance.on { border-color: var(--green); box-shadow: inset 0 0 0 1px #5ee28a88; }
+.bar.tech div { background: linear-gradient(90deg, #a78bfa, #c4b5fd); }
+.info { overflow: hidden; }
+
+/* barra de avance de edad */
+#agebar { position: fixed; top: calc(40px + var(--sat)); left: 50%; transform: translateX(-50%); z-index: 6; width: min(300px, 70vw);
+  background: #1c150fee; border: 1px solid var(--gold); border-radius: 12px; padding: 4px 10px 6px; font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }
+#agebar span { position: relative; z-index: 1; color: #fff3d0; }
+#agebar i { position: absolute; left: 0; bottom: 0; height: 4px; background: linear-gradient(90deg, var(--gold), #fff1b8); transition: width .3s linear; }
+#agebar:not([hidden]) ~ #objective { top: calc(76px + var(--sat)); }
+
+/* puntuación */
+#score { position: fixed; top: calc(40px + var(--sat)); left: calc(8px + var(--sal)); z-index: 6; background: #1c150fdd; border: 1px solid var(--edge);
+  border-radius: 12px; padding: 4px 10px; font-size: 12px; cursor: pointer; max-width: calc(100vw - 90px); }
+#score small { color: var(--dim); margin-left: 4px; font-size: 10.5px; }
+#score.open { padding: 6px 8px; max-height: 60vh; overflow: auto; }
+#score.open small { display: block; text-align: center; margin-top: 4px; }
+table.players tr.hd td { color: var(--dim); font-size: 11px; }
+table.players tr.team td { color: var(--gold); font-size: 11px; border-bottom: 1px solid #e3b94a55; }
+table.players td:nth-child(n+4) { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ficha al mantener apretado */
+#tip { position: fixed; z-index: 50; background: linear-gradient(#3a2c1f, #241b13); border: 1px solid var(--gold); border-radius: 12px; padding: 10px 12px;
+  box-shadow: 0 10px 30px #000c; font-size: 12.5px; line-height: 1.4; pointer-events: none; animation: tin .12s ease-out; }
+#tip b:first-child { font-family: Cinzel, serif; font-size: 15px; color: var(--gold); display: block; margin-bottom: 2px; }
+#tip p { margin: 4px 0; }
+#tip .stats { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 4px 0; }
+#tip .good { color: #86efac; } #tip .bad { color: #fca5a5; } #tip .dim { color: var(--dim); font-size: 11.5px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.sheet-head small { font-family: Inter, sans-serif; font-size: 11px; color: var(--dim); margin-left: auto; margin-right: 10px; }
+
+/* ---------- vertical ---------- */
+@media (orientation: portrait) {
+  #bottom { align-items: flex-start; }
+  #panel { flex-direction: column; gap: 4px; }
+  .info { max-height: 64px; }
+  #minimapwrap { width: 92px; height: 92px; }
+  #res { gap: 7px; font-size: 12px; }
+  #sidebtns { top: auto; bottom: calc(196px + var(--sab)); transform: none; }
+}
+
+/* ---------- horizontal en pantallas bajas (celular girado dentro de la app) ---------- */
+@media (orientation: landscape) and (max-height: 500px) {
+  #topbar { padding: calc(2px + var(--sat)) calc(6px + var(--sar)) 2px calc(6px + var(--sal)); gap: 8px; }
+  #res { font-size: 12px; gap: 9px; }
+  #clock { font-size: 11px; }
+  #btnPause { width: 30px; height: 24px; font-size: 12px; }
+  #bottom { padding: 3px calc(6px + var(--sar)) calc(3px + var(--sab)) calc(6px + var(--sal)); gap: 6px; align-items: center; }
+  #minimapwrap { width: 62px; height: 62px; }
+  #panel { flex-direction: row; gap: 8px; align-items: center; }
+  .info { flex: 0 0 auto; width: clamp(120px, 22vw, 200px); min-width: 0; max-height: 62px; gap: 1px; }
+  .info .title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info .sub, .info .dim, .hint { font-size: 10.5px; }
+  .hint { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .chips { flex-wrap: nowrap; overflow: hidden; }
+  .acts { grid-template-rows: 54px; grid-auto-columns: 66px; gap: 5px; }
+  .act { width: 66px; height: 54px; }
+  .act i { font-size: 16px; } .act span { font-size: 9px; } .act em { font-size: 8.5px; }
+  #sidebtns { top: calc(34px + var(--sat)); bottom: calc(76px + var(--sab)); transform: none; gap: 5px; flex-wrap: wrap-reverse; align-content: flex-end; justify-content: center; }
+  #sidebtns button { width: 40px; height: 40px; font-size: 17px; }
+  #agebar, #score { top: calc(32px + var(--sat)); }
+  #agebar:not([hidden]) ~ #objective { top: calc(62px + var(--sat)); }
+  #objective { top: calc(32px + var(--sat)); padding: 3px 10px; font-size: 12px; }
+  #toasts { top: calc(64px + var(--sat)); }
+  .toast { font-size: 12px; padding: 4px 10px; }
+  #dialog { bottom: calc(76px + var(--sab)); padding: 8px 12px; max-height: calc(100% - 110px); overflow: auto; }
+  #dialog .text { font-size: 13px; margin: 4px 0 6px; } #dialog .who { font-size: 14px; } #dialog .who span { font-size: 20px; }
+  #dialog .big { padding: 6px 14px; font-size: 13px; }
+  .card { padding: 12px 16px; } .card h1 { font-size: 26px !important; } .card .big { padding: 9px; }
+  .sheet-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+  .bcard small { display: none; } .bcard { padding: 5px 4px; } .bcard i { font-size: 20px; }
+  .sheet-head { padding: 5px 12px; font-size: 14px; } .sheet-head button { height: 30px; }
+}
+.info { justify-content: flex-start; }
+.info .sub { line-height: 1.2; }
+.bar { height: 5px; margin-top: 1px; }
+@media (orientation: portrait) {
+  .info { max-height: none; }
+  #agebar { left: auto; right: calc(8px + var(--sar)); transform: none; width: min(230px, 55vw); }
+  #score { max-width: 40vw; }
+  #score.open { max-width: calc(100vw - 16px); }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .info { justify-content: center; }
+  .info .dim { display: none; }
+  .bar { height: 4px; }
+}
+@media (orientation: portrait) { #sidebtns { top: calc(96px + var(--sat)); bottom: auto; } }

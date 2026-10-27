@@ -288,7 +288,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
     trains: ['fishship', 'galleon', 'fireship', 'cannongalleon'], drop: ['food'], desc: 'Se construye en el agua, pegado a la costa.',
   },
   wall: { name: 'Empalizada', size: 1, hp: 350, cost: { wood: 4 }, buildTime: 4, age: 1, sight: 1, line: true, desc: 'Muro de madera. Tocá dos puntos para trazarla.' },
-  gate: { name: 'Puerta', size: 1, hp: 1500, cost: { stone: 30 }, buildTime: 15, age: 2, sight: 2, onWall: true, desc: 'Va sobre tu muralla: deja pasar a tu equipo y frena al enemigo.' },
+  gate: { name: 'Portón', size: 3, hp: 2000, cost: { stone: 40 }, buildTime: 20, age: 2, sight: 3, onWall: true, desc: 'Ocupa 3 tramos de tu muralla. Se abre para tu equipo y se puede bloquear.' },
   stonewall: { name: 'Muralla de piedra', size: 1, hp: 1200, cost: { stone: 6 }, buildTime: 7, age: 2, sight: 1, line: true, desc: 'Muro de piedra muy resistente.' },
 };
 

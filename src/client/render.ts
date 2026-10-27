@@ -1,6 +1,6 @@
 // Dibujo del mundo con Canvas 2D. Sin imágenes externas: todo se dibuja con código
 // (terreno, árboles y minas se pre-dibujan una vez como "sprites" para ir rápido en el celular).
-import { BUILDINGS, BuildingType, NodeType, Projectile, Res, TILE, UNITS, UnitType } from '../sim/data.js';
+import { BUILDINGS, BuildingType, NODES, NodeType, Projectile, Res, TILE, UNITS, UnitType } from '../sim/data.js';
 import { Entity, World } from '../sim/world.js';
 import { settings } from './settings.js';
 
@@ -199,9 +199,7 @@ function mineSprite(gold: boolean, snow: boolean): HTMLCanvasElement {
   rock([[-10, -6], [0, -11], [3, -1], [-5, 2]], '#8e8a85');
   rock([[3, -1], [12, -6], [15, 6], [6, 4]], '#5a5753');
   if (snow) rock([[-9, -6], [0, -11], [8, -8], [0, -6]], '#f1f5f9');
-  g.fillStyle = gold ? '#ffd23f' : '#e3e8ec';
-  for (const [dx, dy, r] of [[-6, 3, 2.6], [-1, 6, 2.2], [5, 2, 2.8], [9, 7, 2], [-3, -3, 2]]) { g.beginPath(); g.arc(x + dx, y + dy, r, 0, 7); g.fill(); }
-  if (gold) { g.fillStyle = '#fff8c4'; g.beginPath(); g.arc(x + 4, y + 1, 1, 0, 7); g.fill(); }
+  void gold;
   return c;
 }
 
@@ -262,18 +260,18 @@ export class Renderer {
       const tx = Math.floor(e.x / TILE), ty = Math.floor(e.y / TILE);
       const i = ty * w.w + tx;
       if (e.cat === 'unit') return e.owner === me || !w.isEnemy(me, e.owner) || pl.visible[i] === 1;
-      for (let y = e.ty; y < e.ty + e.size; y++) for (let x = e.tx; x < e.tx + e.size; x++) if (pl.explored[y * w.w + x]) return true;
+      for (let y = e.ty; y < e.ty + e.fh; y++) for (let x = e.tx; x < e.tx + e.fw; x++) if (pl.explored[y * w.w + x]) return true;
       return false;
     };
 
     const list: Entity[] = [];
     for (const e of w.entities.values()) {
-      const r = e.cat === 'unit' ? 24 : e.size * TILE + 20;
+      const r = e.cat === 'unit' ? 24 : e.size * TILE + 40;
       if (e.x + r < vx0 || e.x - r > vx1 || e.y + r < vy0 || e.y - r > vy1) continue;
       if (!visible(e)) continue;
       list.push(e);
     }
-    const depth = (e: Entity) => (e.type === 'farm' ? -1e6 : 0) + (e.cat === 'unit' ? e.y : (e.ty + e.size) * TILE - 6);
+    const depth = (e: Entity) => (e.type === 'farm' ? -1e6 : 0) + (e.cat === 'unit' ? e.y : (e.ty + e.fh) * TILE - 6);
     list.sort((a, b) => depth(a) - depth(b));
 
     for (const e of list) if (sel.has(e.id)) this.selRing(e, e.owner === me ? '#7CFC8A' : w.isEnemy(me, e.owner) ? '#ff6b6b' : '#ffe08a', time);
@@ -317,13 +315,13 @@ export class Renderer {
     if (e.cat === 'unit') {
       const p = 1 + Math.sin(time * 6) * 0.06;
       g.ellipse(e.x, e.y + e.radius * 0.6, (e.radius + 4) * p, (e.radius + 4) * 0.55 * p, 0, 0, 7);
-    } else g.rect(e.tx * TILE - 2, e.ty * TILE - 2, e.size * TILE + 4, e.size * TILE + 4);
+    } else g.rect(e.tx * TILE - 2, e.ty * TILE - 2, e.fw * TILE + 4, e.fh * TILE + 4);
     g.stroke();
   }
 
   private hpBar(e: Entity) {
     const g = this.ctx;
-    const wdt = e.cat === 'unit' ? 22 : Math.min(80, e.size * TILE * 0.8);
+    const wdt = e.cat === 'unit' ? 22 : Math.min(80, e.fw * TILE * 0.8);
     const x = e.x - wdt / 2, y = e.cat === 'unit' ? e.y - e.radius - 14 : e.ty * TILE - 16;
     g.fillStyle = 'rgba(0,0,0,0.65)'; g.fillRect(x - 1, y - 1, wdt + 2, 5);
     const f = Math.max(0, e.hp / e.maxHp);
@@ -352,7 +350,7 @@ export class Renderer {
         for (let i = 0; i < n; i++) { const a = i * 2.1 + e.id; g.beginPath(); g.arc(e.x + Math.cos(a) * 7, e.y - 1 + Math.sin(a) * 5, 2.2, 0, 7); g.fill(); }
         break;
       }
-      case 'goldmine': g.drawImage(this.gold, e.x - 20, e.y - 20); break;
+      case 'goldmine': g.drawImage(this.gold, e.x - 20, e.y - 20); this.nuggets(e, '#ffd23f', '#fff8c4'); break;
       case 'fish': {
         const ph = time * 1.5 + e.id;
         g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1;
@@ -365,8 +363,19 @@ export class Renderer {
         }
         break;
       }
-      case 'stonemine': g.drawImage(this.stone, e.x - 20, e.y - 20); break;
+      case 'stonemine': g.drawImage(this.stone, e.x - 20, e.y - 20); this.nuggets(e, '#e3e8ec', '#ffffff'); break;
     }
+  }
+
+  /** Pepitas/bloques que van desapareciendo a medida que se extrae la mina */
+  private nuggets(e: Entity, col: string, hi: string) {
+    const g = this.ctx;
+    const max = NODES[e.type as NodeType].amount;
+    const SPOTS = [[-6, 3, 2.6], [5, 2, 2.8], [-1, 6, 2.2], [9, 7, 2], [-3, -3, 2], [-10, 6, 2], [2, -5, 2.2], [10, -1, 1.8], [-7, -1, 1.8], [4, 8, 2]];
+    const n = Math.ceil((e.amount / max) * SPOTS.length);
+    g.fillStyle = col;
+    for (let i = 0; i < n; i++) { const [dx, dy, r] = SPOTS[i]; g.beginPath(); g.arc(e.x + dx, e.y + dy, r, 0, 7); g.fill(); }
+    if (n > 1) { g.fillStyle = hi; g.beginPath(); g.arc(e.x + 4, e.y + 1, 1, 0, 7); g.fill(); }
   }
 
   // --------------------------------------------------------------- edificios
@@ -374,27 +383,63 @@ export class Renderer {
   private box(x0: number, y0: number, s: number, wallH: number, wall: string, roof: string, opts: { stone?: boolean; flatRoof?: boolean } = {}) {
     const g = this.ctx;
     const top = y0 + s - wallH; // donde empieza la pared frontal
+    const wx0 = x0 + 3, wx1 = x0 + s - 3, wb = y0 + s - 3;
     // pared frontal
-    g.fillStyle = wall; g.fillRect(x0 + 3, top, s - 6, wallH - 3);
-    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x0 + s - 10, top, 7, wallH - 3); // lado en sombra
+    g.fillStyle = wall; g.fillRect(wx0, top, wx1 - wx0, wb - top);
+    g.beginPath();
     if (opts.stone) {
-      g.strokeStyle = 'rgba(0,0,0,0.12)'; g.lineWidth = 1;
-      for (let yy = top + 6; yy < y0 + s - 4; yy += 6) { g.beginPath(); g.moveTo(x0 + 3, yy); g.lineTo(x0 + s - 3, yy); g.stroke(); }
+      // sillares
+      g.strokeStyle = 'rgba(40,30,20,0.2)'; g.lineWidth = 0.8;
+      for (let yy = wb - 5, row = 0; yy > top; yy -= 5, row++) {
+        g.moveTo(wx0, yy); g.lineTo(wx1, yy);
+        for (let xx = wx0 + (row % 2 ? 5 : 0) + 5; xx < wx1; xx += 10) { g.moveTo(xx, yy); g.lineTo(xx, yy + 5); }
+      }
+    } else {
+      // entramado de madera: tablones + vigas
+      g.strokeStyle = 'rgba(60,40,20,0.18)'; g.lineWidth = 0.8;
+      for (let xx = wx0 + 4; xx < wx1; xx += 4) { g.moveTo(xx, top); g.lineTo(xx, wb); }
     }
+    g.stroke();
+    if (!opts.stone) {
+      g.strokeStyle = 'rgba(70,45,25,0.55)'; g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(wx0, top + 1); g.lineTo(wx1, top + 1);
+      g.moveTo(wx0 + 1, top); g.lineTo(wx0 + 1, wb); g.moveTo(wx1 - 1, top); g.lineTo(wx1 - 1, wb);
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(wx1 - 7, top, 7, wb - top); // lado en sombra
+    g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(wx0, wb - 2, wx1 - wx0, 2); // zócalo
     // techo
     if (opts.flatRoof) {
       g.fillStyle = roof; g.fillRect(x0 + 1, y0 + 4, s - 2, top - y0 - 2);
+      g.strokeStyle = 'rgba(0,0,0,0.1)'; g.lineWidth = 0.8; g.beginPath();
+      for (let yy = y0 + 9; yy < top; yy += 5) { g.moveTo(x0 + 1, yy); g.lineTo(x0 + s - 1, yy); }
+      g.stroke();
       g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(x0 + 1, y0 + 4, s - 2, 4);
     } else {
       const ridgeY = y0 + 4, eave = top + 2;
+      const L = x0 + s * 0.18, R = x0 + s * 0.82;
+      // faldón trasero/derecho en sombra y faldón iluminado
       g.fillStyle = shade(roof, -0.18);
-      g.beginPath(); g.moveTo(x0, eave); g.lineTo(x0 + s * 0.18, ridgeY); g.lineTo(x0 + s * 0.82, ridgeY); g.lineTo(x0 + s, eave); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(x0, eave); g.lineTo(L, ridgeY); g.lineTo(R, ridgeY); g.lineTo(x0 + s, eave); g.closePath(); g.fill();
       g.fillStyle = roof;
-      g.beginPath(); g.moveTo(x0, eave); g.lineTo(x0 + s * 0.18, ridgeY); g.lineTo(x0 + s * 0.5, ridgeY); g.lineTo(x0 + s * 0.5, eave); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(x0, eave); g.lineTo(L, ridgeY); g.lineTo(x0 + s * 0.5, ridgeY); g.lineTo(x0 + s * 0.5, eave); g.closePath(); g.fill();
+      // tejas: hileras con juntas alternadas
+      g.save();
+      g.beginPath(); g.moveTo(x0, eave); g.lineTo(L, ridgeY); g.lineTo(R, ridgeY); g.lineTo(x0 + s, eave); g.closePath(); g.clip();
+      g.strokeStyle = 'rgba(0,0,0,0.16)'; g.lineWidth = 0.9; g.beginPath();
+      for (let yy = eave - 4, row = 0; yy > ridgeY; yy -= 4, row++) {
+        g.moveTo(x0, yy); g.lineTo(x0 + s, yy);
+        for (let xx = x0 + (row % 2 ? 3 : 0); xx < x0 + s; xx += 6) { g.moveTo(xx, yy); g.lineTo(xx, yy + 4); }
+      }
+      g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.07)';
+      for (let yy = eave - 4; yy > ridgeY; yy -= 8) g.fillRect(x0, yy - 4, s, 2);
+      g.restore();
       g.strokeStyle = shade(roof, -0.35); g.lineWidth = 1.5;
-      g.beginPath(); g.moveTo(x0 + s * 0.18, ridgeY); g.lineTo(x0 + s * 0.82, ridgeY); g.stroke();
-      g.strokeStyle = 'rgba(0,0,0,0.12)'; g.lineWidth = 1;
-      for (let xx = x0 + 6; xx < x0 + s - 4; xx += 6) { g.beginPath(); g.moveTo(xx, eave); g.lineTo(xx + (x0 + s / 2 - xx) * 0.15, ridgeY + 2); g.stroke(); }
+      g.beginPath(); g.moveTo(L, ridgeY); g.lineTo(R, ridgeY); g.stroke();
+      g.strokeStyle = shade(roof, -0.3); g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x0, eave); g.lineTo(x0 + s, eave); g.stroke();
     }
     return top;
   }
@@ -453,7 +498,7 @@ export class Renderer {
       this.wallPiece(e, col);
       return;
     }
-    if (t === 'gate') { this.gatePiece(e, col); return; }
+    if (t === 'gate') { this.gatePiece(e, col, time); return; }
 
     g.save();
     if (!done) g.globalAlpha = 0.5 + e.progress * 0.45;
@@ -616,66 +661,230 @@ export class Renderer {
     }
   }
 
+  /** Prisma extruido: base en el suelo (polígono) + altura H. Dibuja las caras visibles y la tapa. */
+  private prism(pts: number[][], H: number, face: string, top: string, tex: 'brick' | 'plank' | null = null) {
+    const g = this.ctx;
+    const n = pts.length;
+    // orientación del polígono para que la normal apunte hacia afuera
+    let area = 0;
+    for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
+    const sgn = area > 0 ? 1 : -1;
+    for (let i = 0; i < n; i++) {
+      const a = pts[i], b = pts[(i + 1) % n];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = (dy / len) * sgn, ny = (-dx / len) * sgn;
+      if (ny <= 0.05) continue;
+      const light = 0.12 * nx - 0.05;
+      g.fillStyle = shade(face, light);
+      g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(b[0], b[1] - H); g.lineTo(a[0], a[1] - H); g.closePath(); g.fill();
+      if (tex) {
+        g.save(); g.clip();
+        g.strokeStyle = tex === 'brick' ? 'rgba(40,30,20,0.22)' : 'rgba(40,25,10,0.3)'; g.lineWidth = 0.8;
+        g.beginPath();
+        const steps = Math.max(1, Math.round(len / 8));
+        if (tex === 'brick') {
+          for (let k = 5, row = 0; k < H; k += 5, row++) {
+            g.moveTo(a[0], a[1] - k); g.lineTo(b[0], b[1] - k);
+            for (let s = row % 2 ? 0.5 : 0; s < steps; s++) {
+              const f = s / steps, px = a[0] + dx * f, py = a[1] + dy * f;
+              g.moveTo(px, py - k); g.lineTo(px, py - k + 5);
+            }
+          }
+        } else {
+          for (let s = 0; s < steps * 2; s++) { const f = s / (steps * 2), px = a[0] + dx * f, py = a[1] + dy * f; g.moveTo(px, py); g.lineTo(px, py - H); }
+        }
+        g.stroke(); g.restore();
+      }
+    }
+    g.fillStyle = top;
+    g.beginPath(); g.moveTo(pts[0][0], pts[0][1] - H);
+    for (let i = 1; i < n; i++) g.lineTo(pts[i][0], pts[i][1] - H);
+    g.closePath(); g.fill();
+  }
+
+  /** Segmento grueso como polígono de suelo */
+  private seg(ax: number, ay: number, bx: number, by: number, t: number): number[][] {
+    const dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy) || 1;
+    const nx = (-dy / l) * t / 2, ny = (dx / l) * t / 2;
+    return [[ax + nx, ay + ny], [bx + nx, by + ny], [bx - nx, by - ny], [ax - nx, ay - ny]];
+  }
+  private sq(cx: number, cy: number, s: number): number[][] {
+    return [[cx - s / 2, cy - s / 2], [cx + s / 2, cy - s / 2], [cx + s / 2, cy + s / 2], [cx - s / 2, cy + s / 2]];
+  }
+  /** almenas sobre la línea superior frontal de un segmento */
+  private crenLine(ax: number, ay: number, bx: number, by: number, col: string) {
+    const g = this.ctx;
+    const l = Math.hypot(bx - ax, by - ay);
+    g.fillStyle = col;
+    const k = Math.max(1, Math.round(l / 7));
+    for (let i = 0; i < k; i++) {
+      const f = (i + 0.5) / k;
+      g.fillRect(ax + (bx - ax) * f - 2, ay + (by - ay) * f - 4, 4, 4);
+    }
+  }
+
   private wallPiece(e: Entity, col: string) {
     const g = this.ctx, w = this.w;
-    const x0 = e.tx * TILE, y0 = e.ty * TILE;
-    const isWall = (x: number, y: number) => { const o = w.get(w.occ[y * w.w + x]); return !!o && (o.type === e.type || o.type === 'gate') && o.owner === e.owner; };
-    g.globalAlpha = e.progress < 1 ? 0.5 : 1;
-    const cx = x0 + 16, cy = y0 + 20;
+    const isWall = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= w.w || y >= w.h) return false;
+      const o = w.get(w.occ[y * w.w + x]);
+      return !!o && o.owner === e.owner && (o.type === e.type || o.type === 'gate' || (e.type === 'wall' && o.type === 'stonewall') || (e.type === 'stonewall' && o.type === 'wall'));
+    };
+    g.globalAlpha = e.progress < 1 ? 0.55 : 1;
+    const cx = e.tx * TILE + 16, cy = e.ty * TILE + 18;
+    const E = isWall(e.tx + 1, e.ty), S = isWall(e.tx, e.ty + 1), W = isWall(e.tx - 1, e.ty);
+    const SE = isWall(e.tx + 1, e.ty + 1) && !E && !S;
+    const SW = isWall(e.tx - 1, e.ty + 1) && !W && !S;
+    const targets: number[][] = [];
+    if (S) targets.push([0, 1]);
+    if (SE) targets.push([1, 1]);
+    if (SW) targets.push([-1, 1]);
+    if (E) targets.push([1, 0]);
+    // los portones no dibujan tramos hacia afuera: la muralla vecina los alcanza
+    const gateAt = (x: number, y: number) => { const o = x >= 0 && y >= 0 && x < w.w && y < w.h ? w.get(w.occ[y * w.w + x]) : undefined; return !!o && o.type === 'gate' && o.owner === e.owner; };
+    if (gateAt(e.tx - 1, e.ty)) targets.unshift([-1, 0]);
+    if (gateAt(e.tx, e.ty - 1)) targets.unshift([0, -1]);
     if (e.type === 'stonewall') {
-      const block = (x: number, y: number, wdt: number, hgt: number) => {
-        g.fillStyle = '#8f8b84'; g.fillRect(x, y - 18, wdt, 20);
-        g.fillStyle = '#a9a59d'; g.fillRect(x, y - 22, wdt, 5);
-        g.fillStyle = 'rgba(0,0,0,0.12)'; for (let yy = y - 14; yy < y; yy += 6) g.fillRect(x, yy, wdt, 1);
-        void hgt;
-      };
-      // tramos en diagonal: rellenar el escalón para que la muralla se vea continua
-      const diagR = isWall(e.tx + 1, e.ty + 1) && !isWall(e.tx + 1, e.ty) && !isWall(e.tx, e.ty + 1);
-      const diagL = isWall(e.tx - 1, e.ty + 1) && !isWall(e.tx - 1, e.ty) && !isWall(e.tx, e.ty + 1);
-      if (diagR) { for (let k = 4; k <= 28; k += 6) block(cx - 9 + k, cy + k, 18, 0); }
-      if (diagL) { for (let k = 4; k <= 28; k += 6) block(cx - 9 - k, cy + k, 18, 0); }
-      block(cx - 9, cy, 18, 0);
-      if (isWall(e.tx + 1, e.ty)) block(cx + 9, cy, 23, 0);
-      if (isWall(e.tx, e.ty + 1)) { for (let i = 6; i < 32; i += 6) block(cx - 9, cy + i, 18, 0); }
-      this.crenels(cx - 9, cy - 22, 18, '#a9a59d');
-      g.fillStyle = col; g.fillRect(cx - 9, cy - 10, 18, 2);
+      const H = 18, T = 13, face = '#9a958c', top = '#b9b4aa';
+      for (const [dx, dy] of targets) {
+        const bx = cx + dx * TILE, by = cy + dy * TILE;
+        this.prism(this.seg(cx, cy, bx, by, dx && dy ? T * 1.15 : T), H, face, top, 'brick');
+        const off = dx === 0 ? 0 : T / 2 - 1;
+        this.crenLine(cx, cy + off - H, bx, by + off - H, '#c9c4ba');
+      }
+      // pilar central
+      this.prism(this.sq(cx, cy, 16), H + 5, '#8f8a81', '#b3ada3', 'brick');
+      g.fillStyle = '#c9c4ba';
+      for (const [ox, oy] of [[-8, -8], [4, -8], [-8, 4], [4, 4]]) g.fillRect(cx + ox, cy + oy - H - 9, 4, 4);
+      g.fillStyle = col; g.fillRect(cx - 8, cy + 8 - H * 0.55, 16, 2.5);
     } else {
-      const stake = (x: number, y: number) => {
-        g.fillStyle = '#7a5634'; g.fillRect(x - 3, y - 14, 6, 16);
-        g.fillStyle = '#9b7348'; g.fillRect(x - 3, y - 14, 2, 16);
-        g.fillStyle = '#5d3f22'; g.beginPath(); g.moveTo(x - 3, y - 14); g.lineTo(x, y - 19); g.lineTo(x + 3, y - 14); g.fill();
+      const stake = (x: number, y: number, h: number) => {
+        g.fillStyle = '#6f4d2c'; g.fillRect(x - 2.6, y - h, 5.2, h + 1);
+        g.fillStyle = '#9b7348'; g.fillRect(x - 2.6, y - h, 1.8, h + 1);
+        g.fillStyle = '#4e351c'; g.beginPath(); g.moveTo(x - 2.6, y - h); g.lineTo(x, y - h - 5); g.lineTo(x + 2.6, y - h); g.fill();
       };
-      if (isWall(e.tx + 1, e.ty)) { for (let i = 6; i < 32; i += 7) stake(cx + i, cy); }
-      if (isWall(e.tx + 1, e.ty + 1) && !isWall(e.tx + 1, e.ty) && !isWall(e.tx, e.ty + 1)) { for (let i = 6; i < 32; i += 7) stake(cx + i, cy + i); }
-      if (isWall(e.tx - 1, e.ty + 1) && !isWall(e.tx - 1, e.ty) && !isWall(e.tx, e.ty + 1)) { for (let i = 6; i < 32; i += 7) stake(cx - i, cy + i); }
-      if (isWall(e.tx, e.ty + 1)) { for (let i = 6; i < 32; i += 7) stake(cx, cy + i); }
-      stake(cx - 5, cy); stake(cx + 1, cy);
-      g.fillStyle = col; g.fillRect(cx - 7, cy - 8, 10, 2);
+      const pts: number[][] = [];
+      for (const [dx, dy] of targets) {
+        const l = dx && dy ? 45 : 32;
+        for (let d = 5; d < l - 2; d += 5) pts.push([cx + (dx * d * TILE) / l, cy + (dy * d * TILE) / l]);
+      }
+      pts.push([cx - 2.5, cy], [cx + 2.5, cy]);
+      pts.sort((a, b) => a[1] - b[1]);
+      // travesaño
+      g.strokeStyle = '#4e351c'; g.lineWidth = 2;
+      g.beginPath();
+      for (const [dx, dy] of targets) { g.moveTo(cx, cy - 8); g.lineTo(cx + dx * TILE, cy + dy * TILE - 8); }
+      g.stroke();
+      for (const [x, y] of pts) stake(x, y, 15);
+      g.fillStyle = col; g.fillRect(cx - 5, cy - 9, 10, 2);
     }
     g.globalAlpha = 1;
   }
 
-  private gatePiece(e: Entity, col: string) {
+  /** Portón de 3 tramos estilo castillo: torres en los extremos y puertas de madera dobles */
+  private gatePiece(e: Entity, col: string, time: number) {
     const g = this.ctx, w = this.w;
+    const vertical = e.fh > e.fw;
     const x0 = e.tx * TILE, y0 = e.ty * TILE;
-    const wallAt = (x: number, y: number) => { const o = w.get(w.occ[y * w.w + x]); return !!o && o.owner === e.owner && (o.type === 'stonewall' || o.type === 'wall' || o.type === 'gate'); };
-    const vertical = (wallAt(e.tx, e.ty - 1) || wallAt(e.tx, e.ty + 1)) && !(wallAt(e.tx - 1, e.ty) || wallAt(e.tx + 1, e.ty));
-    g.globalAlpha = e.progress < 1 ? 0.5 : 1;
-    const cx = x0 + 16, base = y0 + 22;
-    // pilares y dintel
-    g.fillStyle = '#8f8b84';
-    if (vertical) { g.fillRect(cx - 9, base - 26, 18, 30); }
-    else { g.fillRect(x0, base - 26, 32, 28); }
-    g.fillStyle = '#a9a59d'; g.fillRect(vertical ? cx - 9 : x0, base - 30, vertical ? 18 : 32, 5);
-    this.crenels(vertical ? cx - 9 : x0, base - 30, vertical ? 18 : 32, '#a9a59d');
-    // arco con rastrillo
-    g.fillStyle = '#2b2018';
-    g.beginPath(); g.moveTo(cx - 7, base + 2); g.lineTo(cx - 7, base - 12); g.arc(cx, base - 12, 7, Math.PI, 0); g.lineTo(cx + 7, base + 2); g.closePath(); g.fill();
-    g.strokeStyle = '#5d5d5d'; g.lineWidth = 1.2;
-    for (let xx = cx - 5; xx <= cx + 5; xx += 3.3) { g.beginPath(); g.moveTo(xx, base - 16); g.lineTo(xx, base + 1); g.stroke(); }
-    g.beginPath(); g.moveTo(cx - 7, base - 8); g.lineTo(cx + 7, base - 8); g.moveTo(cx - 7, base - 3); g.lineTo(cx + 7, base - 3); g.stroke();
-    g.fillStyle = col; g.fillRect(cx - 9, base - 25, 18, 3);
+    const done = e.progress >= 1;
+    g.globalAlpha = done ? 1 : 0.55;
+    // ¿se abre? (unidad aliada cerca y no bloqueado)
+    let open = false;
+    if (done && !e.locked) {
+      const team = w.players[e.owner]?.team;
+      w.forUnitsNear(e.x, e.y, TILE * 2.6, (u) => {
+        if (!open && u.hp > 0 && u.owner >= 0 && w.players[u.owner]?.team === team && Math.hypot(u.x - e.x, u.y - e.y) < TILE * 2.4) open = true;
+      });
+    }
+    const face = '#9a958c', top = '#b9b4aa', towerF = '#8d887f', towerT = '#aaa49a';
+    const wood = '#7a5130', woodD = '#4e331c';
+    const H = 22;
+    if (!vertical) {
+      const cy = y0 + 18;
+      const lx = x0 + 16, rx = x0 + 3 * TILE - 16;
+      // cuerpo del portón
+      this.prism(this.seg(lx, cy, rx, cy, 17), H, face, top, 'brick');
+      // arco y puertas en la cara frontal
+      const mx = x0 + TILE * 1.5, fy = cy + 8.5;
+      const aw = 18, ah = 19;
+      const arch = () => { g.beginPath(); g.moveTo(mx - aw / 2, fy); g.lineTo(mx - aw / 2, fy - ah + aw / 2); g.arc(mx, fy - ah + aw / 2, aw / 2, Math.PI, 0); g.lineTo(mx + aw / 2, fy); g.closePath(); };
+      g.fillStyle = '#6d6860'; arch(); g.fill();
+      g.save(); g.translate(0, 0);
+      g.beginPath(); g.moveTo(mx - aw / 2 + 1.5, fy); g.lineTo(mx - aw / 2 + 1.5, fy - ah + aw / 2); g.arc(mx, fy - ah + aw / 2, aw / 2 - 1.5, Math.PI, 0); g.lineTo(mx + aw / 2 - 1.5, fy); g.closePath();
+      g.clip();
+      if (open) {
+        g.fillStyle = '#2a1f16'; g.fillRect(mx - aw / 2, fy - ah, aw, ah);
+        g.fillStyle = '#8a7a5c'; g.fillRect(mx - aw / 2, fy - 4, aw, 4);
+        // hojas abiertas, vistas de canto
+        g.fillStyle = wood; g.fillRect(mx - aw / 2 + 1.5, fy - ah + 2, 3, ah - 2); g.fillRect(mx + aw / 2 - 4.5, fy - ah + 2, 3, ah - 2);
+      } else {
+        g.fillStyle = wood; g.fillRect(mx - aw / 2, fy - ah, aw, ah);
+        g.strokeStyle = woodD; g.lineWidth = 0.9; g.beginPath();
+        for (let xx = mx - aw / 2 + 3; xx < mx + aw / 2; xx += 3) { g.moveTo(xx, fy - ah); g.lineTo(xx, fy); }
+        g.stroke();
+        g.strokeStyle = '#2b2b2b'; g.lineWidth = 1.6; g.beginPath();
+        g.moveTo(mx, fy - ah); g.lineTo(mx, fy);
+        g.moveTo(mx - aw / 2, fy - 5); g.lineTo(mx + aw / 2, fy - 5); g.moveTo(mx - aw / 2, fy - 12); g.lineTo(mx + aw / 2, fy - 12);
+        g.stroke();
+      }
+      g.restore();
+      this.crenLine(lx + 8, cy - 8 - H, rx - 8, cy - 8 - H, '#c9c4ba');
+      this.crenLine(lx + 8, cy + 8 - H, rx - 8, cy + 8 - H, '#c9c4ba');
+      // torres
+      for (const tx of [lx, rx]) this.tower(tx, cy, H + 12, towerF, towerT, col);
+      if (e.locked) this.padlock(mx, fy - ah - 6);
+      if (done) this.banner(mx, cy - H - 2, col, time, 12);
+    } else {
+      const cx = x0 + 16;
+      const ty = y0 + 16, by = y0 + 3 * TILE - 14;
+      const my = y0 + TILE * 1.5;
+      // camino que cruza la muralla
+      g.fillStyle = 'rgba(120,98,66,0.75)'; g.fillRect(cx - 30, my - 8, 60, 16);
+      this.prism(this.seg(cx, ty, cx, by, 18), H, face, top, 'brick');
+      this.crenLine(cx - 8, ty - H, cx - 8, by - H, '#c9c4ba');
+      this.crenLine(cx + 8, ty - H, cx + 8, by - H, '#c9c4ba');
+      this.tower(cx, ty, H + 12, towerF, towerT, col);
+      // abertura del portón vista desde arriba
+      const gy = my - H;
+      g.fillStyle = '#6d6860'; g.fillRect(cx - 10, gy - 10, 20, 20);
+      if (open) {
+        g.fillStyle = '#2a1f16'; g.fillRect(cx - 9, gy - 8, 18, 16);
+        g.fillStyle = '#8a7a5c'; g.fillRect(cx - 9, gy + 4, 18, 4);
+        g.fillStyle = wood; g.fillRect(cx - 9, gy - 8, 18, 2.5); g.fillRect(cx - 9, gy + 5.5, 18, 2.5);
+      } else {
+        g.fillStyle = wood; g.fillRect(cx - 9, gy - 8, 18, 16);
+        g.strokeStyle = woodD; g.lineWidth = 0.9; g.beginPath();
+        for (let yy = gy - 5; yy < gy + 8; yy += 3) { g.moveTo(cx - 9, yy); g.lineTo(cx + 9, yy); }
+        g.stroke();
+        g.strokeStyle = '#2b2b2b'; g.lineWidth = 1.6; g.beginPath();
+        g.moveTo(cx - 9, gy); g.lineTo(cx + 9, gy); g.moveTo(cx - 4, gy - 8); g.lineTo(cx - 4, gy + 8); g.moveTo(cx + 4, gy - 8); g.lineTo(cx + 4, gy + 8);
+        g.stroke();
+      }
+      this.tower(cx, by, H + 12, towerF, towerT, col);
+      if (e.locked) this.padlock(cx + 14, gy - 4);
+    }
     g.globalAlpha = 1;
+  }
+
+  private tower(cx: number, cy: number, H: number, face: string, top: string, col: string) {
+    const g = this.ctx;
+    // torre octogonal
+    const r = 12, pts: number[][] = [];
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.PI / 8; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.85]); }
+    this.prism(pts, H, face, top, 'brick');
+    g.fillStyle = '#c9c4ba';
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; g.fillRect(cx + Math.cos(a) * 10 - 2, cy + Math.sin(a) * 8.5 - H - 4, 4, 4); }
+    g.fillStyle = '#2b2018'; g.fillRect(cx - 1.5, cy + 4 - H * 0.6, 3, 6);
+    g.fillStyle = col; g.fillRect(cx - 9, cy + 9 - H + 4, 18, 2.5);
+  }
+
+  private padlock(x: number, y: number) {
+    const g = this.ctx;
+    g.strokeStyle = '#e8c547'; g.lineWidth = 2;
+    g.beginPath(); g.arc(x, y - 3, 3.2, Math.PI, 0); g.stroke();
+    g.fillStyle = '#d4a017'; g.fillRect(x - 5, y - 3, 10, 8);
+    g.fillStyle = '#3a2a10'; g.fillRect(x - 0.8, y - 1, 1.6, 3.5);
   }
 
   // --------------------------------------------------------------- unidades
@@ -691,6 +900,10 @@ export class Renderer {
     g.beginPath(); g.ellipse(x, y + r * 0.75, r * 0.95, r * 0.42, 0, 0, 7); g.fill();
     if (d.cls === 'siege') { this.siege(e, col, time); return; }
     if (t === 'elephant') { this.elephant(e, col, time); return; }
+    // animación de ataque: estocada hacia el objetivo + golpe del arma
+    const sw = this.swing(e);
+    const lunge = d.range <= 1 ? Math.max(0, sw) * 2.6 : 0;
+    g.save(); g.translate(Math.cos(e.facing) * lunge, Math.sin(e.facing) * lunge * 0.6);
     const bob = moving ? Math.abs(Math.sin(time * 12 + e.id)) * 1.6 : 0;
     const fx = Math.cos(e.facing), fy = Math.sin(e.facing);
     const flip = fx < 0 ? -1 : 1;
@@ -742,18 +955,24 @@ export class Renderer {
         break;
       }
       case 'militia': case 'champion': case 'samurai': {
-        const len = t === 'champion' ? 11 : t === 'samurai' ? 12 : 8;
+        const len = t === 'champion' ? 11 : t === 'samurai' ? 12 : 9;
+        const a = flip > 0 ? -0.7 + sw * 1.25 : Math.PI + 0.7 - sw * 1.25;
         g.strokeStyle = '#e8eef3'; g.lineWidth = t === 'samurai' ? 1.8 : 2.5;
-        g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + fx * len, ay + fy * len - 6); g.stroke();
+        g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(a) * len, ay + Math.sin(a) * len); g.stroke();
+        g.strokeStyle = '#6d4c41'; g.lineWidth = 2; g.beginPath(); g.moveTo(ax + Math.cos(a + 1.57) * 3, ay + Math.sin(a + 1.57) * 3); g.lineTo(ax - Math.cos(a + 1.57) * 3, ay - Math.sin(a + 1.57) * 3); g.stroke();
+        if (sw > 0.6) { g.strokeStyle = 'rgba(255,255,255,0.45)'; g.lineWidth = 1.5; g.beginPath(); g.arc(ax, ay, len, flip > 0 ? -0.7 : Math.PI - 0.5, flip > 0 ? 0.5 : Math.PI + 0.7); g.stroke(); }
         if (t !== 'samurai') this.shield(x - flip * r * 0.55, by + 1, col, t === 'champion' ? 5 : 4);
         break;
       }
-      case 'spearman':
+      case 'spearman': {
+        const th = Math.max(0, sw) * 6;
+        const tip = sw > 0 ? [ax + fx * (13 + th), ay + fy * (13 + th) - 3] : [ax + fx * 12, ay - 10];
         g.strokeStyle = '#8d6e63'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(ax - fx * 6, ay + 4); g.lineTo(ax + fx * 12, ay - 10); g.stroke();
-        g.fillStyle = '#cfd8dc'; g.beginPath(); g.arc(ax + fx * 12, ay - 10, 2.2, 0, 7); g.fill();
+        g.beginPath(); g.moveTo(ax - fx * 6 + fx * th, ay + 4); g.lineTo(tip[0], tip[1]); g.stroke();
+        g.fillStyle = '#cfd8dc'; g.beginPath(); g.arc(tip[0], tip[1], 2.2, 0, 7); g.fill();
         this.shield(x - flip * r * 0.55, by + 1, col, 3.5);
         break;
+      }
       case 'skirmisher':
         g.strokeStyle = '#a58a5a'; g.lineWidth = 1.6;
         for (const o of [-2, 1]) { g.beginPath(); g.moveTo(ax - flip * 3 + o, ay + 5); g.lineTo(ax + flip * 5 + o, ay - 9); g.stroke(); }
@@ -763,8 +982,14 @@ export class Renderer {
         const big = t === 'longbow' ? 10 : 7;
         g.strokeStyle = '#8d6e63'; g.lineWidth = 2;
         g.beginPath(); g.arc(ax, ay, big, e.facing - 1.2, e.facing + 1.2); g.stroke();
-        g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 0.8;
-        g.beginPath(); g.moveTo(ax + Math.cos(e.facing - 1.2) * big, ay + Math.sin(e.facing - 1.2) * big); g.lineTo(ax + Math.cos(e.facing + 1.2) * big, ay + Math.sin(e.facing + 1.2) * big); g.stroke();
+        // cuerda: se tensa al disparar
+        const pull = sw < 0 ? -sw * 6 : 0;
+        const p1x = ax + Math.cos(e.facing - 1.2) * big, p1y = ay + Math.sin(e.facing - 1.2) * big;
+        const p2x = ax + Math.cos(e.facing + 1.2) * big, p2y = ay + Math.sin(e.facing + 1.2) * big;
+        const mx = (p1x + p2x) / 2 - fx * pull, my = (p1y + p2y) / 2 - fy * pull;
+        g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 0.8;
+        g.beginPath(); g.moveTo(p1x, p1y); g.lineTo(mx, my); g.lineTo(p2x, p2y); g.stroke();
+        if (pull > 1) { g.strokeStyle = '#d7ccc8'; g.lineWidth = 1; g.beginPath(); g.moveTo(mx, my); g.lineTo(mx + fx * (big + 2), my + fy * (big + 2)); g.stroke(); }
         g.fillStyle = '#6d4c41'; g.fillRect(x - flip * 5 - 1.5, by - 6, 3, 8);
         break;
       }
@@ -781,8 +1006,7 @@ export class Renderer {
         g.strokeStyle = '#6d4c41'; g.lineWidth = 3; g.beginPath(); g.moveTo(ax - fx * 5, ay + 3); g.lineTo(ax, ay + 1); g.stroke();
         break;
       case 'axeman': case 'berserker': {
-        const swing = e.cooldown > 0 ? Math.sin(time * 14) * 0.5 : 0;
-        const a = (flip > 0 ? -0.7 : Math.PI + 0.7) + swing;
+        const a = flip > 0 ? -0.7 + sw * 1.3 : Math.PI + 0.7 - sw * 1.3;
         g.strokeStyle = '#6d4c41'; g.lineWidth = 2;
         g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(a) * 10, ay + Math.sin(a) * 10); g.stroke();
         g.fillStyle = '#cfd8dc'; g.beginPath(); g.ellipse(ax + Math.cos(a) * 10, ay + Math.sin(a) * 10, 3.5, 2.2, a + Math.PI / 2, 0, 7); g.fill();
@@ -791,7 +1015,13 @@ export class Renderer {
       }
       case 'knight': case 'cataphract': case 'scout':
         g.strokeStyle = t === 'cataphract' ? '#8d6e63' : '#e8eef3'; g.lineWidth = t === 'cataphract' ? 2 : 2.5;
-        g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + flip * (t === 'cataphract' ? 17 : 13), ay - 4); g.stroke();
+        if (t === 'cataphract') {
+          const th = Math.max(0, sw) * 6;
+          g.beginPath(); g.moveTo(ax - flip * 4 + flip * th, ay + 1); g.lineTo(ax + flip * (17 + th), ay - 4 + Math.max(0, sw) * 3); g.stroke();
+        } else {
+          const a = flip > 0 ? -0.6 + sw * 1.2 : Math.PI + 0.6 - sw * 1.2;
+          g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(a) * 12, ay + Math.sin(a) * 12); g.stroke();
+        }
         if (t !== 'scout') this.shield(x - flip * r * 0.4, by + 1, col, 4);
         break;
       case 'monk':
@@ -800,6 +1030,16 @@ export class Renderer {
         g.fillStyle = '#ffd86b'; g.beginPath(); g.arc(ax, ay - 12, 2.5, 0, 7); g.fill();
         break;
     }
+    g.restore();
+  }
+
+  /** Fase del golpe: 0 sin ataque; -1 = arma levantada (carga), +1 = impacto */
+  private swing(e: Entity): number {
+    if (!e.order || e.order.t !== 'attack') return 0;
+    const since = (this.w.tick - e.lastAtk) / 20;
+    if (since >= 0 && since < 0.3) return 1 - since / 0.3;           // impacto y vuelta
+    if (e.path.length === 0 && since < 6 && e.cooldown < 0.35) return -(1 - Math.max(0, e.cooldown) / 0.35); // levanta el arma
+    return 0;
   }
 
   private horse(x: number, y: number, flip: number, bob: number, barding: string | null, coat: string) {
@@ -840,12 +1080,37 @@ export class Renderer {
     const flip = Math.cos(e.facing) < 0 ? -1 : 1;
     const wheel = (wx: number, wy: number, r: number) => { g.fillStyle = '#3e2a1a'; g.beginPath(); g.arc(wx, wy, r, 0, 7); g.fill(); g.fillStyle = '#8d6e4a'; g.beginPath(); g.arc(wx, wy, r * 0.4, 0, 7); g.fill(); };
     if (t === 'ram') {
-      g.save(); g.translate(x, y); g.rotate(e.facing);
-      g.fillStyle = '#5d4037'; g.fillRect(-15, -10, 30, 20);
-      g.fillStyle = col; g.beginPath(); g.moveTo(-15, -10); g.lineTo(0, -15); g.lineTo(15, -10); g.closePath(); g.fill();
-      g.fillStyle = '#3e2a1a'; g.fillRect(10, -3, 10, 6);
-      g.fillStyle = '#9e9e9e'; g.fillRect(18, -4, 4, 8);
-      g.fillStyle = '#212121'; for (const [a, b] of [[-9, -11], [6, -11], [-9, 11], [6, 11]]) { g.beginPath(); g.arc(a, b, 3.2, 0, 7); g.fill(); }
+      // vista lateral: techo de cueros a dos aguas, ruedas y tronco con punta de hierro
+      const since = (this.w.tick - e.lastAtk) / 20;
+      const thrust = since >= 0 && since < 0.5 ? Math.sin((since / 0.5) * Math.PI) * 7 : 0;
+      const roll = e.path.length ? time * 6 : 0;
+      g.save(); g.translate(x, y); g.scale(flip, 1);
+      // tronco (debajo del techo, asoma por delante)
+      g.fillStyle = '#6d4c2e'; g.fillRect(-14 + thrust, -9, 30, 5);
+      g.fillStyle = '#4e351c'; for (const k of [-8, 0, 8]) g.fillRect(k + thrust, -9, 1.2, 5);
+      g.fillStyle = '#7d8790'; g.beginPath(); g.moveTo(16 + thrust, -10); g.lineTo(21 + thrust, -6.5); g.lineTo(16 + thrust, -3); g.closePath(); g.fill();
+      g.fillStyle = '#5c656d'; g.fillRect(14 + thrust, -10, 2.5, 7);
+      // chasis
+      g.fillStyle = '#5d4030'; g.fillRect(-16, -4, 30, 5);
+      // techo en A cubierto de cueros
+      g.fillStyle = '#8a6a48';
+      g.beginPath(); g.moveTo(-18, -2); g.lineTo(-12, -21); g.lineTo(9, -21); g.lineTo(15, -2); g.closePath(); g.fill();
+      g.fillStyle = '#a5845e';
+      g.beginPath(); g.moveTo(-18, -2); g.lineTo(-12, -21); g.lineTo(-1, -21); g.lineTo(-1, -2); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(60,40,20,0.55)'; g.lineWidth = 0.9; g.beginPath();
+      for (const yy of [-16, -11, -6]) { g.moveTo(-17 + (yy + 21) * -0.05 + (-2 - yy) * 0.3, yy); g.lineTo(14 - (-2 - yy) * 0.3, yy); }
+      for (const xx of [-8, 0, 6]) { g.moveTo(xx, -21); g.lineTo(xx + (xx < 0 ? -2 : 2), -2); }
+      g.stroke();
+      g.strokeStyle = '#3e2a1a'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-12, -21); g.lineTo(9, -21); g.stroke();
+      g.fillStyle = col; g.fillRect(-16, -5, 30, 2.5);
+      // ruedas con rayos
+      for (const wx of [-10, 8]) {
+        g.fillStyle = '#3e2a1a'; g.beginPath(); g.arc(wx, 3, 5, 0, 7); g.fill();
+        g.strokeStyle = '#8d6e4a'; g.lineWidth = 1; g.beginPath();
+        for (let k = 0; k < 3; k++) { const a = roll + (k * Math.PI) / 3; g.moveTo(wx + Math.cos(a) * 4, 3 + Math.sin(a) * 4); g.lineTo(wx - Math.cos(a) * 4, 3 - Math.sin(a) * 4); }
+        g.stroke();
+        g.fillStyle = '#8d6e4a'; g.beginPath(); g.arc(wx, 3, 1.4, 0, 7); g.fill();
+      }
       g.restore();
       return;
     }
@@ -1009,7 +1274,7 @@ export class Renderer {
       if (e.cat === 'node') g.fillStyle = e.type === 'tree' ? '#1f4d22' : e.type === 'goldmine' ? '#f5c518' : e.type === 'berries' ? '#d6336c' : '#cfd8dc';
       else g.fillStyle = w.players[e.owner].color;
       if (e.cat === 'unit') g.fillRect(e.x / TILE * sx - 1, e.y / TILE * sy - 1, 2.5, 2.5);
-      else g.fillRect(e.tx * sx, e.ty * sy, Math.max(2, e.size * sx), Math.max(2, e.size * sy));
+      else g.fillRect(e.tx * sx, e.ty * sy, Math.max(2, e.fw * sx), Math.max(2, e.fh * sy));
     }
     g.fillStyle = '#05070a';
     for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (!pl.explored[y * w.w + x]) g.fillRect(x * sx, y * sy, sx + 0.5, sy + 0.5);

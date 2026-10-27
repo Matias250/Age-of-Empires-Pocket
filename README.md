@@ -3,7 +3,7 @@
 Juego de estrategia en tiempo real inspirado en los clásicos del género (aldeanos, recursos, eras, ejércitos),
 pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 
-> Prototipo jugable v0.1 — arte, nombres y facciones son originales.
+> Prototipo jugable v0.5 — arte y código originales.
 
 ## Qué incluye
 
@@ -29,6 +29,13 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 - **Agua y barcos:** pesca con barcos, batallas navales, barcos que bombardean la costa.
 - 7 mapas (Continental, Río, Lagos, Bosque cerrado, Oasis, Mediterráneo y Arena, donde cada reino arranca amurallado con 2 torres y una puerta), 4 tamaños (Diminuto, Chico, Mediano, Grande) y 5 biomas (Templado, Desierto, Nieve, Tropical, Otoño).
 - Niebla de guerra, minimapa, puntos de reunión, colas de entrenamiento.
+- **Órdenes en cola** (como Shift): botón "➕ En cola" para encadenar construcciones, movimientos y recolección.
+- **Posturas** por tropa: Agresiva (persigue), Neutral (defiende su zona y vuelve) y Pasiva (no ataca).
+- **Varias investigaciones a la vez** (una por edificio) con cola de hasta 5; la barra de avance de edad queda visible arriba.
+- **Puntuación en vivo** individual y por equipo (economía, militar, tecnología): tocá el trofeo.
+- Mantené apretado cualquier botón para ver la ficha: vida, ataque, fuerte contra, débil contra, costo.
+- Una granja admite un solo aldeano; las minas y bayas se van vaciando a la vista; la barra de recursos muestra cuántos aldeanos trabajan en cada uno.
+- Portones de 3 tramos que se abren al acercarse tu ejército y se pueden bloquear.
 - **Regla de partida rápida:** el que pierde su Centro Urbano, pierde.
 
 **Controles táctiles**

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1410" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Imperios Rápidos</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" hidden>
+    <div id="topbar">
+      <div id="res"></div>
+      <div id="clock"></div>
+      <button id="btnPause" aria-label="Pausa">⏸</button>
+    </div>
+    <div id="objective" hidden></div>
+    <div id="toasts"></div>
+    <div id="sidebtns">
+      <button data-a="idle" aria-label="Aldeano ocioso">💤<b id="idleCount" hidden></b></button>
+      <button data-a="army" aria-label="Seleccionar ejército">🛡️</button>
+      <button data-a="box" id="btnBox" aria-label="Selección por área">▢</button>
+    </div>
+    <div id="bottom">
+      <div id="minimapwrap"><canvas id="minimap" width="160" height="160"></canvas></div>
+      <div id="panel"></div>
+    </div>
+  </div>
+
+  <div id="dialog" hidden></div>
+  <div id="overlay" hidden></div>
+  <div id="menu"></div>
+
+  <script type="module" src="dist/client/main.js"></script>
+</body>
+</html>

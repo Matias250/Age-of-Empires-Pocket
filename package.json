@@ -1,0 +1,17 @@
+{
+  "name": "imperios-rapidos",
+  "version": "0.1.0",
+  "description": "Estrategia en tiempo real estilo clásico, con partidas rápidas para móvil",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p .",
+    "bundle": "tsc -p . && node scripts/bundle.mjs",
+    "dev": "tsc -p . --watch",
+    "serve": "npx http-server -p 8080 -c-1 .",
+    "test": "tsc -p . && node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

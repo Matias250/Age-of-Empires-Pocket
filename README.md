@@ -18,8 +18,12 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 **Jugabilidad**
 
 - 4 recursos: comida, madera, oro y piedra. Bayas, árboles, minas, canteras y granjas.
-- 6 unidades con piedra-papel-o-tijera: Aldeano, Espadachín, Lancero, Arquero, Jinete y Ariete.
-- 11 edificios: Centro Urbano, Casa, Cuartel, Galería de tiro, Establo, Taller de asedio, Molino, Aserradero, Campamento minero, Granja y Torre.
+- 8 unidades: Aldeano, Espadachín, Lancero, Arquero, Jinete, Ariete, Monje (cura) y Guardia Real (élite del castillo).
+- 16 edificios: Centro Urbano, Casa, Granja, Molino, Aserradero, Campamento minero, Mercado, Cuartel, Galería de tiro, Establo,
+  Taller de asedio, Herrería, Monasterio, Empalizada, Torre y Castillo.
+- 6 investigaciones: Forja, Cota de malla, Hacha doble, Arado, Minería y Carretilla. Mercado para comprar y vender recursos.
+- 5 mapas (Continental, Río con vados, Lagos, Bosque cerrado, Oasis) y 5 biomas (Templado, Desierto, Nieve, Tropical, Otoño).
+- Elegís el color de tu ejército entre 8.
 - 2 eras (Clanes → Reinos) que desbloquean caballería, asedio y torres.
 - Niebla de guerra, minimapa, puntos de reunión, colas de entrenamiento.
 - **Regla de partida rápida:** el que pierde su Centro Urbano, pierde.

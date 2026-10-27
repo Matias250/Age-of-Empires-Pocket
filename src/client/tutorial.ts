@@ -47,7 +47,8 @@ export class Tutorial {
         done: () => pl.stats.gathered.wood >= 40,
       },
       {
-        lines: [{ who: 'Bram', text: 'Cada 🏠 Casa da lugar a 5 personas más. Seleccioná un aldeano, tocá 🔨 Construir y elegí Casa. Arrastrá el edificio y confirmá con ✔️.' }],
+        lines: [{ who: 'Bram', text: 'Cada 🏠 Casa da lugar a 5 personas más. Tocá el botón dorado 🔨 de la derecha, elegí Casa, ubicala tocando el mapa y confirmá con ✔️.' }],
+        enter: () => document.getElementById('btnBuild')?.classList.add('pulse'),
         goal: 'Construí una Casa 🏠',
         done: () => done('house') > 0,
       },
@@ -56,7 +57,7 @@ export class Tutorial {
           { who: 'Ilen', text: 'Necesitamos más manos. Tocá el 🏰 Centro Urbano y entrená aldeanos.' },
           { who: 'Bram', text: 'Y mandá a alguno a las bayas 🫐: sin comida no hay aldeanos ni soldados. Los vecinos nos mandaron 100 de comida.' },
         ],
-        enter: () => gift(100, 0, 0),
+        enter: () => { document.getElementById('btnBuild')?.classList.remove('pulse'); gift(100, 0, 0); },
         goal: 'Llegá a 6 aldeanos',
         progress: () => `${Math.min(6, vill())}/6`,
         done: () => vill() >= 6,
@@ -127,6 +128,7 @@ export class Tutorial {
     this.dlg.hidden = true;
     this.obj.hidden = true;
     this.dlg.onclick = null;
+    document.getElementById('btnBuild')?.classList.remove('pulse');
   }
 
   private next() {

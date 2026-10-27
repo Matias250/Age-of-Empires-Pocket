@@ -1,19 +1,25 @@
 // Interfaz en HTML sobre el canvas: recursos, panel de selección, botones grandes para dedos.
 import {
   AGE_NAME, AGE_UP, BUILDINGS, BuildingType, NODES, NodeType, Res, RES_LIST, TICK_RATE, TILE, UNITS, UnitType, ResBag,
+  TECHS, TechType, TRADE,
 } from '../sim/data.js';
 import { Entity } from '../sim/world.js';
 import type { Game } from './game.js';
 
-export const UNIT_ICON: Record<UnitType, string> = { villager: '🧑‍🌾', militia: '🗡️', spearman: '🔱', archer: '🏹', knight: '🐎', ram: '🐏' };
+export const UNIT_ICON: Record<UnitType, string> = { villager: '🧑‍🌾', militia: '🗡️', spearman: '🔱', archer: '🏹', knight: '🐎', ram: '🐏', monk: '🧙', champion: '🛡️' };
 export const BUILD_ICON: Record<BuildingType, string> = {
   towncenter: '🏰', house: '🏠', barracks: '⚔️', range: '🎯', stable: '🐴', workshop: '⚙️',
   mill: '🌾', lumbercamp: '🪓', miningcamp: '⛏️', farm: '🌱', tower: '🗼',
+  blacksmith: '⚒️', market: '⚖️', castle: '🏯', monastery: '⛪', wall: '🪵',
 };
 export const RES_ICON: Record<Res, string> = { food: '🍖', wood: '🪵', gold: '🪙', stone: '🪨' };
 const NODE_ICON: Record<NodeType, string> = { tree: '🌳', berries: '🫐', goldmine: '🪙', stonemine: '🪨' };
 
-const BUILD_ORDER: BuildingType[] = ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'barracks', 'range', 'stable', 'workshop', 'tower', 'towncenter'];
+const BUILD_GROUPS: [string, BuildingType[]][] = [
+  ['Economía', ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'market', 'towncenter']],
+  ['Militar', ['barracks', 'range', 'stable', 'workshop', 'blacksmith', 'monastery']],
+  ['Defensa', ['wall', 'tower', 'castle']],
+];
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -33,6 +39,11 @@ export class Hud {
     this.root.hidden = false;
     this.minimap = $('minimap') as HTMLCanvasElement;
     this.on(this.panel, 'click', (e) => this.action((e.target as HTMLElement).closest('[data-a]')?.getAttribute('data-a')));
+    this.on($('sheet'), 'click', (e) => {
+      const t = e.target as HTMLElement;
+      if (t.id === 'sheet') { g.buildMenu = false; this.sig = ''; return; }
+      this.action(t.closest('[data-a]')?.getAttribute('data-a'));
+    });
     this.on($('sidebtns'), 'click', (e) => this.action((e.target as HTMLElement).closest('[data-a]')?.getAttribute('data-a')));
     this.on($('btnPause'), 'click', () => this.togglePause());
     const mm = (e: Event) => {
@@ -52,6 +63,7 @@ export class Hud {
   destroy() {
     for (const [el, n, f] of this.handlers) el.removeEventListener(n, f);
     this.root.hidden = true;
+    $('sheet').hidden = true;
     $('overlay').hidden = true;
     $('toasts').innerHTML = '';
   }
@@ -136,8 +148,11 @@ export class Hud {
     const [cmd, arg] = a.split(':');
     switch (cmd) {
       case 'buildmenu': g.buildMenu = true; break;
+      case 'quickbuild': g.openBuildMenu(); break;
+      case 'research': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'research', p: g.me, bid: b.id, tech: arg as TechType }); break; }
+      case 'buy': case 'sell': w.issue({ t: 'trade', p: g.me, res: arg as Res, buy: cmd === 'buy' }); break;
       case 'back': g.buildMenu = false; g.mode = 'normal'; break;
-      case 'place': g.startPlacing(arg as BuildingType); break;
+      case 'place': g.buildMenu = false; g.startPlacing(arg as BuildingType); break;
       case 'confirm': g.confirmPlacement(); this.sig = ''; return;
       case 'cancelplace': g.placing = null; g.ghost = null; break;
       case 'train': g.train(arg as UnitType); break;
@@ -172,7 +187,18 @@ export class Hud {
     $('btnBox').classList.toggle('on', g.mode === 'box');
 
     const sig = this.signature();
-    if (sig !== this.sig) { this.sig = sig; this.panel.innerHTML = this.render(); }
+    if (sig !== this.sig) {
+      this.sig = sig;
+      this.panel.innerHTML = this.render();
+      const sheet = $('sheet');
+      const show = g.buildMenu && g.selUnits().some((u) => u.type === 'villager');
+      sheet.hidden = !show;
+      if (show) {
+        const sc = sheet.querySelector('.sheet-body')?.scrollTop ?? 0;
+        sheet.innerHTML = this.renderSheet();
+        const body = sheet.querySelector('.sheet-body'); if (body) body.scrollTop = sc;
+      }
+    }
     // barras de progreso en vivo
     const pb = this.panel.querySelector<HTMLElement>('[data-progress]');
     if (pb) {
@@ -180,6 +206,7 @@ export class Hud {
       if (b) {
         let f = 0;
         if (b.progress < 1) f = b.progress;
+        else if (b.tech) f = b.techT / TECHS[b.tech].time;
         else if (b.ageT >= 0) f = b.ageT / AGE_UP.time;
         else if (b.queue.length) f = b.trainT / UNITS[b.queue[0]].trainTime;
         pb.style.width = Math.round(f * 100) + '%';
@@ -196,7 +223,7 @@ export class Hud {
     parts.push(RES_LIST.map((r) => Math.floor(pl.res[r] / 25)).join('.'));
     if (g.sel.length === 1) {
       const e = w.get(g.sel[0]);
-      if (e) parts.push(e.queue.join(''), e.progress >= 1 ? 1 : 0, e.ageT >= 0 ? 1 : 0, e.order?.t ?? '', e.carry > 0 ? 1 : 0);
+      if (e) parts.push(e.queue.join(''), e.progress >= 1 ? 1 : 0, e.ageT >= 0 ? 1 : 0, e.order?.t ?? '', e.carry > 0 ? 1 : 0, e.tech ?? '', [...pl.techs].join(''));
     }
     return parts.join('|');
   }
@@ -232,6 +259,7 @@ export class Hud {
       let html = `<div class="info"><div class="title">${BUILD_ICON[b.type as BuildingType]} ${d.name}${mine ? '' : ` <small>(${ownerName})</small>`}</div>
         <div class="sub">❤️ <span data-hp>${Math.ceil(b.hp)}/${b.maxHp}</span>${b.type === 'farm' ? ` · 🍖 ${b.amount}` : ''}</div>`;
       if (b.progress < 1) html += `<div class="sub">En construcción</div><div class="bar"><div data-progress></div></div>`;
+      else if (b.tech) html += `<div class="sub">Investigando ${TECHS[b.tech].name}…</div><div class="bar"><div data-progress></div></div>`;
       else if (b.ageT >= 0) html += `<div class="sub">Avanzando a ${AGE_NAME[2]}…</div><div class="bar"><div data-progress></div></div>`;
       else if (b.queue.length) html += `<div class="sub">Entrenando ${UNITS[b.queue[0]].name} ${b.queue.length > 1 ? `(+${b.queue.length - 1} en cola)` : ''}</div><div class="bar"><div data-progress></div></div>`;
       else html += `<div class="sub dim">${d.desc}</div>`;
@@ -244,9 +272,22 @@ export class Hud {
           html += `<button class="act" data-a="train:${u}" ${locked || !w.canAfford(g.me, ud.cost) ? 'data-dis' : ''} title="${ud.desc}">
             <i>${UNIT_ICON[u]}</i><span>${ud.name}</span><em>${locked ? '🔒 Era II' : costHtml(ud.cost, pl.res)}</em>${n ? `<b class="badge">${n}</b>` : ''}</button>`;
         }
+        for (const t of d.research ?? []) {
+          const td = TECHS[t];
+          if (pl.techs.has(t) || (w.isResearching(g.me, t) && b.tech !== t)) continue;
+          if (b.tech === t) continue;
+          html += `<button class="act tech" data-a="research:${t}" ${w.canAfford(g.me, td.cost) && !b.tech ? '' : 'data-dis'} title="${td.desc}">
+            <i>${td.icon}</i><span>${td.name}</span><em>${costHtml(td.cost, pl.res)}</em></button>`;
+        }
+        if (d.trade) {
+          for (const r of ['food', 'wood', 'stone'] as Res[]) {
+            html += `<button class="act" data-a="buy:${r}" ${pl.res.gold >= TRADE.buy ? '' : 'data-dis'}><i>${RES_ICON[r]}</i><span>Comprar ${TRADE.lot}</span><em>🪙${TRADE.buy}</em></button>`;
+            html += `<button class="act" data-a="sell:${r}" ${pl.res[r] >= TRADE.lot ? '' : 'data-dis'}><i>${RES_ICON[r]}</i><span>Vender ${TRADE.lot}</span><em>+🪙${TRADE.sell}</em></button>`;
+          }
+        }
         if (b.type === 'towncenter' && pl.age === 1 && !w.isResearchingAge(g.me))
           html += `<button class="act gold" data-a="age" ${w.canAfford(g.me, AGE_UP.cost) ? '' : 'data-dis'}><i>👑</i><span>Era de los Reinos</span><em>${costHtml(AGE_UP.cost, pl.res)}</em></button>`;
-        if (b.queue.length || b.ageT >= 0) html += `<button class="act" data-a="cancel"><i>↩️</i><span>Cancelar</span></button>`;
+        if (b.queue.length || b.ageT >= 0 || b.tech) html += `<button class="act" data-a="cancel"><i>↩️</i><span>Cancelar</span></button>`;
         if (d.trains) html += `<button class="act" data-a="rally"><i>🚩</i><span>Reunión</span></button>`;
       }
       html += `<button class="act" data-a="deselect"><i>✖️</i><span>Cerrar</span></button></div>`;
@@ -257,7 +298,7 @@ export class Hud {
     let info: string;
     if (units.length === 1) {
       const u = units[0], d = UNITS[u.type as UnitType];
-      const doing = !u.order ? 'Ocioso' : u.order.t === 'gather' ? `Recolectando ${RES_ICON[u.order.res]}` : u.order.t === 'build' ? 'Construyendo' : u.order.t === 'move' ? 'Moviéndose' : 'Atacando';
+      const doing = !u.order ? 'Ocioso' : u.order.t === 'gather' ? `Recolectando ${RES_ICON[u.order.res]}` : u.order.t === 'build' ? 'Construyendo' : u.order.t === 'move' ? 'Moviéndose' : u.order.t === 'heal' ? 'Curando' : 'Atacando';
       info = `<div class="title">${UNIT_ICON[u.type as UnitType]} ${d.name}${mine ? '' : ` <small>(${ownerName})</small>`}</div>
         <div class="sub">❤️ <span data-hp>${Math.ceil(u.hp)}/${u.maxHp}</span> · ⚔️ ${d.atk} · 🛡️ ${d.armorMelee}/${d.armorPierce}${d.atkType === 'pierce' ? ' · 🎯 alcance' : ''}</div>
         <div class="sub dim">${mine ? doing + (u.carry ? ` · lleva ${u.carry} ${RES_ICON[u.carryRes!]}` : '') : d.desc}</div>`;
@@ -269,15 +310,7 @@ export class Hud {
     let acts = '';
     if (mine) {
       const vills = units.some((u) => u.type === 'villager');
-      if (g.buildMenu && vills) {
-        for (const b of BUILD_ORDER) {
-          const d = BUILDINGS[b];
-          const locked = pl.age < d.age;
-          acts += `<button class="act" data-a="place:${b}" ${locked || !w.canAfford(g.me, d.cost) ? 'data-dis' : ''} title="${d.desc}">
-            <i>${BUILD_ICON[b]}</i><span>${d.name}</span><em>${locked ? '🔒 Era II' : costHtml(d.cost, pl.res)}</em></button>`;
-        }
-        acts += `<button class="act" data-a="back"><i>⬅️</i><span>Volver</span></button>`;
-      } else {
+      {
         if (vills) acts += `<button class="act gold" data-a="buildmenu"><i>🔨</i><span>Construir</span></button>`;
         if (units.some((u) => u.type !== 'villager')) acts += `<button class="act ${g.mode === 'attack' ? 'on' : ''}" data-a="attack"><i>⚔️</i><span>Atacar zona</span></button>`;
         acts += `<button class="act" data-a="stop"><i>✋</i><span>Detener</span></button>`;
@@ -285,5 +318,22 @@ export class Hud {
       }
     } else acts = `<button class="act" data-a="deselect"><i>✖️</i><span>Cerrar</span></button>`;
     return `<div class="info">${info}</div><div class="acts">${acts}</div>`;
+  }
+
+  /** Menú de construcción en una ventana propia, con scroll desde arriba */
+  private renderSheet(): string {
+    const g = this.g, w = g.world, pl = w.players[g.me];
+    let html = `<div class="sheet-card"><div class="sheet-head"><b>🔨 ¿Qué construimos?</b><button data-a="back" aria-label="Cerrar">✖️</button></div><div class="sheet-body">`;
+    for (const [group, list] of BUILD_GROUPS) {
+      html += `<h4>${group}</h4><div class="sheet-grid">`;
+      for (const b of list) {
+        const d = BUILDINGS[b];
+        const locked = pl.age < d.age;
+        html += `<button class="bcard" data-a="place:${b}" ${locked || !w.canAfford(g.me, d.cost) ? 'data-dis' : ''}>
+          <i>${BUILD_ICON[b]}</i><b>${d.name}</b><em>${locked ? '🔒 Era de los Reinos' : costHtml(d.cost, pl.res)}</em><small>${d.desc}</small></button>`;
+      }
+      html += `</div>`;
+    }
+    return html + `</div></div>`;
   }
 }

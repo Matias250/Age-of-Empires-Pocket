@@ -4,7 +4,7 @@
 
 import {
   AGE_UP, BUILDINGS, BUILDING_ARMOR, BuildingType, CARRY, DT, FARM_RATE, MAX_POP, NODES, NodeType,
-  Res, ResBag, RES_LIST, TICK_RATE, TILE, UNITS, UnitType, ArmorClass, START_RES,
+  Res, ResBag, RES_LIST, TICK_RATE, TILE, UNITS, UnitType, ArmorClass, START_RES, TECHS, TechType, TRADE,
 } from './data.js';
 import { findPath, Grid, lineClear } from './path.js';
 import { Rng } from './rng.js';
@@ -14,7 +14,8 @@ export type Order =
   | { t: 'attackMove'; x: number; y: number; sub?: number }
   | { t: 'attack'; target: number }
   | { t: 'gather'; target: number; res: Res; phase: 'go' | 'return' }
-  | { t: 'build'; target: number };
+  | { t: 'build'; target: number }
+  | { t: 'heal'; target: number };
 
 export interface Entity {
   id: number;
@@ -39,6 +40,7 @@ export interface Entity {
   // edificios
   progress: number;
   queue: UnitType[]; trainT: number; ageT: number;
+  tech?: TechType; techT: number;
   rally?: { x: number; y: number; target?: number };
   // nodos / granjas
   amount: number;
@@ -49,6 +51,7 @@ export interface Player {
   isAI: boolean;
   res: ResBag;
   age: 1 | 2;
+  techs: Set<TechType>;
   defeated: boolean;
   gatherMult: number;
   explored: Uint8Array; visible: Uint8Array;
@@ -65,6 +68,8 @@ export type Command =
   | { t: 'cancel'; p: number; bid: number }
   | { t: 'age'; p: number; bid: number }
   | { t: 'rally'; p: number; bid: number; x: number; y: number }
+  | { t: 'research'; p: number; bid: number; tech: TechType }
+  | { t: 'trade'; p: number; res: Res; buy: boolean }
   | { t: 'stop'; p: number; ids: number[] };
 
 export type GEvent =
@@ -75,7 +80,9 @@ export type GEvent =
   | { t: 'attacked'; p: number; x: number; y: number }
   | { t: 'built'; p: number; id: number }
   | { t: 'trained'; p: number; id: number }
-  | { t: 'age'; p: number };
+  | { t: 'age'; p: number }
+  | { t: 'tech'; p: number; tech: TechType }
+  | { t: 'heal'; x: number; y: number };
 
 const INTERACT = 14; // px de distancia para recolectar/construir/depositar
 
@@ -83,6 +90,10 @@ const INTERACT = 14; // px de distancia para recolectar/construir/depositar
 export class World implements Grid {
   readonly w: number; readonly h: number;
   solid: Uint8Array; occ: Int32Array;
+  /** 0 = tierra, 1 = agua, 2 = vado (se camina, no se construye) */
+  terrain: Uint8Array;
+  biome = 'templado';
+  mapName = 'continental';
   tick = 0;
   entities = new Map<number, Entity>();
   players: Player[] = [];
@@ -97,6 +108,7 @@ export class World implements Grid {
     this.w = w; this.h = h;
     this.solid = new Uint8Array(w * h);
     this.occ = new Int32Array(w * h);
+    this.terrain = new Uint8Array(w * h);
     this.rng = new Rng(seed);
   }
 
@@ -104,7 +116,7 @@ export class World implements Grid {
   addPlayer(name: string, team: number, color: string, isAI: boolean): Player {
     const p: Player = {
       id: this.players.length, team, name, color, isAI,
-      res: { ...START_RES }, age: 1, defeated: false, gatherMult: 1,
+      res: { ...START_RES }, age: 1, techs: new Set(), defeated: false, gatherMult: 1,
       explored: new Uint8Array(this.w * this.h), visible: new Uint8Array(this.w * this.h),
       stats: { gathered: { food: 0, wood: 0, gold: 0, stone: 0 }, kills: 0, lost: 0, trained: 0, built: 0 },
       lastPopMsg: -999, lastAttackMsg: -999,
@@ -117,7 +129,7 @@ export class World implements Grid {
     return {
       id: this.nextId++, cat, type, owner, x: 0, y: 0, tx: 0, ty: 0, size: 0, hp: 1, maxHp: 1, radius: 0,
       path: [], pathKey: '', repathAt: 0, carry: 0, gatherAcc: 0, cooldown: 0, lastHitBy: 0, acquireAt: 0,
-      facing: 0, lastNode: 0, progress: 1, queue: [], trainT: 0, ageT: -1, amount: 0,
+      facing: 0, lastNode: 0, progress: 1, queue: [], trainT: 0, ageT: -1, techT: 0, amount: 0,
     };
   }
 
@@ -164,7 +176,7 @@ export class World implements Grid {
       for (let x = e.tx; x < e.tx + e.size; x++) {
         const i = y * this.w + x;
         this.occ[i] = on ? e.id : 0;
-        if (solid) this.solid[i] = on ? 1 : 0;
+        if (solid) this.solid[i] = on || this.terrain[i] === 1 ? 1 : 0;
       }
   }
 
@@ -172,9 +184,40 @@ export class World implements Grid {
     for (let y = ty - margin; y < ty + size + margin; y++)
       for (let x = tx - margin; x < tx + size + margin; x++) {
         if (x < 0 || y < 0 || x >= this.w || y >= this.h) return false;
-        if (this.occ[y * this.w + x]) return false;
+        const i = y * this.w + x;
+        if (this.occ[i] || this.terrain[i] !== 0) return false;
       }
     return true;
+  }
+
+  setWater(x: number, y: number, kind: 1 | 2) {
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
+    const i = y * this.w + x;
+    const e = this.get(this.occ[i]);
+    if (e && e.cat === 'node') this.kill(e);
+    else if (e) return;
+    this.terrain[i] = kind;
+    this.solid[i] = kind === 1 ? 1 : 0;
+  }
+
+  /** Quita árboles y convierte agua en vado (para abrir caminos al generar el mapa) */
+  clearTile(x: number, y: number) {
+    if (x < 1 || y < 1 || x >= this.w - 1 || y >= this.h - 1) return;
+    const i = y * this.w + x;
+    const e = this.get(this.occ[i]);
+    if (e && e.cat === 'node' && e.type === 'tree') this.kill(e);
+    if (this.terrain[i] === 1) { this.terrain[i] = 2; this.solid[i] = this.occ[i] ? this.solid[i] : 0; }
+  }
+
+  hasTech(p: number, t: TechType): boolean { return p >= 0 && this.players[p].techs.has(t); }
+  speedOf(u: Entity): number {
+    const s = UNITS[u.type as UnitType].speed;
+    return u.type === 'villager' && this.hasTech(u.owner, 'wheelbarrow') ? s * 1.15 : s;
+  }
+  carryCap(u: Entity): number { return CARRY + (this.hasTech(u.owner, 'wheelbarrow') ? 5 : 0); }
+  isResearching(p: number, t?: TechType): boolean {
+    for (const b of this.buildingsOf(p)) if (b.tech && (!t || b.tech === t)) return true;
+    return false;
   }
 
   canPlace(p: number, type: BuildingType, tx: number, ty: number): string | null {
@@ -309,17 +352,42 @@ export class World implements Grid {
         const b = this.entities.get(c.bid);
         if (!b || b.owner !== c.p) return;
         if (b.ageT >= 0) { b.ageT = -1; this.refund(c.p, AGE_UP.cost); return; }
+        if (b.tech) { this.refund(c.p, TECHS[b.tech].cost); b.tech = undefined; b.techT = 0; return; }
         const u = b.queue.pop();
         if (u) { this.refund(c.p, UNITS[u].cost); if (!b.queue.length) b.trainT = 0; }
         break;
       }
       case 'age': {
         const b = this.entities.get(c.bid);
-        if (!b || b.owner !== c.p || b.type !== 'towncenter' || b.progress < 1) return;
+        if (!b || b.owner !== c.p || b.type !== 'towncenter' || b.progress < 1 || b.tech) return;
         if (pl.age >= 2 || this.isResearchingAge(c.p)) return;
         if (!this.canAfford(c.p, AGE_UP.cost)) { this.events.push({ t: 'msg', p: c.p, text: 'Recursos insuficientes' }); return; }
         this.pay(c.p, AGE_UP.cost);
         b.ageT = 0;
+        break;
+      }
+      case 'research': {
+        const b = this.entities.get(c.bid);
+        if (!b || b.owner !== c.p || b.cat !== 'building' || b.progress < 1 || b.tech || b.ageT >= 0) return;
+        const td = TECHS[c.tech];
+        if (!BUILDINGS[b.type as BuildingType].research?.includes(c.tech)) return;
+        if (pl.techs.has(c.tech) || this.isResearching(c.p, c.tech)) return;
+        if (pl.age < td.age) return;
+        if (!this.canAfford(c.p, td.cost)) { this.events.push({ t: 'msg', p: c.p, text: 'Recursos insuficientes' }); return; }
+        this.pay(c.p, td.cost);
+        b.tech = c.tech; b.techT = 0;
+        break;
+      }
+      case 'trade': {
+        if (!this.buildingsOf(c.p, 'market', true).length) return;
+        if (c.res === 'gold') return;
+        if (c.buy) {
+          if (pl.res.gold < TRADE.buy) { this.events.push({ t: 'msg', p: c.p, text: 'Falta oro' }); return; }
+          pl.res.gold -= TRADE.buy; pl.res[c.res] += TRADE.lot;
+        } else {
+          if (pl.res[c.res] < TRADE.lot) { this.events.push({ t: 'msg', p: c.p, text: 'No tenés suficiente para vender' }); return; }
+          pl.res[c.res] -= TRADE.lot; pl.res.gold += TRADE.sell;
+        }
         break;
       }
       case 'rally': {
@@ -341,6 +409,11 @@ export class World implements Grid {
   /** Orden contextual: recolectar, construir, atacar o moverse según el objetivo. */
   orderOnTarget(u: Entity, t: Entity) {
     const isVill = u.type === 'villager';
+    if (u.type === 'monk') {
+      if (t.cat === 'unit' && !this.isEnemy(u.owner, t.owner) && t.id !== u.id) this.setOrder(u, { t: 'heal', target: t.id });
+      else this.setOrder(u, { t: 'move', x: t.x, y: t.y + (t.cat === 'building' ? t.size * TILE * 0.5 + 12 : 0) });
+      return;
+    }
     if (t.cat === 'node') {
       if (isVill) this.setOrder(u, { t: 'gather', target: t.id, res: NODES[t.type as NodeType].res, phase: 'go' });
       else this.setOrder(u, { t: 'move', x: t.x, y: t.y + TILE });
@@ -400,8 +473,16 @@ export class World implements Grid {
     if (b.progress < 1) return;
     const bd = BUILDINGS[b.type as BuildingType];
     const pl = this.players[b.owner];
-    // Investigación de era
-    if (b.ageT >= 0) {
+    // Investigaciones
+    if (b.tech) {
+      b.techT += DT;
+      if (b.techT >= TECHS[b.tech].time) {
+        pl.techs.add(b.tech);
+        this.events.push({ t: 'tech', p: b.owner, tech: b.tech });
+        this.events.push({ t: 'msg', p: b.owner, text: `Investigación lista: ${TECHS[b.tech].name}` });
+        b.tech = undefined; b.techT = 0;
+      }
+    } else if (b.ageT >= 0) {
       b.ageT += DT;
       if (b.ageT >= AGE_UP.time) {
         b.ageT = -1; pl.age = 2;
@@ -472,6 +553,7 @@ export class World implements Grid {
     else {
       const d = UNITS[t.type as UnitType];
       armor = type === 'melee' ? d.armorMelee : d.armorPierce; cls = d.cls;
+      if (t.type !== 'villager' && t.type !== 'monk' && this.hasTech(t.owner, 'mail')) armor += 1;
     }
     return Math.max(1, atk + (bonus?.[cls] ?? 0) - armor);
   }
@@ -500,6 +582,7 @@ export class World implements Grid {
         if (this.moveTo(u, o.x, o.y)) this.setOrder(u, undefined);
         break;
       case 'attackMove': {
+        if (d.heals || d.atk === 0) { if (this.moveTo(u, o.x, o.y)) this.setOrder(u, undefined); break; }
         let sub = this.get(o.sub);
         if (!sub || sub.hp <= 0) {
           o.sub = undefined;
@@ -521,6 +604,17 @@ export class World implements Grid {
       }
       case 'gather': this.gatherStep(u, o); break;
       case 'build': this.buildStep(u, o); break;
+      case 'heal': {
+        const t = this.get(o.target);
+        if (!t || t.hp <= 0 || t.hp >= t.maxHp) { this.setOrder(u, undefined); break; }
+        if (this.edgeDist(u, t) <= d.range) {
+          u.path = [];
+          u.facing = Math.atan2(t.y - u.y, t.x - u.x);
+          t.hp = Math.min(t.maxHp, t.hp + 4 * DT);
+          if (this.tick % 10 === 0) this.events.push({ t: 'heal', x: t.x, y: t.y });
+        } else this.approach(u, t, d.range * 0.8);
+        break;
+      }
     }
   }
 
@@ -528,6 +622,16 @@ export class World implements Grid {
     if (this.tick < u.acquireAt) return;
     u.acquireAt = this.tick + 10;
     if (u.type === 'villager') return;
+    if (d.heals) {
+      let best: Entity | undefined, bd = d.sight * TILE;
+      for (const e of this.entities.values()) {
+        if (e.cat !== 'unit' || e.id === u.id || e.hp >= e.maxHp || this.isEnemy(u.owner, e.owner) || e.owner < 0) continue;
+        const dist = Math.hypot(e.x - u.x, e.y - u.y);
+        if (dist < bd) { bd = dist; best = e; }
+      }
+      if (best) this.setOrder(u, { t: 'heal', target: best.id });
+      return;
+    }
     const hitter = this.get(u.lastHitBy);
     if (hitter && hitter.hp > 0 && this.isEnemy(u.owner, hitter.owner) && !(d.onlyBuildings && hitter.cat !== 'building')) {
       this.setOrder(u, { t: 'attack', target: hitter.id });
@@ -553,14 +657,15 @@ export class World implements Grid {
   }
 
   private attackStep(u: Entity, d: (typeof UNITS)[UnitType], t: Entity) {
-    if (d.onlyBuildings && t.cat !== 'building') { this.setOrder(u, undefined); return; }
+    if ((d.onlyBuildings && t.cat !== 'building') || d.atk === 0) { this.setOrder(u, undefined); return; }
     const dist = this.edgeDist(u, t);
     if (dist <= d.range) {
       u.path = [];
       u.facing = Math.atan2(t.y - u.y, t.x - u.x);
       if (u.cooldown <= 0) {
         u.cooldown = d.cooldown;
-        this.dealDamage(u, t, d.atk, d.atkType, d.bonus);
+        const atk = d.atk + (u.type !== 'villager' && this.hasTech(u.owner, 'forge') ? 1 : 0);
+        this.dealDamage(u, t, atk, d.atkType, d.bonus);
         if (d.atkType === 'pierce') this.events.push({ t: 'shot', x1: u.x, y1: u.y, x2: t.x, y2: t.y });
       }
     } else {
@@ -571,7 +676,8 @@ export class World implements Grid {
   private gatherStep(u: Entity, o: Extract<Order, { t: 'gather' }>) {
     const pl = this.players[u.owner];
     if (u.carry > 0 && u.carryRes !== o.res) o.phase = 'return';
-    if (u.carry >= CARRY) o.phase = 'return';
+    const cap = this.carryCap(u);
+    if (u.carry >= cap) o.phase = 'return';
     if (o.phase === 'return') {
       if (u.carry <= 0) { o.phase = 'go'; return; }
       const drop = this.nearestDrop(u, u.carryRes!);
@@ -607,17 +713,19 @@ export class World implements Grid {
       u.path = [];
       u.lastNode = n.id;
       u.facing = Math.atan2(n.y - u.y, n.x - u.x);
-      const rate = (n.cat === 'node' ? NODES[n.type as NodeType].rate : FARM_RATE) * pl.gatherMult;
+      let rate = (n.cat === 'node' ? NODES[n.type as NodeType].rate : FARM_RATE) * pl.gatherMult;
+      if ((o.res === 'wood' && pl.techs.has('axe')) || (o.res === 'food' && pl.techs.has('plow')) ||
+        ((o.res === 'gold' || o.res === 'stone') && pl.techs.has('mining'))) rate *= 1.2;
       u.carryRes = o.res;
       u.gatherAcc += rate * DT;
-      while (u.gatherAcc >= 1 && n.amount > 0 && u.carry < CARRY) {
+      while (u.gatherAcc >= 1 && n.amount > 0 && u.carry < cap) {
         u.gatherAcc -= 1; n.amount -= 1; u.carry += 1;
       }
       if (n.amount <= 0) {
         if (n.cat === 'node') this.kill(n);
         else n.hp = 0; // granja agotada
       }
-      if (u.carry >= CARRY) o.phase = 'return';
+      if (u.carry >= cap) o.phase = 'return';
     } else {
       // ir al centro de la granja; o al lado del nodo
       if (n.type === 'farm') { if (this.moveTo(u, n.x, n.y)) { /* llegó */ } }
@@ -782,7 +890,7 @@ export class World implements Grid {
   private followPath(u: Entity) {
     const p = u.path[0];
     if (!p) return;
-    const speed = UNITS[u.type as UnitType].speed * DT;
+    const speed = this.speedOf(u) * DT;
     if (Math.hypot(p.x - u.x, p.y - u.y) <= speed + 1) {
       u.x = p.x; u.y = p.y; u.path.shift();
       return;
@@ -794,7 +902,7 @@ export class World implements Grid {
     const dx = x - u.x, dy = y - u.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 0.01) return;
-    const sp = Math.min(dist, UNITS[u.type as UnitType].speed * DT);
+    const sp = Math.min(dist, this.speedOf(u) * DT);
     u.facing = Math.atan2(dy, dx);
     this.tryMove(u, u.x + (dx / dist) * sp, u.y + (dy / dist) * sp);
   }

@@ -1,5 +1,5 @@
 // IA de computadora. Solo "juega" emitiendo los mismos comandos que un humano.
-import { AGE_UP, BUILDINGS, BuildingType, NODES, NodeType, Res, TICK_RATE, TILE, UNITS, UnitType } from './data.js';
+import { AGE_UP, BUILDINGS, BuildingType, NODES, NodeType, Res, TECHS, TechType, TICK_RATE, TILE, UNITS, UnitType } from './data.js';
 import { Entity, World } from './world.js';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -8,11 +8,12 @@ export const DIFF_NAME: Record<Difficulty, string> = { easy: 'Fácil', normal: '
 interface Profile {
   think: number; gather: number; maxVill: number; firstAttack: number; armyAttack: number;
   ageUpAt: number; stable: boolean; ram: boolean; towers: number; barracksAt: number; rangeAt: number;
+  techs: TechType[]; castle: boolean;
 }
 const PROFILES: Record<Difficulty, Profile> = {
-  easy: { think: 3, gather: 0.75, maxVill: 14, firstAttack: 480, armyAttack: 6, ageUpAt: 14, stable: false, ram: false, towers: 0, barracksAt: 9, rangeAt: 99 },
-  normal: { think: 1.5, gather: 1, maxVill: 22, firstAttack: 330, armyAttack: 9, ageUpAt: 17, stable: true, ram: true, towers: 0, barracksAt: 8, rangeAt: 13 },
-  hard: { think: 0.75, gather: 1.2, maxVill: 30, firstAttack: 230, armyAttack: 10, ageUpAt: 19, stable: true, ram: true, towers: 1, barracksAt: 7, rangeAt: 11 },
+  easy: { think: 3, gather: 0.75, maxVill: 14, firstAttack: 480, armyAttack: 6, ageUpAt: 14, stable: false, ram: false, towers: 0, barracksAt: 9, rangeAt: 99, techs: [], castle: false },
+  normal: { think: 1.5, gather: 1, maxVill: 22, firstAttack: 330, armyAttack: 9, ageUpAt: 17, stable: true, ram: true, towers: 0, barracksAt: 8, rangeAt: 13, techs: ['axe', 'forge'], castle: false },
+  hard: { think: 0.75, gather: 1.35, maxVill: 30, firstAttack: 230, armyAttack: 10, ageUpAt: 19, stable: true, ram: true, towers: 1, barracksAt: 7, rangeAt: 11, techs: ['wheelbarrow', 'axe', 'plow', 'forge', 'mining', 'mail'], castle: true },
 };
 
 export class AI {
@@ -21,7 +22,9 @@ export class AI {
   private next = 0;
   private attacking = false;
   private wave = 0;
+  private waveSize = 0;
   private attackTarget = 0;
+  private rebalanceAt = 0;
   private busy = new Set<number>(); // aldeanos ya usados en este ciclo de decisión
 
   constructor(private w: World, p: number, readonly diff: Difficulty) {
@@ -41,6 +44,7 @@ export class AI {
     this.assignOrphanBuildings();
     this.economy(tc);
     this.buildings(tc);
+    this.research();
     this.army(tc);
   }
 
@@ -67,23 +71,30 @@ export class AI {
     if (cap < 125 && cap - pop <= (pop > 20 ? 5 : 3) && housesBuilding === 0) this.construct('house', tc, 3, 9);
 
     // Depósitos
-    if (vills.length >= 5 && !w.buildingsOf(this.p, 'lumbercamp').length) this.campNear('lumbercamp', 'tree', tc);
-    if (vills.length >= 10 && !w.buildingsOf(this.p, 'miningcamp').length) this.campNear('miningcamp', 'goldmine', tc);
+    if (vills.length >= 5 && this.campFar('lumbercamp', 'tree', 3)) this.campNear('lumbercamp', 'tree', tc);
+    if (vills.length >= 10 && this.campFar('miningcamp', 'goldmine', 2)) this.campNear('miningcamp', 'goldmine', tc);
 
     // Repartir aldeanos ociosos
     const want = pl.age === 1 && w.buildingsOf(this.p, 'barracks').length === 0
       ? { food: 0.5, wood: 0.4, gold: 0.1, stone: 0 }
-      : { food: 0.45, wood: 0.3, gold: 0.21, stone: 0.04 };
-    // Si sobra un recurso, bajar su prioridad; si falta comida, subirla
-    for (const r of Object.keys(want) as Res[]) if (pl.res[r] > 600) want[r] *= 0.3;
+      : { food: 0.45, wood: 0.3, gold: 0.21, stone: this.prof.castle && pl.age === 2 ? 0.12 : 0.04 };
+    // Si sobra un recurso, bajar mucho su prioridad; si falta comida o madera, subirla
+    for (const r of Object.keys(want) as Res[]) {
+      if (pl.res[r] > 450) want[r] *= 0.1;
+      else if (pl.res[r] > 250 && r !== 'food' && r !== 'wood') want[r] *= 0.5;
+    }
     if (pl.res.food < 100) want.food *= 1.3;
+    if (pl.res.wood < 100) want.wood *= 1.3;
+    const total = want.food + want.wood + want.gold + want.stone;
+    for (const r of Object.keys(want) as Res[]) want[r] /= total;
     const count: Record<Res, number> = { food: 0, wood: 0, gold: 0, stone: 0 };
     for (const v of vills) if (v.order?.t === 'gather') count[v.order.res]++;
-    // Rebalanceo lento: liberar un aldeano del recurso más sobrado
-    const surplus = (Object.keys(want) as Res[]).find((r) => count[r] - want[r] * vills.length > 2.5);
-    if (surplus && w.tick % (TICK_RATE * 6) < this.prof.think * TICK_RATE) {
+    // Rebalanceo: liberar un aldeano del recurso más sobrado
+    const surplus = (Object.keys(want) as Res[]).find((r) => pl.res[r] > 300 && count[r] - want[r] * vills.length > 2);
+    if (surplus && w.tick >= this.rebalanceAt) {
+      this.rebalanceAt = w.tick + TICK_RATE * 8;
       const v = vills.find((u) => u.order?.t === 'gather' && u.order.res === surplus && u.carry === 0);
-      if (v) { w.issue({ t: 'stop', p: this.p, ids: [v.id] }); count[surplus]--; }
+      if (v) { w.issue({ t: 'stop', p: this.p, ids: [v.id] }); count[surplus]--; this.busy.add(v.id); }
     }
     for (const v of vills) {
       if (v.order || this.busy.has(v.id)) continue;
@@ -117,7 +128,22 @@ export class AI {
     else if (pl.age === 2 && this.prof.stable && !have('stable')) this.construct('stable', tc, 4, 13);
     else if (pl.age === 2 && this.prof.ram && this.time > this.prof.firstAttack && !have('workshop')) this.construct('workshop', tc, 4, 13);
     else if (pl.age === 2 && have('tower') < this.prof.towers) this.construct('tower', tc, 3, 6);
-    else if (pl.age === 2 && this.diff === 'hard' && vills >= 24 && have('barracks') < 2) this.construct('barracks', tc, 5, 14);
+    else if (this.prof.techs.length > 1 && vills >= 14 && !have('blacksmith')) this.construct('blacksmith', tc, 4, 12);
+    else if (this.prof.castle && pl.age === 2 && !have('castle') && pl.res.stone >= 450) this.construct('castle', tc, 5, 13);
+    else if (this.diff === 'hard' && vills >= 20 && have('barracks') < 2) this.construct('barracks', tc, 5, 14);
+    else if (this.diff === 'hard' && vills >= 25 && have('range') < 2) this.construct('range', tc, 5, 14);
+  }
+
+  private research() {
+    const w = this.w, pl = w.players[this.p];
+    if (this.savingForAge(w.unitsOf(this.p, 'villager').length)) return;
+    for (const t of this.prof.techs) {
+      if (pl.techs.has(t) || w.isResearching(this.p, t)) continue;
+      const td = TECHS[t];
+      if (!w.canAfford(this.p, td.cost) || pl.res.food - (td.cost.food ?? 0) < 100) continue;
+      const b = w.buildingsOf(this.p, undefined, true).find((x) => BUILDINGS[x.type as BuildingType].research?.includes(t) && !x.tech && x.ageT < 0 && !x.queue.length);
+      if (b) { w.issue({ t: 'research', p: this.p, bid: b.id, tech: t }); return; }
+    }
   }
 
   private army(tc: Entity) {
@@ -138,7 +164,7 @@ export class AI {
       if (w.canAfford(this.p, c)) w.issue({ t: 'train', p: this.p, bid: b.id, u });
     }
 
-    const army = w.unitsOf(this.p).filter((u) => u.type !== 'villager');
+    const army = w.unitsOf(this.p).filter((u) => u.type !== 'villager' && u.type !== 'monk');
     // Defensa: enemigos cerca de mis edificios
     const threat = this.findThreat();
     if (threat) {
@@ -150,10 +176,17 @@ export class AI {
     const needed = this.prof.armyAttack + this.wave * 2;
     if (!this.attacking && this.time >= this.prof.firstAttack && army.length >= Math.min(needed, 24)) {
       this.attacking = true;
+      this.waveSize = army.length;
       this.wave++;
     }
     if (this.attacking) {
-      if (army.length < 3) { this.attacking = false; return; }
+      if (army.length < Math.max(3, this.waveSize * 0.35)) {
+        // la ola fracasó: replegarse y juntar un ejército nuevo
+        this.attacking = false;
+        const home = army.map((u) => u.id);
+        if (home.length) w.issue({ t: 'move', p: this.p, ids: home, x: tc.x, y: tc.y + 3 * TILE });
+        return;
+      }
       let target = w.get(this.attackTarget);
       if (!target || target.hp <= 0) {
         target = this.pickTarget(tc);
@@ -193,6 +226,19 @@ export class AI {
   }
 
   // ------------------------------------------------------------------
+  /** ¿Hace falta un depósito nuevo? (no hay, o los recursos quedaron lejos de todos) */
+  private campFar(type: BuildingType, node: NodeType, max: number): boolean {
+    const w = this.w;
+    const camps = w.buildingsOf(this.p, type);
+    if (!camps.length) return true;
+    if (camps.length >= max || camps.some((c) => c.progress < 1)) return false;
+    for (const e of w.entities.values()) {
+      if (e.cat !== 'node' || e.type !== node) continue;
+      if (camps.some((c) => Math.hypot(e.x - c.x, e.y - c.y) < 6 * TILE)) return false;
+    }
+    return true;
+  }
+
   private campNear(type: BuildingType, node: NodeType, tc: Entity) {
     const w = this.w;
     let best: Entity | undefined, bd = 18 * TILE;

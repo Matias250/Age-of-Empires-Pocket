@@ -19,6 +19,7 @@ export class Game {
   mode: InputMode = 'normal';
   placing: BuildingType | null = null;
   ghost: { tx: number; ty: number } | null = null;
+  wallStart: { tx: number; ty: number } | null = null;
   buildMenu = false;
   paused = false;
   speed = 1;
@@ -107,6 +108,7 @@ export class Game {
     for (const e of w.events) {
       switch (e.t) {
         case 'shot': R.fx.push({ kind: 'shot', x: e.x1, y: e.y1, x2: e.x2, y2: e.y2, t: this.time, life: 0.3 }); break;
+        case 'heal': R.fx.push({ kind: 'heal', x: e.x, y: e.y, t: this.time, life: 0.8 }); break;
         case 'hit': if (R.fx.length < 200) R.fx.push({ kind: 'hit', x: e.x, y: e.y, t: this.time, life: 0.18 }); break;
         case 'death': R.fx.push({ kind: 'death', x: e.x, y: e.y, t: this.time, life: e.cat === 'building' ? 1.2 : 0.6 }); break;
         case 'msg': if (e.p === this.me || e.p === -1) this.hud.toast(e.text); break;
@@ -134,11 +136,14 @@ export class Game {
     // fantasma de construcción
     if (this.placing && this.ghost) {
       const d = BUILDINGS[this.placing];
-      const ok = !w.canPlace(this.me, this.placing, this.ghost.tx, this.ghost.ty);
-      g.fillStyle = ok ? 'rgba(80,220,120,0.35)' : 'rgba(240,80,80,0.4)';
-      g.strokeStyle = ok ? '#5ee28a' : '#f05050'; g.lineWidth = 2;
-      g.fillRect(this.ghost.tx * TILE, this.ghost.ty * TILE, d.size * TILE, d.size * TILE);
-      g.strokeRect(this.ghost.tx * TILE, this.ghost.ty * TILE, d.size * TILE, d.size * TILE);
+      const tiles = this.placing === 'wall' ? this.wallTiles() : [this.ghost];
+      for (const t of tiles) {
+        const ok = !w.canPlace(this.me, this.placing, t.tx, t.ty);
+        g.fillStyle = ok ? 'rgba(80,220,120,0.35)' : 'rgba(240,80,80,0.4)';
+        g.strokeStyle = ok ? '#5ee28a' : '#f05050'; g.lineWidth = 2;
+        g.fillRect(t.tx * TILE, t.ty * TILE, d.size * TILE, d.size * TILE);
+        g.strokeRect(t.tx * TILE, t.ty * TILE, d.size * TILE, d.size * TILE);
+      }
     }
     if (this.box) {
       const a = this.screenToWorld(this.box.x0, this.box.y0), b = this.screenToWorld(this.box.x1, this.box.y1);
@@ -271,7 +276,7 @@ export class Game {
   }
 
   cancelModes() {
-    this.placing = null; this.ghost = null; this.mode = 'normal'; this.buildMenu = false;
+    this.placing = null; this.ghost = null; this.wallStart = null; this.mode = 'normal'; this.buildMenu = false;
   }
 
   private ghostUnder(sx: number, sy: number): boolean {
@@ -287,8 +292,45 @@ export class Game {
     this.ghost = { tx: Math.round(p.x / TILE - s / 2), ty: Math.round(p.y / TILE - s / 2) };
   }
 
+  /** Casillas de la empalizada entre el primer y el segundo toque */
+  wallTiles(): { tx: number; ty: number }[] {
+    if (!this.ghost) return [];
+    const a = this.wallStart ?? this.ghost, b = this.ghost;
+    const n = Math.max(Math.abs(b.tx - a.tx), Math.abs(b.ty - a.ty));
+    const out: { tx: number; ty: number }[] = [];
+    for (let i = 0; i <= n; i++) {
+      const tx = Math.round(a.tx + (b.tx - a.tx) * (n ? i / n : 0)), ty = Math.round(a.ty + (b.ty - a.ty) * (n ? i / n : 0));
+      if (!out.some((t) => t.tx === tx && t.ty === ty)) out.push({ tx, ty });
+    }
+    return out.slice(0, 40);
+  }
+
+  openBuildMenu() {
+    if (!this.selUnits().some((u) => u.type === 'villager')) {
+      const vills = this.world.unitsOf(this.me, 'villager');
+      if (!vills.length) { this.hud.toast('No tenés aldeanos'); return; }
+      const c = this.screenToWorld(this.vw / 2, this.vh / 2);
+      const idle = vills.filter((v) => !v.order);
+      const pool = idle.length ? idle : vills;
+      pool.sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y));
+      this.select([pool[0].id]);
+      this.hud.toast(`Aldeano elegido para construir`);
+    }
+    this.placing = null; this.ghost = null;
+    this.buildMenu = true;
+  }
+
   confirmPlacement() {
     if (!this.placing || !this.ghost) return;
+    if (this.placing === 'wall') {
+      const vills = this.selUnits().filter((u) => u.type === 'villager').map((u) => u.id);
+      const tiles = this.wallTiles().filter((t) => !this.world.canPlace(this.me, 'wall', t.tx, t.ty));
+      if (!tiles.length) { this.hud.toast('No se puede construir ahí'); return; }
+      // el primer tramo se ordena al final para que los aldeanos arranquen por ahí
+      for (const t of [...tiles].reverse()) this.world.issue({ t: 'build', p: this.me, ids: vills, b: 'wall', tx: t.tx, ty: t.ty });
+      this.placing = null; this.ghost = null; this.wallStart = null;
+      return;
+    }
     const why = this.world.canPlace(this.me, this.placing, this.ghost.tx, this.ghost.ty);
     if (why) { this.hud.toast(why); return; }
     const vills = this.selUnits().filter((u) => u.type === 'villager').map((u) => u.id);
@@ -303,8 +345,13 @@ export class Game {
     const p = this.screenToWorld(sx, sy);
     const w = this.world;
     if (this.placing) {
-      if (rightClick) { this.placing = null; this.ghost = null; return; }
+      if (rightClick) { this.placing = null; this.ghost = null; this.wallStart = null; return; }
       this.setGhost(sx, sy);
+      if (this.placing === 'wall') {
+        if (!this.wallStart) { this.wallStart = this.ghost; this.hud.toast('Ahora tocá dónde termina la empalizada'); return; }
+        if (isMouse) this.confirmPlacement();
+        return;
+      }
       if (isMouse) this.confirmPlacement();
       return;
     }
@@ -422,7 +469,8 @@ export class Game {
     const d = BUILDINGS[b];
     if (this.world.players[this.me].age < d.age) { this.hud.toast('Requiere la Era de los Reinos'); return; }
     if (!this.world.canAfford(this.me, d.cost)) { this.hud.toast('Recursos insuficientes'); return; }
-    this.placing = b; this.buildMenu = false;
+    this.placing = b; this.buildMenu = false; this.wallStart = null;
+    if (b === 'wall') { this.ghost = null; this.hud.toast('Tocá dónde empieza la empalizada'); return; }
     // fantasma inicial: lugar válido más cercano al centro de la pantalla
     this.setGhost(this.vw / 2, this.vh * 0.42);
     const g0 = this.ghost!;

@@ -1,8 +1,9 @@
 // Punto de entrada: menú principal y arranque de partidas.
 import { DIFF_NAME, Difficulty } from '../sim/ai.js';
-import { BIOMES, Biome, MAPS, MapType, MatchConfig, Mode, PLAYER_COLORS, SlotCfg } from '../sim/match.js';
+import { BIOMES, Biome, MAP_SIZES, MapSize, MAPS, MapType, MatchConfig, Mode, PLAYER_COLORS, sizeForPlayers, SlotCfg } from '../sim/match.js';
 import { CIV_LIST, CIVS, CivId } from '../sim/civs.js';
 import { UNITS } from '../sim/data.js';
+import { saveSettings, settings, Settings } from './settings.js';
 import { Game } from './game.js';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -18,6 +19,9 @@ let color = Number(store.get('color', '0'));
 let mapSel = store.get('map', 'random') as MapType | 'random';
 let biomeSel = store.get('biome', 'random') as Biome | 'random';
 let slots: SlotCfg[] = loadSlots();
+let sizeSel = (store.get('size', '') || sizeForPlayers(slots.length)) as MapSize;
+if (!MAP_SIZES[sizeSel] || MAP_SIZES[sizeSel].players < slots.length) sizeSel = sizeForPlayers(slots.length);
+const maxPlayers = () => MAP_SIZES[sizeSel].players;
 
 function loadSlots(): SlotCfg[] {
   try {
@@ -51,8 +55,7 @@ function renderMenu() {
     </div>
     <div class="modes">
       <button class="mode" data-m="tutorial"><i>📜</i><div><b>Historia: La Crónica de Varnia</b><small>Tutorial guiado · 10 minutos</small></div></button>
-      <button class="mode" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza</b><small>De 1 contra 1 hasta 8 jugadores · elegí equipos y civilizaciones</small></div></button>
-      <button class="mode" data-m="coop"><i>🤝</i><div><b>Cooperativo 2 contra 2</b><small>Vos + aliado IA contra 2 IA</small></div></button>
+      <button class="mode" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza</b><small>1 contra 1, cooperativo con aliados IA o hasta 8 jugadores</small></div></button>
       <button class="mode" data-m="civs"><i>🏛️</i><div><b>Civilizaciones</b><small>Bonificaciones y unidad única de cada una</small></div></button>
       <button class="mode soon" data-m="ranked" disabled><i>🏆</i><div><b>Competitivo online</b><small>Próximamente · partidas clasificatorias</small></div></button>
     </div>
@@ -60,7 +63,7 @@ function renderMenu() {
       <span>Tu color</span>
       <div class="swatches">${PLAYER_COLORS.map((_, i) => swatch(i)).join('')}</div>
     </div>
-    <button class="howto" data-m="howto">¿Cómo se juega?</button>
+    <div class="links"><button class="howto" data-m="howto">¿Cómo se juega?</button><button class="howto" data-m="settings">⚙️ Configuración</button></div>
     <div class="rotate">📱↻ Girá el teléfono para jugar mejor</div>
   </div>`;
   menu.onchange = null;
@@ -71,9 +74,9 @@ function renderMenu() {
     const m = t.closest('[data-m]')?.getAttribute('data-m');
     if (m === 'howto') { showHowTo(); return; }
     if (m === 'civs') { showCivs(); return; }
+    if (m === 'settings') { showSettings(); return; }
     if (m === 'tutorial') start({ mode: 'tutorial', difficulty, color, biome: biomeSel, seed: Math.floor(Math.random() * 99999) });
     if (m === 'skirmish') showSetup();
-    if (m === 'coop') { slots = preset('2v2', slots[0].civ); saveSlots(); showSetup(); }
   };
 }
 
@@ -117,16 +120,18 @@ function showSetup() {
   const sides = new Set(slots.map((s, i) => (s.team > 0 ? s.team : 100 + i)));
   menu.innerHTML = `<div class="menu-inner setup">
     <h2>⚔️ Escaramuza</h2>
-    <section><h3>Jugadores (${slots.length}/8)</h3>
+    <section><h3>Jugadores (${slots.length}/${maxPlayers()})</h3>
       <div class="presets">
         <button class="chip" data-preset="1v1">1 vs 1</button><button class="chip" data-preset="2v2">2 vs 2</button>
         <button class="chip" data-preset="4v4">4 vs 4</button><button class="chip" data-preset="ffa">Todos contra todos</button>
       </div>
       <div class="slots">${rows}</div>
-      ${slots.length < 8 ? '<button class="addai" data-add>➕ Agregar IA</button>' : ''}
+      ${slots.length < maxPlayers() ? '<button class="addai" data-add>➕ Agregar IA</button>' : `<p class="dim">Este tamaño de mapa admite hasta ${maxPlayers()} jugadores. Elegí uno más grande para sumar IAs.</p>`}
       ${sides.size < 2 ? '<p class="warn">Tiene que haber al menos dos bandos distintos.</p>' : ''}
     </section>
     <section><h3>Tu civilización</h3>${civCard(slots[0].civ)}</section>
+    <section><h3>Tamaño del mapa</h3><div class="seg sizes">${(Object.keys(MAP_SIZES) as MapSize[]).map((k) =>
+      `<button data-size="${k}" class="${k === sizeSel ? 'on' : ''}">${MAP_SIZES[k].name}<small>${MAP_SIZES[k].players} jug.</small></button>`).join('')}</div></section>
     <section><h3>Mapa</h3><div class="opts">${mapsHtml}</div></section>
     <section><h3>Bioma</h3><div class="chips">${biomesHtml}</div></section>
     <div class="setup-actions"><button class="big ghost" data-back>Volver</button><button class="big" data-go ${sides.size < 2 ? 'disabled' : ''}>¡A jugar!</button></div>
@@ -153,8 +158,15 @@ function showSetup() {
       saveSlots(); return showSetup();
     }
     const pr = t.closest('[data-preset]')?.getAttribute('data-preset');
-    if (pr) { slots = preset(pr as '1v1', slots[0].civ); saveSlots(); return showSetup(); }
-    if (t.closest('[data-add]')) {
+    if (pr) { slots = preset(pr as '1v1', slots[0].civ); sizeSel = sizeForPlayers(slots.length); store.set('size', sizeSel); saveSlots(); return showSetup(); }
+    const sz = t.closest('[data-size]')?.getAttribute('data-size') as MapSize | null;
+    if (sz) {
+      sizeSel = sz; store.set('size', sz);
+      // si hay más jugadores de los que entran, quitar IAs del final
+      while (slots.length > MAP_SIZES[sz].players) slots.pop();
+      saveSlots(); return showSetup();
+    }
+    if (t.closest('[data-add]') && slots.length < maxPlayers()) {
       const used = new Set(slots.map((s) => s.color));
       const c = [0, 1, 2, 3, 4, 5, 6, 7].find((x) => !used.has(x)) ?? 0;
       slots.push({ ai: true, civ: 'random', team: slots.some((s) => s.team === 2) ? 2 : 0, color: c, difficulty });
@@ -167,8 +179,28 @@ function showSetup() {
     const bi = t.closest('[data-biome]')?.getAttribute('data-biome');
     if (bi) { biomeSel = bi as Biome; store.set('biome', bi); return showSetup(); }
     if (t.closest('[data-back]')) return renderMenu();
-    if (t.closest('[data-go]') && sides.size >= 2) start({ mode: 'skirmish', difficulty, color, map: mapSel, biome: biomeSel, players: slots.map((s) => ({ ...s })), seed: Math.floor(Math.random() * 99999) });
+    if (t.closest('[data-go]') && sides.size >= 2) start({ mode: 'skirmish', difficulty, color, map: mapSel, biome: biomeSel, size: sizeSel, players: slots.map((s) => ({ ...s })), seed: Math.floor(Math.random() * 99999) });
   };
+}
+
+function showSettings() {
+  const row = (k: keyof Settings, title: string, desc: string) => `
+    <label class="setting"><div><b>${title}</b><small>${desc}</small></div>
+    <input type="checkbox" id="set-${k}" data-set="${k}" ${settings[k] ? 'checked' : ''}><span class="switch"></span></label>`;
+  menu.innerHTML = `<div class="menu-inner">
+    <h2 class="pagetitle">⚙️ Configuración</h2>
+    <div class="settings">
+      ${row('grid', 'Cuadrícula', 'Muestra las casillas del terreno: ayuda a ubicar edificios y murallas.')}
+      ${row('hpBars', 'Barras de vida siempre visibles', 'Muestra la vida de todas tus unidades, no solo de las heridas.')}
+    </div>
+    <button class="big" data-back>Volver</button>
+  </div>`;
+  menu.onchange = (e) => {
+    const t = e.target as HTMLInputElement;
+    const k = t.getAttribute('data-set') as keyof Settings | null;
+    if (k) { settings[k] = t.checked; saveSettings(); }
+  };
+  menu.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-back]')) renderMenu(); };
 }
 
 function showCivs() {

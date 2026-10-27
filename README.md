@@ -10,8 +10,7 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 | Modo | Estado |
 |---|---|
 | 📜 **Historia: La Crónica de Varnia** — tutorial narrativo de 8 objetivos | ✅ Jugable |
-| ⚔️ **Escaramuza de 2 a 8 jugadores** — equipos, civilización, color y dificultad (Fácil, Normal, Difícil) por jugador | ✅ Jugable |
-| 🤝 **Cooperativo 2 vs 2** — vos + aliado IA contra 2 IA | ✅ Jugable (aliado IA) |
+| ⚔️ **Escaramuza de 2 a 8 jugadores** — equipos (cooperativo con aliados IA), civilización, color y dificultad por jugador; 4 tamaños de mapa | ✅ Jugable |
 | 🤝 Cooperativo online con amigos | 🛠️ Próxima etapa |
 | 🏆 Competitivo online (clasificatorias) | 🛠️ Próxima etapa |
 
@@ -24,11 +23,11 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 - **19 unidades comunes:** Aldeano, Espadachín, Lancero, Campeón, Arquero, Escaramuzador, Arquero a caballo, Arcabucero,
   Explorador, Caballero, Ariete, Mangana (daño en área), Cañón de bombardeo, Fundíbulo, Monje (cura), Barco pesquero,
   Galeón, Barco de fuego y Galeón cañonero.
-- **19 edificios**, entre ellos Muelle (va en el agua), Universidad, Castillo, Monasterio, Mercado, Herrería, Empalizada y Muralla de piedra.
+- **19 edificios**, entre ellos Muelle (va en el agua), Universidad, Castillo, Monasterio, Mercado, Herrería, Empalizada, Muralla de piedra y Puertas (dejan pasar solo a tu equipo).
 - **15 investigaciones:** Herrería (Forja, Cota de malla, Emplumado, Barda), Universidad (Albañilería, Arquitectura, Química,
   Balística, Matacanes, Ingeniería de asedio) y economía (Telar, Carretilla, Hacha doble, Arado, Minería). Química desbloquea la pólvora.
 - **Agua y barcos:** pesca con barcos, batallas navales, barcos que bombardean la costa.
-- 6 mapas (Continental, Río, Lagos, Bosque cerrado, Oasis, Mediterráneo) y 5 biomas (Templado, Desierto, Nieve, Tropical, Otoño).
+- 7 mapas (Continental, Río, Lagos, Bosque cerrado, Oasis, Mediterráneo y Arena, donde cada reino arranca amurallado con 2 torres y una puerta), 4 tamaños (Diminuto, Chico, Mediano, Grande) y 5 biomas (Templado, Desierto, Nieve, Tropical, Otoño).
 - Niebla de guerra, minimapa, puntos de reunión, colas de entrenamiento.
 - **Regla de partida rápida:** el que pierde su Centro Urbano, pierde.
 

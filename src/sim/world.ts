@@ -211,6 +211,24 @@ export class World implements Grid {
     const t = this.terrain[i];
     this.solid[i] = t === 1 || (o && o.type !== 'farm') ? 1 : 0;
     this.nav.solid[i] = t === 0 || o ? 1 : 0;
+    // las puertas se abren solo para su equipo
+    const gateTeam = o && o.type === 'gate' && o.owner >= 0 ? this.players[o.owner]?.team : undefined;
+    for (const [team, g] of this.teamGrids) g.solid[i] = gateTeam !== undefined && gateTeam === team ? 0 : this.solid[i];
+  }
+
+  private teamGrids = new Map<number, Grid>();
+  /** Recursos que un equipo no puede alcanzar (se olvida cada minuto) */
+  private unreachable = new Map<number, Set<number>>();
+  /** Grilla de caminos para un equipo (sus puertas son pasables) */
+  teamGrid(team: number): Grid {
+    let g = this.teamGrids.get(team);
+    if (!g) {
+      g = { w: this.w, h: this.h, solid: this.solid.slice() };
+      for (const e of this.entities.values())
+        if (e.type === 'gate' && e.owner >= 0 && this.players[e.owner].team === team) g.solid[e.ty * this.w + e.tx] = 0;
+      this.teamGrids.set(team, g);
+    }
+    return g;
   }
 
   private occupy(e: Entity, on: boolean) {
@@ -260,6 +278,13 @@ export class World implements Grid {
     if (e && e.cat === 'node') this.kill(e);
     else if (e) return;
     this.terrain[i] = kind;
+    this.refreshCell(i);
+  }
+
+  setLand(x: number, y: number) {
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
+    const i = y * this.w + x;
+    this.terrain[i] = 0;
     this.refreshCell(i);
   }
 
@@ -380,10 +405,17 @@ export class World implements Grid {
     const pl = this.players[p];
     if (pl.age < d.age) return `Requiere la ${AGE_NAME[d.age]}`;
     if (d.onWater) { if (!this.dockSpotOk(tx, ty)) return 'El muelle va en el agua, pegado a la costa'; }
-    else if (!this.areaFree(tx, ty, d.size)) return 'No se puede construir ahí';
+    else if (d.onWall && this.ownWallAt(p, tx, ty)) { /* reemplaza el tramo de muralla */ }
+    else if (!this.areaFree(tx, ty, d.size)) return d.onWall ? 'La puerta va sobre tu muralla o en un lugar libre' : 'No se puede construir ahí';
     for (let y = ty; y < ty + d.size; y++)
       for (let x = tx; x < tx + d.size; x++) if (!pl.explored[y * this.w + x]) return 'Terreno sin explorar';
     return null;
+  }
+
+  ownWallAt(p: number, tx: number, ty: number): Entity | undefined {
+    if (tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return undefined;
+    const e = this.get(this.occ[ty * this.w + tx]);
+    return e && e.owner === p && (e.type === 'wall' || e.type === 'stonewall') ? e : undefined;
   }
 
   // ------------------------------------------------------------ utilidades
@@ -463,13 +495,13 @@ export class World implements Grid {
     return Math.hypot(u.x - cx, u.y - cy) - u.radius;
   }
 
-  tileSolid(tx: number, ty: number, naval = false): boolean {
+  tileSolid(tx: number, ty: number, grid: Grid = this): boolean {
     if (tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return true;
-    return (naval ? this.nav.solid : this.solid)[ty * this.w + tx] === 1;
+    return grid.solid[ty * this.w + tx] === 1;
   }
 
   /** Casilla libre más cercana a (tx,ty) */
-  nearestFree(tx: number, ty: number, maxR = 12, naval = false): { x: number; y: number } | null {
+  nearestFree(tx: number, ty: number, maxR = 12, naval: Grid = this): { x: number; y: number } | null {
     if (!this.tileSolid(tx, ty, naval)) return { x: tx, y: ty };
     for (let r = 1; r <= maxR; r++)
       for (let dy = -r; dy <= r; dy++)
@@ -516,6 +548,8 @@ export class World implements Grid {
         const cost = this.buildingCost(c.p, c.b);
         if (!this.canAfford(c.p, cost)) { msg('Recursos insuficientes'); return; }
         this.pay(c.p, cost);
+        const old = BUILDINGS[c.b].onWall ? this.ownWallAt(c.p, c.tx, c.ty) : undefined;
+        if (old) this.remove(old.id);
         const b = this.placeBuilding(c.p, c.b, c.tx, c.ty, false);
         for (const u of us) this.setOrder(u, { t: 'build', target: b.id });
         break;
@@ -654,6 +688,7 @@ export class World implements Grid {
     for (const e of this.entities.values()) if (e.hp <= 0) { dead = true; break; }
     if (dead) for (const e of [...this.entities.values()]) if (e.hp <= 0) this.kill(e);
     if (this.tick % 10 === 0) this.refreshVisibility();
+    if (this.tick % (TICK_RATE * 60) === 0) this.unreachable.clear();
     if (this.tick % 20 === 0 && this.checkDefeat) this.updateDefeat();
   }
 
@@ -707,8 +742,7 @@ export class World implements Grid {
         b.trainT += DT * speed;
         if (b.trainT >= UNITS[ut].trainTime) {
           b.trainT = 0; b.queue.shift();
-          const naval = !!UNITS[ut].naval;
-          const spot = this.spawnSpot(b, naval);
+          const spot = this.spawnSpot(b, UNITS[ut].naval ? this.nav : this.teamGrid(pl.team));
           const u = this.spawnUnit(b.owner, ut, spot.x, spot.y);
           pl.stats.trained++;
           this.events.push({ t: 'trained', p: b.owner, id: u.id });
@@ -745,7 +779,7 @@ export class World implements Grid {
     }
   }
 
-  private spawnSpot(b: Entity, naval: boolean): { x: number; y: number } {
+  private spawnSpot(b: Entity, naval: Grid): { x: number; y: number } {
     const goal = b.rally ?? { x: b.x, y: b.y + 999 };
     let best = { x: b.x, y: b.y + b.size * TILE }, bd = Infinity;
     for (let r = 0; r < 5; r++) {
@@ -921,7 +955,47 @@ export class World implements Grid {
       }
       return true;
     }
-    return this.approach(u, t, range);
+    if (this.approach(u, t, range)) return true;
+    // ¿lo tapa una muralla o puerta enemiga? entonces atacarla primero
+    if (!this.isNaval(u)) {
+      const b = this.findBlocker(u, t, range);
+      if (b && b !== t) {
+        const o = u.order;
+        if (o?.t === 'attack') this.setOrder(u, { t: 'attack', target: b.id });
+        else if (o?.t === 'attackMove') { o.sub = b.id; u.path = []; u.pathKey = ''; }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isWallLike(e: Entity): boolean { return e.type === 'wall' || e.type === 'stonewall' || e.type === 'gate'; }
+
+  /** Primera muralla/puerta enemiga que corta el camino hacia `t` */
+  findBlocker(u: Entity, t: Entity, range: number): Entity | undefined {
+    this.index();
+    const base = this.gridOf(u).solid;
+    const open = base.slice();
+    let any = false;
+    for (const b of this.allBuildings)
+      if (this.isWallLike(b) && this.isEnemy(u.owner, b.owner)) { open[b.ty * this.w + b.tx] = 0; any = true; }
+    if (!any) return undefined;
+    const goalR = range + TILE * 0.75;
+    const x0 = t.cat === 'unit' ? t.x : t.tx * TILE, y0 = t.cat === 'unit' ? t.y : t.ty * TILE;
+    const x1 = t.cat === 'unit' ? t.x : x0 + t.size * TILE, y1 = t.cat === 'unit' ? t.y : y0 + t.size * TILE;
+    const tiles = findPath({ w: this.w, h: this.h, solid: open }, Math.floor(u.x / TILE), Math.floor(u.y / TILE), (x, y) => {
+      const px = (x + 0.5) * TILE, py = (y + 0.5) * TILE;
+      const cx = Math.max(x0, Math.min(px, x1)), cy = Math.max(y0, Math.min(py, y1));
+      return Math.hypot(px - cx, py - cy) <= goalR;
+    }, Math.floor(t.x / TILE), Math.floor(t.y / TILE));
+    if (!pathFound()) return undefined;
+    for (const p of tiles) {
+      const i = p.y * this.w + p.x;
+      if (!base[i]) continue;
+      const e = this.get(this.occ[i]);
+      if (e && this.isWallLike(e) && this.isEnemy(u.owner, e.owner)) return e;
+    }
+    return undefined;
   }
 
   private gatherStep(u: Entity, o: Extract<Order, { t: 'gather' }>) {
@@ -985,7 +1059,12 @@ export class World implements Grid {
       if (u.carry >= cap) o.phase = 'return';
     } else {
       if (n.type === 'farm') this.moveTo(u, n.x, n.y);
-      else if (!this.approach(u, n, INTERACT)) { o.target = 0; u.acquireAt = this.tick; }
+      else if (!this.approach(u, n, INTERACT)) {
+        const team = this.players[u.owner].team;
+        let set = this.unreachable.get(team); if (!set) this.unreachable.set(team, (set = new Set()));
+        set.add(n.id);
+        o.target = 0;
+      }
     }
   }
 
@@ -1054,9 +1133,10 @@ export class World implements Grid {
   findNode(from: Entity, r: Res, range: number): Entity | undefined {
     const naval = this.isNaval(from);
     this.index();
+    const bad = from.owner >= 0 ? this.unreachable.get(this.players[from.owner].team) : undefined;
     let best: Entity | undefined, bd = range;
     for (const e of this.entities.values()) {
-      if (e.amount <= 0) continue;
+      if (e.amount <= 0 || bad?.has(e.id)) continue;
       if (Math.abs(e.x - from.x) > bd || Math.abs(e.y - from.y) > bd) continue;
       let ok = false;
       if (e.cat === 'node') ok = NODES[e.type as NodeType].res === r && (e.type === 'fish') === naval;
@@ -1071,7 +1151,7 @@ export class World implements Grid {
   farmBusy(f: Entity): boolean { this.index(); return this.farmUsers.has(f.id); }
 
   // ---------------------------------------------------------- movimiento
-  private gridOf(u: Entity): Grid { return this.isNaval(u) ? this.nav : this; }
+  gridOf(u: Entity): Grid { return this.isNaval(u) ? this.nav : this.teamGrid(this.players[u.owner].team); }
 
   /** Acercarse a una entidad hasta `range` px de su borde. Devuelve false si es inalcanzable. */
   private approach(u: Entity, t: Entity, range: number): boolean {
@@ -1111,7 +1191,7 @@ export class World implements Grid {
     if (u.pathKey !== key) {
       u.pathKey = key;
       let gx = Math.floor(x / TILE), gy = Math.floor(y / TILE);
-      const free = this.nearestFree(Math.max(0, Math.min(this.w - 1, gx)), Math.max(0, Math.min(this.h - 1, gy)), naval ? 24 : 12, naval);
+      const free = this.nearestFree(Math.max(0, Math.min(this.w - 1, gx)), Math.max(0, Math.min(this.h - 1, gy)), naval ? 24 : 12, this.gridOf(u));
       if (!free) return true;
       const changed = free.x !== gx || free.y !== gy;
       gx = free.x; gy = free.y;
@@ -1166,7 +1246,7 @@ export class World implements Grid {
   }
 
   private tryMove(u: Entity, nx: number, ny: number) {
-    const naval = this.isNaval(u);
+    const naval = this.gridOf(u);
     const inSolid = this.tileSolid(Math.floor(u.x / TILE), Math.floor(u.y / TILE), naval);
     const ok = (x: number, y: number) => inSolid || !this.tileSolid(Math.floor(x / TILE), Math.floor(y / TILE), naval);
     if (ok(nx, ny)) { u.x = nx; u.y = ny; return; }

@@ -7,7 +7,16 @@ import { Rng } from './rng.js';
 import { CIV_LIST, CIVS, CivId } from './civs.js';
 
 export type Mode = 'skirmish' | 'coop' | 'tutorial' | 'aivsai';
-export type MapType = 'continental' | 'rio' | 'lagos' | 'bosque' | 'oasis' | 'mediterraneo';
+export type MapType = 'continental' | 'rio' | 'lagos' | 'bosque' | 'oasis' | 'mediterraneo' | 'arena';
+export type MapSize = 'tiny' | 'small' | 'medium' | 'large';
+export const MAP_SIZES: Record<MapSize, { name: string; tiles: number; players: number }> = {
+  tiny: { name: 'Diminuto', tiles: 48, players: 2 },
+  small: { name: 'Chico', tiles: 62, players: 4 },
+  medium: { name: 'Mediano', tiles: 74, players: 6 },
+  large: { name: 'Grande', tiles: 84, players: 8 },
+};
+/** El tamaño más chico que alcanza para n jugadores */
+export function sizeForPlayers(n: number): MapSize { return n <= 2 ? 'tiny' : n <= 4 ? 'small' : n <= 6 ? 'medium' : 'large'; }
 export type Biome = 'templado' | 'desierto' | 'nieve' | 'tropical' | 'otono';
 
 /** Un lugar en la partida: vos o una IA */
@@ -22,7 +31,7 @@ export interface SlotCfg {
 
 export interface MatchConfig {
   mode: Mode; difficulty: Difficulty; seed: number;
-  color?: number; map?: MapType | 'random'; biome?: Biome | 'random';
+  color?: number; map?: MapType | 'random'; biome?: Biome | 'random'; size?: MapSize;
   players?: SlotCfg[];
 }
 export interface Match { world: World; ais: AI[]; human: number; cfg: MatchConfig }
@@ -34,6 +43,7 @@ export const MAPS: Record<MapType, { name: string; desc: string }> = {
   bosque: { name: 'Bosque cerrado', desc: 'Bosque denso con senderos angostos' },
   oasis: { name: 'Oasis', desc: 'Un lago central rodeado de riquezas' },
   mediterraneo: { name: 'Mediterráneo', desc: 'Un mar en el centro: muelles y batallas navales' },
+  arena: { name: 'Arena', desc: 'Cada reino arranca amurallado, con 2 torres y una puerta' },
 };
 export const BIOMES: Record<Biome, string> = { templado: 'Templado', desierto: 'Desierto', nieve: 'Nieve', tropical: 'Tropical', otono: 'Otoño' };
 
@@ -67,7 +77,7 @@ export function defaultSlots(cfg: MatchConfig): SlotCfg[] {
   ];
 }
 
-export function mapSizeFor(n: number): number { return n <= 2 ? 48 : n <= 4 ? 62 : n <= 6 ? 74 : 84; }
+export function mapSizeFor(n: number): number { return MAP_SIZES[sizeForPlayers(n)].tiles; }
 
 export function createMatch(cfg: MatchConfig): Match {
   const rng = new Rng(cfg.seed);
@@ -76,7 +86,7 @@ export function createMatch(cfg: MatchConfig): Match {
   const map = pick(cfg.map, Object.keys(MAPS) as MapType[], rng, 'continental');
   const slots = (cfg.players && cfg.players.length >= 2 ? cfg.players : defaultSlots(cfg)).slice(0, 8);
   const n = slots.length;
-  const size = mapSizeFor(n);
+  const size = Math.max(mapSizeFor(n), cfg.size ? MAP_SIZES[cfg.size].tiles : 0);
   const w = new World(size, size, cfg.seed);
   w.biome = biome; w.mapName = map;
   w.popLimit = n <= 2 ? 125 : n <= 4 ? 100 : 75;
@@ -121,7 +131,8 @@ export function createMatch(cfg: MatchConfig): Match {
       }
   }
   const area = (size * size) / (48 * 48);
-  const forests = { continental: 11, rio: 8, lagos: 8, bosque: 0, oasis: 9, mediterraneo: 8 }[map] * area;
+  if (map === 'continental' || map === 'lagos' || map === 'oasis' || map === 'mediterraneo') smoothWater(w, reserved);
+  const forests = { continental: 11, rio: 8, lagos: 8, bosque: 0, oasis: 9, mediterraneo: 8, arena: 10 }[map] * area;
   scatterForests(w, rng, reserved, Math.round(forests));
   const ci = Math.floor(c);
   if (map === 'oasis' || map === 'mediterraneo') {
@@ -143,6 +154,8 @@ export function createMatch(cfg: MatchConfig): Match {
   if (map === 'bosque') for (const b of bases) carve(w, b, { tx: ci - 1, ty: ci - 1 });
   // 5) peces en el agua
   addFish(w, rng);
+  // 6) Arena: murallas de piedra, puertas y torres alrededor de cada base
+  if (map === 'arena') makeArena(w, bases);
 
   const ais: AI[] = [];
   for (const p of w.players) {
@@ -168,13 +181,89 @@ function makeRiver(w: World, rng: Rng, reserved: (x: number, y: number, r?: numb
   }
 }
 
+/** Lago de borde orgánico: el radio varía suave con el ángulo */
 function lake(w: World, rng: Rng, cx: number, cy: number, r: number, reserved?: (x: number, y: number, r?: number) => boolean) {
-  for (let y = Math.floor(cy - r - 1); y <= cy + r + 1; y++)
-    for (let x = Math.floor(cx - r - 1); x <= cx + r + 1; x++) {
+  const p1 = rng.next() * 6.28, p2 = rng.next() * 6.28, p3 = rng.next() * 6.28;
+  const a1 = 0.12 + rng.next() * 0.12, a2 = 0.06 + rng.next() * 0.08;
+  const stretch = 0.8 + rng.next() * 0.45, rot = rng.next() * 3.14;
+  const R = r * 1.5 + 2;
+  for (let y = Math.floor(cy - R); y <= cy + R; y++)
+    for (let x = Math.floor(cx - R); x <= cx + R; x++) {
       if (reserved && reserved(x, y, 7)) continue;
-      const d = Math.hypot(x - cx, y - cy) + Math.sin(x * 1.7 + y) * 0.6 + rng.next() * 0.4;
-      if (d < r) w.setWater(x, y, 1);
+      const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+      // estirar el lago en una dirección para que no sea un círculo
+      const ex = dx * Math.cos(rot) + dy * Math.sin(rot), ey = (-dx * Math.sin(rot) + dy * Math.cos(rot)) * stretch;
+      const a = Math.atan2(ey, ex);
+      const rr = r * (1 + a1 * Math.sin(2 * a + p1) + a2 * Math.sin(3 * a + p2) + 0.05 * Math.sin(5 * a + p3));
+      if (Math.hypot(ex, ey) < rr) w.setWater(x, y, 1);
     }
+}
+
+/** Suaviza costas: rellena entradas finitas y quita puntitos de agua sueltos */
+function smoothWater(w: World, reserved: (x: number, y: number, r?: number) => boolean) {
+  for (let it = 0; it < 2; it++) {
+    const next = w.terrain.slice();
+    for (let y = 1; y < w.h - 1; y++)
+      for (let x = 1; x < w.w - 1; x++) {
+        const i = y * w.w + x;
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && w.terrain[i + dy * w.w + dx] === 1) n++;
+        if (w.terrain[i] === 0 && n >= 5 && !w.occ[i] && !reserved(x, y, 7)) next[i] = 1;
+        else if (w.terrain[i] === 1 && n <= 2) next[i] = 0;
+      }
+    for (let i = 0; i < next.length; i++) {
+      if (next[i] === w.terrain[i]) continue;
+      const x = i % w.w, y = (i / w.w) | 0;
+      if (next[i] === 1) w.setWater(x, y, 1); else w.setLand(x, y);
+    }
+  }
+}
+
+/** Mapa Arena: anillo de muralla de piedra con 2 puertas y 2 torres por jugador */
+function makeArena(w: World, bases: Base[]) {
+  let dmin = Infinity;
+  for (let i = 0; i < bases.length; i++) for (let j = i + 1; j < bases.length; j++) dmin = Math.min(dmin, Math.hypot(bases[i].tx - bases[j].tx, bases[i].ty - bases[j].ty));
+  const r = Math.max(7, Math.min(11, Math.floor(dmin / 2) - 1));
+  bases.forEach((b, p) => {
+    const cx = b.tx + 1, cy = b.ty + 1; // casilla central del centro urbano
+    const inside = (dx: number, dy: number) => Math.abs(dx) <= r && Math.abs(dy) <= r && Math.abs(dx) + Math.abs(dy) <= r * 1.45;
+    const ring: { x: number; y: number }[] = [];
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (!inside(dx, dy)) continue;
+        let edge = false;
+        for (let oy = -1; oy <= 1 && !edge; oy++) for (let ox = -1; ox <= 1; ox++) if (!inside(dx + ox, dy + oy)) { edge = true; break; }
+        if (!edge) continue;
+        const x = cx + dx, y = cy + dy;
+        if (x < 0 || y < 0 || x >= w.w || y >= w.h) continue;
+        ring.push({ x, y });
+      }
+    // puerta: mirando al centro del mapa
+    const toC = Math.atan2(w.h / 2 - cy, w.w / 2 - cx);
+    const gx = Math.round(cx + Math.cos(toC) * r * 1.2), gy = Math.round(cy + Math.sin(toC) * r * 1.2);
+    ring.sort((a, b2) => Math.hypot(a.x - gx, a.y - gy) - Math.hypot(b2.x - gx, b2.y - gy));
+    const g1 = ring[0];
+    const g2 = ring.find((t) => Math.abs(t.x - g1.x) + Math.abs(t.y - g1.y) === 1)!;
+    for (const t of ring) {
+      const i = t.y * w.w + t.x;
+      const o = w.get(w.occ[i]);
+      if (o && o.cat === 'node') w.remove(o.id);
+      else if (o) continue;
+      if (w.terrain[i] !== 0) w.setLand(t.x, t.y);
+      w.placeBuilding(p, t === g1 || t === g2 ? 'gate' : 'stonewall', t.x, t.y, true);
+    }
+    // dos torres de vigía a los costados de la puerta, del lado de adentro
+    const px = -Math.sin(toC), py = Math.cos(toC);
+    for (const s of [-1, 1]) {
+      const tx = Math.round(cx + Math.cos(toC) * (r - 2.5) + px * s * 3.5), ty = Math.round(cy + Math.sin(toC) * (r - 2.5) + py * s * 3.5);
+      for (let k = 0; k < 9; k++) {
+        const x = tx + (k % 3) - 1, y = ty + Math.floor(k / 3) - 1;
+        const o = w.get(w.occ[y * w.w + x]);
+        if (o && o.cat === 'node' && o.type === 'tree') w.remove(o.id);
+        if (w.areaFree(x, y, 1)) { w.placeBuilding(p, 'tower', x, y, true); break; }
+      }
+    }
+  });
 }
 
 function makeLakes(w: World, rng: Rng, reserved: (x: number, y: number, r?: number) => boolean, count: number, minR = 2.6) {
@@ -212,7 +301,7 @@ function addFish(w: World, rng: Rng) {
       // no pegado a la costa para dejar lugar a los muelles
       let open = true;
       for (let dy = -1; dy <= 1 && open; dy++) for (let dx = -1; dx <= 1; dx++) if (w.terrain[(y + dy) * w.w + x + dx] !== 1) { open = false; break; }
-      if (open && rng.next() < 0.07) w.addNode('fish', x, y);
+      if (open && rng.next() < 0.1) w.addNode('fish', x, y);
     }
 }
 

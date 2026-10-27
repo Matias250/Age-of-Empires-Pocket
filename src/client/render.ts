@@ -2,6 +2,7 @@
 // (terreno, árboles y minas se pre-dibujan una vez como "sprites" para ir rápido en el celular).
 import { BUILDINGS, BuildingType, NodeType, Projectile, Res, TILE, UNITS, UnitType } from '../sim/data.js';
 import { Entity, World } from '../sim/world.js';
+import { settings } from './settings.js';
 
 export interface Camera { x: number; y: number; zoom: number }
 export interface Fx { kind: 'shot' | 'hit' | 'death' | 'mark' | 'heal' | 'smoke' | 'blast' | 'sink'; x: number; y: number; x2?: number; y2?: number; t: number; life: number; color?: string; proj?: Projectile; r?: number }
@@ -71,28 +72,31 @@ export function makeGround(w: World): HTMLCanvasElement {
     else { g.beginPath(); g.arc(x, y, 1 + rnd() * 1.4, 0, 7); g.fill(); }
   }
   g.globalAlpha = 1;
-  // agua: costa, poco profundo y profundo
-  const water = (x: number, y: number) => x >= 0 && y >= 0 && x < w.w && y < w.h && w.terrain[y * w.w + x] !== 0;
-  for (let y = 0; y < w.h; y++)
-    for (let x = 0; x < w.w; x++) {
-      if (!water(x, y)) continue;
-      g.fillStyle = pal.shore;
-      g.beginPath(); g.arc((x + 0.5) * TILE, (y + 0.5) * TILE, TILE * 0.85, 0, 7); g.fill();
-    }
-  for (let y = 0; y < w.h; y++)
-    for (let x = 0; x < w.w; x++) {
-      const t = w.terrain[y * w.w + x];
-      if (!t) continue;
-      g.fillStyle = t === 2 ? pal.shallow : pal.water;
-      g.beginPath(); g.arc((x + 0.5) * TILE, (y + 0.5) * TILE, TILE * 0.72, 0, 7); g.fill();
-    }
-  for (let y = 0; y < w.h; y++)
-    for (let x = 0; x < w.w; x++) {
-      if (w.terrain[y * w.w + x] !== 1) continue;
-      let deep = true;
-      for (let dy = -1; dy <= 1 && deep; dy++) for (let dx = -1; dx <= 1; dx++) if (!water(x + dx, y + dy)) { deep = false; break; }
-      if (deep) { g.fillStyle = pal.waterDeep; g.beginPath(); g.arc((x + 0.5) * TILE, (y + 0.5) * TILE, TILE * 0.62, 0, 7); g.fill(); }
-    }
+  // agua con costas suaves (marching squares sobre campos difuminados)
+  const W = w.w, H = w.h;
+  const field = (pred: (t: number) => boolean, r: number) => {
+    const raw = new Float32Array(W * H);
+    for (let i = 0; i < raw.length; i++) raw[i] = pred(w.terrain[i]) ? 1 : 0;
+    const out = new Float32Array(W * H);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        let sum = 0, n = 0;
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const xx = Math.min(W - 1, Math.max(0, x + dx)), yy = Math.min(H - 1, Math.max(0, y + dy));
+          sum += raw[yy * W + xx]; n++;
+        }
+        out[y * W + x] = sum / n;
+      }
+    return out;
+  };
+  if (w.terrain.some((t) => t !== 0)) {
+    const any1 = field((t) => t !== 0, 1), any2 = field((t) => t !== 0, 2);
+    isoFill(g, any2, W, H, 0.1, pal.shore);
+    isoFill(g, any1, W, H, 0.42, pal.shallow);
+    isoFill(g, any1, W, H, 0.6, pal.water);
+    isoFill(g, field((t) => t === 1, 2), W, H, 0.8, pal.waterDeep);
+    isoFill(g, field((t) => t === 2, 1), W, H, 0.4, pal.shallow);
+  }
   // piedritas en los vados
   for (let y = 0; y < w.h; y++)
     for (let x = 0; x < w.w; x++) {
@@ -105,6 +109,35 @@ export function makeGround(w: World): HTMLCanvasElement {
   grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, 'rgba(0,0,0,0.22)');
   g.fillStyle = grd; g.fillRect(0, 0, c.width, c.height);
   return c;
+}
+
+/** Rellena la región donde el campo supera `thr`, con bordes interpolados */
+function isoFill(g: CanvasRenderingContext2D, f: Float32Array, W: number, H: number, thr: number, color: string) {
+  const v = (x: number, y: number) => f[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))];
+  g.beginPath();
+  const cx = [0, 1, 1, 0], cy = [0, 0, 1, 1];
+  const vals = [0, 0, 0, 0];
+  for (let y = -1; y < H; y++)
+    for (let x = -1; x < W; x++) {
+      let any = false;
+      for (let k = 0; k < 4; k++) { vals[k] = v(x + cx[k], y + cy[k]); if (vals[k] >= thr) any = true; }
+      if (!any) continue;
+      let first = true;
+      for (let k = 0; k < 4; k++) {
+        const k2 = (k + 1) % 4;
+        const ax = x + cx[k], ay = y + cy[k], bx = x + cx[k2], by = y + cy[k2];
+        const ia = vals[k] >= thr, ib = vals[k2] >= thr;
+        if (ia) { const px = (ax + 0.5) * TILE, py = (ay + 0.5) * TILE; if (first) { g.moveTo(px, py); first = false; } else g.lineTo(px, py); }
+        if (ia !== ib) {
+          const t = (thr - vals[k]) / (vals[k2] - vals[k]);
+          const px = (ax + (bx - ax) * t + 0.5) * TILE, py = (ay + (by - ay) * t + 0.5) * TILE;
+          if (first) { g.moveTo(px, py); first = false; } else g.lineTo(px, py);
+        }
+      }
+      g.closePath();
+    }
+  g.fillStyle = color;
+  g.fill();
 }
 
 // --------------------------------------------------------------- sprites
@@ -215,6 +248,15 @@ export class Renderer {
     g.imageSmoothingEnabled = true;
     g.drawImage(this.ground, 0, 0);
     this.waterAnim(time, vx0, vy0, vx1, vy1);
+    if (settings.grid) {
+      g.strokeStyle = 'rgba(0,0,0,0.16)'; g.lineWidth = 1 / cam.zoom;
+      g.beginPath();
+      const gx0 = Math.max(0, Math.floor(vx0 / TILE)), gx1 = Math.min(w.w, Math.ceil(vx1 / TILE));
+      const gy0 = Math.max(0, Math.floor(vy0 / TILE)), gy1 = Math.min(w.h, Math.ceil(vy1 / TILE));
+      for (let x = gx0; x <= gx1; x++) { g.moveTo(x * TILE, gy0 * TILE); g.lineTo(x * TILE, gy1 * TILE); }
+      for (let y = gy0; y <= gy1; y++) { g.moveTo(gx0 * TILE, y * TILE); g.lineTo(gx1 * TILE, y * TILE); }
+      g.stroke();
+    }
 
     const visible = (e: Entity) => {
       const tx = Math.floor(e.x / TILE), ty = Math.floor(e.y / TILE);
@@ -243,7 +285,7 @@ export class Renderer {
     }
     for (const e of list) {
       if (e.cat === 'node' || e.type === 'wall') continue;
-      if (sel.has(e.id) || (e.hp < e.maxHp && e.cat === 'unit') || (e.cat === 'building' && (e.progress < 1 || e.hp < e.maxHp * 0.98))) this.hpBar(e);
+      if (sel.has(e.id) || (e.cat === 'unit' && (e.hp < e.maxHp || (settings.hpBars && e.owner === me))) || (e.cat === 'building' && (e.progress < 1 || e.hp < e.maxHp * 0.98))) this.hpBar(e);
     }
     this.drawFx(time);
     extra(g);
@@ -394,11 +436,12 @@ export class Renderer {
       g.fillStyle = done ? '#7a5634' : '#8a7356';
       g.fillRect(x0 + 2, y0 + 2, s - 4, s - 4);
       g.fillStyle = 'rgba(0,0,0,0.12)';
-      for (let i = 0; i < 7; i++) g.fillRect(x0 + 4, y0 + 7 + i * 12.5, s - 8, 3);
+      const rows = Math.floor((s - 8) / 12.5), cols = Math.floor((s - 10) / 9.5);
+      for (let i = 0; i < rows; i++) g.fillRect(x0 + 4, y0 + 7 + i * 12.5, s - 8, 3);
       if (done) {
         const f = e.amount / (BUILDINGS.farm.food ?? 600);
         g.fillStyle = f > 0.35 ? this.pal.crop : this.pal.cropRipe;
-        for (let i = 0; i < 7; i++) for (let j = 0; j < 9; j++) {
+        for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
           const h = 2 + f * 3;
           g.fillRect(x0 + 6 + j * 9.5, y0 + 8 + i * 12.5 - h, 2.5, h);
         }
@@ -410,6 +453,7 @@ export class Renderer {
       this.wallPiece(e, col);
       return;
     }
+    if (t === 'gate') { this.gatePiece(e, col); return; }
 
     g.save();
     if (!done) g.globalAlpha = 0.5 + e.progress * 0.45;
@@ -527,17 +571,17 @@ export class Renderer {
         break;
       }
       case 'dock': {
-        // muelle de madera sobre el agua
+        // muelle de madera sobre el agua (2x2)
         g.fillStyle = '#6d4c2e';
-        for (const [px, py] of [[x0 + 6, y0 + 8], [x0 + s - 10, y0 + 8], [x0 + 6, y0 + s - 10], [x0 + s - 10, y0 + s - 10], [cx - 2, y0 + 8], [cx - 2, y0 + s - 10]]) g.fillRect(px, py, 4, 8);
-        g.fillStyle = '#9b7a52'; g.fillRect(x0 + 4, y0 + 10, s - 8, s - 22);
+        for (const [px, py] of [[x0 + 4, y0 + 10], [x0 + s - 8, y0 + 10], [x0 + 4, y0 + s - 10], [x0 + s - 8, y0 + s - 10]]) g.fillRect(px, py, 4, 9);
+        g.fillStyle = '#9b7a52'; g.fillRect(x0 + 2, y0 + 12, s - 4, s - 20);
         g.strokeStyle = 'rgba(60,40,20,0.45)'; g.lineWidth = 1;
-        for (let xx = x0 + 10; xx < x0 + s - 4; xx += 7) { g.beginPath(); g.moveTo(xx, y0 + 10); g.lineTo(xx, y0 + s - 12); g.stroke(); }
-        g.fillStyle = timber; g.fillRect(x0 + 10, y0 + 2, 30, 18);
-        g.fillStyle = col; g.beginPath(); g.moveTo(x0 + 7, y0 + 4); g.lineTo(x0 + 25, y0 - 8); g.lineTo(x0 + 43, y0 + 4); g.closePath(); g.fill();
-        this.door(x0 + 25, y0 + 20, 8, 12);
-        g.strokeStyle = '#c9b48a'; g.lineWidth = 1.2; g.beginPath(); g.arc(x0 + s - 18, y0 + s - 22, 5, 0, 7); g.stroke();
-        this.banner(x0 + s - 8, y0 + 12, col, time, 18);
+        for (let xx = x0 + 8; xx < x0 + s - 2; xx += 6) { g.beginPath(); g.moveTo(xx, y0 + 12); g.lineTo(xx, y0 + s - 8); g.stroke(); }
+        g.fillStyle = timber; g.fillRect(x0 + 6, y0 + 4, 24, 15);
+        g.fillStyle = col; g.beginPath(); g.moveTo(x0 + 3, y0 + 6); g.lineTo(x0 + 18, y0 - 5); g.lineTo(x0 + 33, y0 + 6); g.closePath(); g.fill();
+        this.door(x0 + 18, y0 + 19, 7, 10);
+        g.strokeStyle = '#c9b48a'; g.lineWidth = 1.2; g.beginPath(); g.arc(x0 + s - 14, y0 + s - 16, 4, 0, 7); g.stroke();
+        this.banner(x0 + s - 6, y0 + 14, col, time, 16);
         break;
       }
       case 'university': {
@@ -575,7 +619,7 @@ export class Renderer {
   private wallPiece(e: Entity, col: string) {
     const g = this.ctx, w = this.w;
     const x0 = e.tx * TILE, y0 = e.ty * TILE;
-    const isWall = (x: number, y: number) => { const o = w.get(w.occ[y * w.w + x]); return !!o && o.type === e.type && o.owner === e.owner; };
+    const isWall = (x: number, y: number) => { const o = w.get(w.occ[y * w.w + x]); return !!o && (o.type === e.type || o.type === 'gate') && o.owner === e.owner; };
     g.globalAlpha = e.progress < 1 ? 0.5 : 1;
     const cx = x0 + 16, cy = y0 + 20;
     if (e.type === 'stonewall') {
@@ -585,6 +629,11 @@ export class Renderer {
         g.fillStyle = 'rgba(0,0,0,0.12)'; for (let yy = y - 14; yy < y; yy += 6) g.fillRect(x, yy, wdt, 1);
         void hgt;
       };
+      // tramos en diagonal: rellenar el escalón para que la muralla se vea continua
+      const diagR = isWall(e.tx + 1, e.ty + 1) && !isWall(e.tx + 1, e.ty) && !isWall(e.tx, e.ty + 1);
+      const diagL = isWall(e.tx - 1, e.ty + 1) && !isWall(e.tx - 1, e.ty) && !isWall(e.tx, e.ty + 1);
+      if (diagR) { for (let k = 4; k <= 28; k += 6) block(cx - 9 + k, cy + k, 18, 0); }
+      if (diagL) { for (let k = 4; k <= 28; k += 6) block(cx - 9 - k, cy + k, 18, 0); }
       block(cx - 9, cy, 18, 0);
       if (isWall(e.tx + 1, e.ty)) block(cx + 9, cy, 23, 0);
       if (isWall(e.tx, e.ty + 1)) { for (let i = 6; i < 32; i += 6) block(cx - 9, cy + i, 18, 0); }
@@ -597,10 +646,35 @@ export class Renderer {
         g.fillStyle = '#5d3f22'; g.beginPath(); g.moveTo(x - 3, y - 14); g.lineTo(x, y - 19); g.lineTo(x + 3, y - 14); g.fill();
       };
       if (isWall(e.tx + 1, e.ty)) { for (let i = 6; i < 32; i += 7) stake(cx + i, cy); }
+      if (isWall(e.tx + 1, e.ty + 1) && !isWall(e.tx + 1, e.ty) && !isWall(e.tx, e.ty + 1)) { for (let i = 6; i < 32; i += 7) stake(cx + i, cy + i); }
+      if (isWall(e.tx - 1, e.ty + 1) && !isWall(e.tx - 1, e.ty) && !isWall(e.tx, e.ty + 1)) { for (let i = 6; i < 32; i += 7) stake(cx - i, cy + i); }
       if (isWall(e.tx, e.ty + 1)) { for (let i = 6; i < 32; i += 7) stake(cx, cy + i); }
       stake(cx - 5, cy); stake(cx + 1, cy);
       g.fillStyle = col; g.fillRect(cx - 7, cy - 8, 10, 2);
     }
+    g.globalAlpha = 1;
+  }
+
+  private gatePiece(e: Entity, col: string) {
+    const g = this.ctx, w = this.w;
+    const x0 = e.tx * TILE, y0 = e.ty * TILE;
+    const wallAt = (x: number, y: number) => { const o = w.get(w.occ[y * w.w + x]); return !!o && o.owner === e.owner && (o.type === 'stonewall' || o.type === 'wall' || o.type === 'gate'); };
+    const vertical = (wallAt(e.tx, e.ty - 1) || wallAt(e.tx, e.ty + 1)) && !(wallAt(e.tx - 1, e.ty) || wallAt(e.tx + 1, e.ty));
+    g.globalAlpha = e.progress < 1 ? 0.5 : 1;
+    const cx = x0 + 16, base = y0 + 22;
+    // pilares y dintel
+    g.fillStyle = '#8f8b84';
+    if (vertical) { g.fillRect(cx - 9, base - 26, 18, 30); }
+    else { g.fillRect(x0, base - 26, 32, 28); }
+    g.fillStyle = '#a9a59d'; g.fillRect(vertical ? cx - 9 : x0, base - 30, vertical ? 18 : 32, 5);
+    this.crenels(vertical ? cx - 9 : x0, base - 30, vertical ? 18 : 32, '#a9a59d');
+    // arco con rastrillo
+    g.fillStyle = '#2b2018';
+    g.beginPath(); g.moveTo(cx - 7, base + 2); g.lineTo(cx - 7, base - 12); g.arc(cx, base - 12, 7, Math.PI, 0); g.lineTo(cx + 7, base + 2); g.closePath(); g.fill();
+    g.strokeStyle = '#5d5d5d'; g.lineWidth = 1.2;
+    for (let xx = cx - 5; xx <= cx + 5; xx += 3.3) { g.beginPath(); g.moveTo(xx, base - 16); g.lineTo(xx, base + 1); g.stroke(); }
+    g.beginPath(); g.moveTo(cx - 7, base - 8); g.lineTo(cx + 7, base - 8); g.moveTo(cx - 7, base - 3); g.lineTo(cx + 7, base - 3); g.stroke();
+    g.fillStyle = col; g.fillRect(cx - 9, base - 25, 18, 3);
     g.globalAlpha = 1;
   }
 

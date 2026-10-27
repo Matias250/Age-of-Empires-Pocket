@@ -33,7 +33,7 @@ export type BuildingType =
   | 'towncenter' | 'house' | 'barracks' | 'range' | 'stable' | 'workshop'
   | 'mill' | 'lumbercamp' | 'miningcamp' | 'farm' | 'tower'
   | 'blacksmith' | 'market' | 'castle' | 'monastery' | 'wall'
-  | 'dock' | 'university' | 'stonewall';
+  | 'dock' | 'university' | 'stonewall' | 'gate';
 export type NodeType = 'tree' | 'berries' | 'goldmine' | 'stonemine' | 'fish';
 
 export type ArmorClass = 'infantry' | 'archer' | 'cavalry' | 'siege' | 'villager' | 'building' | 'ship';
@@ -249,6 +249,7 @@ export interface BuildingDef {
   trade?: boolean;
   onWater?: boolean;
   line?: boolean; // se traza como línea (murallas)
+  onWall?: boolean; // puede reemplazar un tramo de muralla propia
   desc: string;
 }
 
@@ -266,7 +267,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   mill: { name: 'Molino', size: 2, hp: 500, cost: { wood: 100 }, buildTime: 14, age: 1, drop: ['food'], sight: 4, research: ['plow'], desc: 'Depósito de comida.' },
   lumbercamp: { name: 'Aserradero', size: 2, hp: 500, cost: { wood: 100 }, buildTime: 14, age: 1, drop: ['wood'], sight: 4, research: ['axe'], desc: 'Depósito de madera.' },
   miningcamp: { name: 'Campamento minero', size: 2, hp: 500, cost: { wood: 100 }, buildTime: 14, age: 1, drop: ['gold', 'stone'], sight: 4, research: ['mining'], desc: 'Depósito de oro y piedra.' },
-  farm: { name: 'Granja', size: 3, hp: 200, cost: { wood: 60 }, buildTime: 8, age: 1, sight: 1, food: 600, desc: 'Comida casi inagotable.' },
+  farm: { name: 'Granja', size: 2, hp: 200, cost: { wood: 60 }, buildTime: 8, age: 1, sight: 1, food: 600, desc: 'Comida casi inagotable.' },
   tower: {
     name: 'Torre de vigía', size: 1, hp: 700, cost: { wood: 50, stone: 125 }, buildTime: 28, age: 2, sight: 8,
     attack: { atk: 6, range: 7 * TILE, cooldown: 2 }, desc: 'Defensa que dispara flechas.',
@@ -283,10 +284,11 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
     trains: ['trebuchet'], attack: { atk: 8, range: 8 * TILE, cooldown: 1.2 }, desc: 'Fortaleza: entrena la unidad única de tu civilización.',
   },
   dock: {
-    name: 'Muelle', size: 3, hp: 1200, cost: { wood: 150 }, buildTime: 25, age: 1, sight: 6, onWater: true,
+    name: 'Muelle', size: 2, hp: 1200, cost: { wood: 150 }, buildTime: 25, age: 1, sight: 6, onWater: true,
     trains: ['fishship', 'galleon', 'fireship', 'cannongalleon'], drop: ['food'], desc: 'Se construye en el agua, pegado a la costa.',
   },
   wall: { name: 'Empalizada', size: 1, hp: 350, cost: { wood: 4 }, buildTime: 4, age: 1, sight: 1, line: true, desc: 'Muro de madera. Tocá dos puntos para trazarla.' },
+  gate: { name: 'Puerta', size: 1, hp: 1500, cost: { stone: 30 }, buildTime: 15, age: 2, sight: 2, onWall: true, desc: 'Va sobre tu muralla: deja pasar a tu equipo y frena al enemigo.' },
   stonewall: { name: 'Muralla de piedra', size: 1, hp: 1200, cost: { stone: 6 }, buildTime: 7, age: 2, sight: 1, line: true, desc: 'Muro de piedra muy resistente.' },
 };
 

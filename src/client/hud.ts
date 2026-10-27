@@ -6,6 +6,7 @@ import {
 import { CIVS } from '../sim/civs.js';
 import { Entity } from '../sim/world.js';
 import type { Game } from './game.js';
+import { saveSettings, settings } from './settings.js';
 
 export const UNIT_ICON: Record<UnitType, string> = {
   villager: '🧑‍🌾', militia: '🗡️', spearman: '🔱', champion: '⚔️',
@@ -19,7 +20,7 @@ export const BUILD_ICON: Record<BuildingType, string> = {
   towncenter: '🏰', house: '🏠', barracks: '⚔️', range: '🎯', stable: '🐴', workshop: '⚙️',
   mill: '🌾', lumbercamp: '🪓', miningcamp: '⛏️', farm: '🌱', tower: '🗼',
   blacksmith: '⚒️', market: '⚖️', castle: '🏯', monastery: '⛪', wall: '🪵',
-  dock: '⚓', university: '🎓', stonewall: '🧱',
+  dock: '⚓', university: '🎓', stonewall: '🧱', gate: '🚪',
 };
 export const RES_ICON: Record<Res, string> = { food: '🍖', wood: '🪵', gold: '🪙', stone: '🪨' };
 const NODE_ICON: Record<NodeType, string> = { tree: '🌳', berries: '🫐', goldmine: '🪙', stonemine: '🪨', fish: '🐟' };
@@ -27,7 +28,7 @@ const NODE_ICON: Record<NodeType, string> = { tree: '🌳', berries: '🫐', gol
 const BUILD_GROUPS: [string, BuildingType[]][] = [
   ['Economía', ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'dock', 'market', 'towncenter']],
   ['Militar', ['barracks', 'range', 'stable', 'workshop', 'blacksmith', 'monastery', 'university']],
-  ['Defensa', ['wall', 'stonewall', 'tower', 'castle']],
+  ['Defensa', ['wall', 'stonewall', 'gate', 'tower', 'castle']],
 ];
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -123,6 +124,7 @@ export class Hud {
       <h2>Pausa</h2>
       ${civ ? `<p class="civline">${CIVS[civ].emblem} Jugás con los <b>${CIVS[civ].name}</b>: ${CIVS[civ].bonuses.join(' · ')}. Unidad única: ${UNITS[CIVS[civ].unique].name}.</p>` : ''}
       ${this.playersTable()}
+      <div class="row"><button class="chip ${settings.grid ? 'on' : ''}" data-grid>▦ Cuadrícula: ${settings.grid ? 'Sí' : 'No'}</button></div>
       <div class="row">Velocidad:
         ${[1, 1.5, 2].map((s) => `<button class="chip ${g.speed === s ? 'on' : ''}" data-speed="${s}">${s}×</button>`).join('')}
       </div>
@@ -131,6 +133,7 @@ export class Hud {
     </div>`;
     o.onclick = (e) => {
       const t = e.target as HTMLElement;
+      if (t.closest('[data-grid]')) { settings.grid = !settings.grid; saveSettings(); g.paused = false; this.togglePause(); return; }
       const sp = t.getAttribute('data-speed');
       if (sp) { g.speed = Number(sp); g.paused = false; this.togglePause(); return; }
       const a = t.getAttribute('data-o');

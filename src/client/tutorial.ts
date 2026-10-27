@@ -71,7 +71,7 @@ export class Tutorial {
       {
         lines: [
           { who: 'Ilen', text: 'Ahora, soldados. Tocá el Cuartel y entrená tropas.' },
-          { who: 'Bram', text: 'Los 🗡️ Espadachines aguantan y rompen edificios. Los 🔱 Lanceros son baratos y frenan jinetes. Acá tenés oro y comida del tesoro.' },
+          { who: 'Bram', text: 'Los 🗡️ Espadachines aguantan y rompen edificios. Cuando avances a la Edad Media vas a tener lanceros, arqueros y jinetes. Acá tenés oro y comida del tesoro.' },
         ],
         enter: () => gift(200, 0, 80),
         goal: 'Entrená 4 soldados',

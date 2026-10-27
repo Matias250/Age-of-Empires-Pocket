@@ -8,7 +8,7 @@ function setup() {
   const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 5, map: 'continental', biome: 'templado' });
   const w = m.world; const p = w.players[0];
   p.res = { food: 5000, wood: 5000, gold: 5000, stone: 5000 };
-  p.age = 2;
+  p.age = 4;
   p.explored.fill(1);
   const tc = w.buildingsOf(0, 'towncenter')[0];
   const run = (s) => { for (let i = 0; i < s * 20; i++) w.step(); };
@@ -55,4 +55,41 @@ test('aldeanos construyen empalizada y castillo', () => {
   w.issue({ t: 'build', p: 0, ids: v, b: 'castle', tx: c.x, ty: c.y });
   run(70);
   assert.equal(w.buildingsOf(0, 'castle', true).length, 1);
+});
+
+test('muelle: el barco pesquero pesca y descarga', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 9, map: 'mediterraneo', biome: 'templado' });
+  const w = m.world; const p = w.players[0];
+  p.explored.fill(1); p.res.wood = 2000;
+  const tc = w.buildingsOf(0, 'towncenter')[0];
+  let spot = null;
+  for (let r = 3; r < 30 && !spot; r++) for (let dy = -r; dy <= r && !spot; dy++) for (let dx = -r; dx <= r; dx++) if (!w.canPlace(0, 'dock', tc.tx + dx, tc.ty + dy)) { spot = { x: tc.tx + dx, y: tc.ty + dy }; break; }
+  assert.ok(spot, 'debería haber lugar para un muelle');
+  const dock = w.placeBuilding(0, 'dock', spot.x, spot.y, true);
+  w.issue({ t: 'train', p: 0, bid: dock.id, u: 'fishship' });
+  for (let i = 0; i < 20 * 20; i++) w.step();
+  const ship = w.unitsOf(0, 'fishship')[0];
+  assert.ok(ship, 'se entrenó el barco');
+  const fish = w.findNode(ship, 'food', 60 * 32);
+  assert.ok(fish, 'hay peces');
+  w.issue({ t: 'target', p: 0, ids: [ship.id], target: fish.id });
+  const food0 = p.stats.gathered.food;
+  for (let i = 0; i < 90 * 20; i++) w.step();
+  assert.ok(p.stats.gathered.food > food0, 'pescó y descargó comida');
+});
+
+test('civilizaciones: bonos y unidad única en el castillo', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 4, players: [
+    { ai: false, civ: 'chinos', team: 1, color: 0 }, { ai: true, civ: 'turcos', team: 2, color: 1 }] });
+  const w = m.world;
+  assert.equal(w.unitsOf(0, 'villager').length, 7, 'chinos empiezan con 3 aldeanos extra');
+  assert.ok(w.players[1].techs.has('chemistry'), 'turcos tienen Química gratis');
+  assert.deepEqual(w.trainsOf(0, 'castle'), ['chukonu', 'trebuchet']);
+  assert.deepEqual(w.trainsOf(1, 'castle')[0], 'janissary');
+});
+
+test('las 4 edades se pueden avanzar', () => {
+  const { w, p, tc, run } = setup();
+  p.age = 1; p.res = { food: 9999, wood: 9999, gold: 9999, stone: 9999 };
+  for (const a of [2, 3, 4]) { w.issue({ t: 'age', p: 0, bid: tc.id }); run(55); assert.equal(p.age, a); }
 });

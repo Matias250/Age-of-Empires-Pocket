@@ -201,3 +201,45 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
   .bcard { padding: 6px 4px; } .bcard i { font-size: 22px; }
   .sheet-head { padding: 6px 12px; }
 }
+
+/* ---------- escaramuza: lugares de jugadores ---------- */
+.presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.slots { display: flex; flex-direction: column; gap: 6px; }
+.slot { display: grid; grid-template-columns: auto 44px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center;
+  background: #0004; border: 1px solid #ffffff14; border-radius: 12px; padding: 6px 8px; }
+.slot select { min-width: 0; width: 100%; background: var(--wood2); color: var(--ink); border: 1px solid var(--edge); border-radius: 8px; padding: 7px 6px; font: inherit; font-size: 13px; }
+.slot .sname { font-size: 13px; }
+.slot .mine { text-align: center; grid-column: span 2; }
+.swatch.sm { width: 26px; height: 26px; }
+.rm { background: transparent; border: 1px solid #f8717166; color: #fca5a5; border-radius: 8px; width: 32px; height: 32px; }
+.rm:disabled { opacity: .3; }
+.addai { margin-top: 6px; background: transparent; border: 1px dashed var(--edge); color: var(--gold); border-radius: 12px; padding: 10px; font-weight: 600; }
+.warn { color: #fca5a5; font-size: 13px; margin: 6px 0 0; }
+.big:disabled { opacity: .45; }
+.civcard { background: linear-gradient(#3d2e20, #2a2018); border: 1px solid var(--edge); border-radius: 12px; padding: 10px 12px; }
+.civcard b { font-family: Cinzel, serif; color: var(--gold); font-size: 15px; }
+.civcard small { color: var(--dim); }
+.civcard ul { margin: 6px 0; padding-left: 18px; font-size: 13px; line-height: 1.45; }
+.civcard p { margin: 4px 0 0; font-size: 13px; color: var(--ink); }
+.civgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.pagetitle { font-family: Cinzel, serif; color: var(--gold); margin: 0; }
+.menu-inner:has(.civgrid) { max-width: 900px; }
+@media (max-width: 560px) {
+  .slot { grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 34px; grid-template-areas: "sw civ civ civ" "sw team dif rm"; }
+  .slot .swatch { grid-area: sw; align-self: start; margin-top: 4px; }
+  .slot .sname { display: none; }
+  .slot select[data-k="civ"] { grid-area: civ; }
+  .slot select[data-k="team"] { grid-area: team; }
+  .slot select[data-k="dif"] { grid-area: dif; }
+  .slot .rm { grid-area: rm; }
+  .slot .mine { grid-area: dif; text-align: left; padding-left: 6px; }
+}
+/* tabla de jugadores en pausa y final */
+table.players { width: 100%; font-size: 12px; margin: 8px 0; border-collapse: collapse; }
+table.players td { padding: 4px; border-bottom: 1px solid #ffffff10; text-align: left; white-space: nowrap; }
+table.players tr.dead { opacity: .45; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.civline { font-size: 12.5px; color: var(--dim); text-align: left; line-height: 1.4; }
+.card { max-height: 92vh; overflow-y: auto; }
+.act.uniq { border-color: #c084fc; box-shadow: inset 0 0 0 1px #c084fc55; }
+.civcard b + small { margin-left: 6px; }

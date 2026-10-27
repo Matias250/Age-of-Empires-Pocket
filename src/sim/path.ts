@@ -52,11 +52,14 @@ let fromBuf = new Int32Array(0);
 let stamp = new Uint32Array(0);
 let closedStamp = new Uint32Array(0);
 let curStamp = 1;
+let lastFound = false;
+/** ¿La última búsqueda llegó a la meta? */
+export function pathFound(): boolean { return lastFound; }
 
 export function findPath(
   grid: Grid, sx: number, sy: number,
   isGoal: (x: number, y: number) => boolean,
-  hx: number, hy: number, maxNodes = 4000,
+  hx: number, hy: number, maxNodes = 9000,
 ): { x: number; y: number }[] {
   const { w, h, solid } = grid;
   const n = w * h;
@@ -97,6 +100,8 @@ export function findPath(
       }
     }
   }
+  // sin meta pero con el área alcanzable agotada => realmente inalcanzable
+  lastFound = found >= 0 || (open.size > 0 && expanded >= maxNodes);
   let end = found >= 0 ? found : best;
   const out: { x: number; y: number }[] = [];
   while (end !== start && end >= 0) {

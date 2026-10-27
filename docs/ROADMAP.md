@@ -9,7 +9,13 @@
 - [x] Controles táctiles, minimapa, niebla de guerra
 - [x] Instalable como app web (PWA) y publicación en GitHub Pages
 
-## v0.2 — Multijugador online (cooperativo)
+## v0.3 — Contenido estilo clásico (hecho)
+- [x] 4 edades, 10 civilizaciones con unidad única y bonificaciones
+- [x] Universidad, Muelle, Muralla de piedra; barcos pesqueros, galeones, barcos de fuego y galeones cañoneros
+- [x] Escaramuza de hasta 8 jugadores con equipos, civilización, color y dificultad por jugador
+- [x] Mapa Mediterráneo y peces en todos los mapas con agua
+
+## v0.4 — Multijugador online (cooperativo)
 La simulación ya está preparada: es determinista y solo cambia por comandos.
 
 1. **Servidor de salas** (Node.js + WebSocket, por ejemplo en Fly.io o Render): crea salas con código de 4 letras.

@@ -1,6 +1,8 @@
 // Punto de entrada: menú principal y arranque de partidas.
 import { DIFF_NAME, Difficulty } from '../sim/ai.js';
-import { BIOMES, Biome, MAPS, MapType, MatchConfig, Mode, PLAYER_COLORS } from '../sim/match.js';
+import { BIOMES, Biome, MAPS, MapType, MatchConfig, Mode, PLAYER_COLORS, SlotCfg } from '../sim/match.js';
+import { CIV_LIST, CIVS, CivId } from '../sim/civs.js';
+import { UNITS } from '../sim/data.js';
 import { Game } from './game.js';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -15,6 +17,28 @@ let difficulty = store.get('dif', 'normal') as Difficulty;
 let color = Number(store.get('color', '0'));
 let mapSel = store.get('map', 'random') as MapType | 'random';
 let biomeSel = store.get('biome', 'random') as Biome | 'random';
+let slots: SlotCfg[] = loadSlots();
+
+function loadSlots(): SlotCfg[] {
+  try {
+    const v = JSON.parse(store.get('slots', '')) as SlotCfg[];
+    if (Array.isArray(v) && v.length >= 2 && v.length <= 8 && !v[0].ai) return v;
+  } catch { /* sin datos guardados */ }
+  return preset('1v1');
+}
+function saveSlots() { store.set('slots', JSON.stringify(slots)); }
+
+function preset(kind: '1v1' | '2v2' | '4v4' | 'ffa', myCiv: CivId | 'random' = 'random'): SlotCfg[] {
+  const cols = [color, ...[0, 1, 2, 3, 4, 5, 6, 7].filter((i) => i !== color)];
+  const n = kind === '1v1' ? 2 : kind === '2v2' ? 4 : kind === '4v4' ? 8 : 4;
+  return Array.from({ length: n }, (_, i) => ({
+    ai: i > 0,
+    civ: i === 0 ? myCiv : 'random',
+    team: kind === 'ffa' ? 0 : kind === '1v1' ? i + 1 : i < n / 2 ? 1 : 2,
+    color: cols[i],
+    difficulty: kind === '2v2' && i === 1 ? 'normal' : difficulty,
+  }));
+}
 
 function renderMenu() {
   menu.hidden = false;
@@ -23,67 +47,137 @@ function renderMenu() {
     <div class="logo">
       <div class="crest">⚜️</div>
       <h1>Imperios <span>Rápidos</span></h1>
-      <p>Estrategia en tiempo real · partidas de 10 a 15 minutos</p>
+      <p>Estrategia en tiempo real · 10 civilizaciones · 4 edades</p>
     </div>
     <div class="modes">
       <button class="mode" data-m="tutorial"><i>📜</i><div><b>Historia: La Crónica de Varnia</b><small>Tutorial guiado · 10 minutos</small></div></button>
-      <button class="mode" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza contra la IA</b><small>1 contra 1 · elegí mapa, bioma y color</small></div></button>
+      <button class="mode" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza</b><small>De 1 contra 1 hasta 8 jugadores · elegí equipos y civilizaciones</small></div></button>
       <button class="mode" data-m="coop"><i>🤝</i><div><b>Cooperativo 2 contra 2</b><small>Vos + aliado IA contra 2 IA</small></div></button>
+      <button class="mode" data-m="civs"><i>🏛️</i><div><b>Civilizaciones</b><small>Bonificaciones y unidad única de cada una</small></div></button>
       <button class="mode soon" data-m="ranked" disabled><i>🏆</i><div><b>Competitivo online</b><small>Próximamente · partidas clasificatorias</small></div></button>
     </div>
     <div class="diff">
       <span>Tu color</span>
       <div class="swatches">${PLAYER_COLORS.map((_, i) => swatch(i)).join('')}</div>
     </div>
-    <div class="diff">
-      <span>Dificultad de la IA</span>
-      <div class="seg">${(['easy', 'normal', 'hard'] as Difficulty[]).map((d) => `<button data-d="${d}" class="${d === difficulty ? 'on' : ''}">${DIFF_NAME[d]}</button>`).join('')}</div>
-    </div>
     <button class="howto" data-m="howto">¿Cómo se juega?</button>
     <div class="rotate">📱↻ Girá el teléfono para jugar mejor</div>
   </div>`;
+  menu.onchange = null;
   menu.onclick = (e) => {
     const t = e.target as HTMLElement;
     const c = t.closest('[data-c]')?.getAttribute('data-c');
-    if (c) { color = Number(c); store.set('color', c); renderMenu(); return; }
-    const d = t.closest('[data-d]')?.getAttribute('data-d') as Difficulty | null;
-    if (d) { difficulty = d; store.set('dif', d); renderMenu(); return; }
+    if (c) { setMyColor(Number(c)); renderMenu(); return; }
     const m = t.closest('[data-m]')?.getAttribute('data-m');
     if (m === 'howto') { showHowTo(); return; }
+    if (m === 'civs') { showCivs(); return; }
     if (m === 'tutorial') start({ mode: 'tutorial', difficulty, color, biome: biomeSel, seed: Math.floor(Math.random() * 99999) });
-    if (m === 'skirmish' || m === 'coop') showSetup(m);
+    if (m === 'skirmish') showSetup();
+    if (m === 'coop') { slots = preset('2v2', slots[0].civ); saveSlots(); showSetup(); }
   };
+}
+
+function setMyColor(c: number) {
+  // si una IA tenía ese color, intercambiar
+  const other = slots.find((s, i) => i > 0 && s.color === c);
+  if (other) other.color = slots[0].color;
+  color = c; slots[0].color = c;
+  store.set('color', String(c)); saveSlots();
 }
 
 const swatch = (i: number) => `<button class="swatch ${i === color ? 'on' : ''}" data-c="${i}" style="--c:${PLAYER_COLORS[i].hex}" aria-label="${PLAYER_COLORS[i].name}"></button>`;
 
-function showSetup(mode: Mode) {
+const civOptions = (sel: CivId | 'random') => `<option value="random" ${sel === 'random' ? 'selected' : ''}>🎲 Al azar</option>` +
+  CIV_LIST.map((c) => `<option value="${c}" ${sel === c ? 'selected' : ''}>${CIVS[c].emblem} ${CIVS[c].name}</option>`).join('');
+const teamOptions = (sel: number) => [0, 1, 2, 3, 4].map((t) => `<option value="${t}" ${sel === t ? 'selected' : ''}>${t ? 'Equipo ' + t : 'Sin equipo'}</option>`).join('');
+const difOptions = (sel: Difficulty) => (['easy', 'normal', 'hard'] as Difficulty[]).map((d) => `<option value="${d}" ${sel === d ? 'selected' : ''}>${DIFF_NAME[d]}</option>`).join('');
+
+function civCard(c: CivId | 'random'): string {
+  if (c === 'random') return `<div class="civcard"><b>🎲 Civilización al azar</b><small>Te toca una de las 10 al empezar.</small></div>`;
+  const d = CIVS[c];
+  return `<div class="civcard"><b>${d.emblem} ${d.name}</b> <small>${d.region}</small>
+    <ul>${d.bonuses.map((x) => `<li>${x}</li>`).join('')}</ul>
+    <p>Unidad única: <b>${UNITS[d.unique].name}</b> — ${UNITS[d.unique].desc.replace(/^Única? de los? [^.]+\. ?/, '')}</p></div>`;
+}
+
+function showSetup() {
   const mapsHtml = (['random', ...Object.keys(MAPS)] as (MapType | 'random')[]).map((k) =>
     `<button class="opt ${k === mapSel ? 'on' : ''}" data-map="${k}"><b>${k === 'random' ? '🎲 Al azar' : MAPS[k as MapType].name}</b><small>${k === 'random' ? 'Sorpresa en cada partida' : MAPS[k as MapType].desc}</small></button>`).join('');
   const biomesHtml = (['random', ...Object.keys(BIOMES)] as (Biome | 'random')[]).map((k) =>
     `<button class="chip ${k === biomeSel ? 'on' : ''}" data-biome="${k}">${k === 'random' ? '🎲 Al azar' : BIOME_ICON[k as Biome] + ' ' + BIOMES[k as Biome]}</button>`).join('');
+  const rows = slots.map((s, i) => `
+    <div class="slot">
+      <button class="swatch sm" data-slotcolor="${i}" style="--c:${PLAYER_COLORS[s.color].hex}" aria-label="Cambiar color"></button>
+      <b class="sname">${i === 0 ? 'Vos' : 'IA ' + i}</b>
+      <select data-k="civ" data-i="${i}" aria-label="Civilización">${civOptions(s.civ)}</select>
+      <select data-k="team" data-i="${i}" aria-label="Equipo">${teamOptions(s.team)}</select>
+      ${s.ai ? `<select data-k="dif" data-i="${i}" aria-label="Dificultad">${difOptions(s.difficulty ?? difficulty)}</select>
+        <button class="rm" data-rm="${i}" aria-label="Quitar" ${slots.length <= 2 ? 'disabled' : ''}>✖</button>` : '<span class="mine">⭐</span>'}
+    </div>`).join('');
+  const sides = new Set(slots.map((s, i) => (s.team > 0 ? s.team : 100 + i)));
   menu.innerHTML = `<div class="menu-inner setup">
-    <h2>${mode === 'coop' ? '🤝 Cooperativo 2 contra 2' : '⚔️ Escaramuza contra la IA'}</h2>
-    <section><h3>Color de tu ejército</h3><div class="swatches">${PLAYER_COLORS.map((_, i) => swatch(i)).join('')}</div>
-      <p class="dim">Elegiste: <b style="color:${PLAYER_COLORS[color].hex}">${PLAYER_COLORS[color].name}</b></p></section>
+    <h2>⚔️ Escaramuza</h2>
+    <section><h3>Jugadores (${slots.length}/8)</h3>
+      <div class="presets">
+        <button class="chip" data-preset="1v1">1 vs 1</button><button class="chip" data-preset="2v2">2 vs 2</button>
+        <button class="chip" data-preset="4v4">4 vs 4</button><button class="chip" data-preset="ffa">Todos contra todos</button>
+      </div>
+      <div class="slots">${rows}</div>
+      ${slots.length < 8 ? '<button class="addai" data-add>➕ Agregar IA</button>' : ''}
+      ${sides.size < 2 ? '<p class="warn">Tiene que haber al menos dos bandos distintos.</p>' : ''}
+    </section>
+    <section><h3>Tu civilización</h3>${civCard(slots[0].civ)}</section>
     <section><h3>Mapa</h3><div class="opts">${mapsHtml}</div></section>
     <section><h3>Bioma</h3><div class="chips">${biomesHtml}</div></section>
-    <section><h3>Dificultad de la IA</h3><div class="seg">${(['easy', 'normal', 'hard'] as Difficulty[]).map((d) => `<button data-d="${d}" class="${d === difficulty ? 'on' : ''}">${DIFF_NAME[d]}</button>`).join('')}</div></section>
-    <div class="setup-actions"><button class="big ghost" data-back>Volver</button><button class="big" data-go>¡A jugar!</button></div>
+    <div class="setup-actions"><button class="big ghost" data-back>Volver</button><button class="big" data-go ${sides.size < 2 ? 'disabled' : ''}>¡A jugar!</button></div>
   </div>`;
+  menu.onchange = (e) => {
+    const t = e.target as HTMLSelectElement;
+    const i = Number(t.getAttribute('data-i')), k = t.getAttribute('data-k');
+    if (!slots[i]) return;
+    if (k === 'civ') slots[i].civ = t.value as CivId | 'random';
+    if (k === 'team') slots[i].team = Number(t.value);
+    if (k === 'dif') slots[i].difficulty = t.value as Difficulty;
+    saveSlots();
+    showSetup();
+  };
   menu.onclick = (e) => {
     const t = e.target as HTMLElement;
-    const c = t.closest('[data-c]')?.getAttribute('data-c');
-    if (c) { color = Number(c); store.set('color', c); return showSetup(mode); }
+    const sc = t.closest('[data-slotcolor]')?.getAttribute('data-slotcolor');
+    if (sc) {
+      const i = Number(sc);
+      const used = new Set(slots.map((s) => s.color));
+      let c = slots[i].color;
+      for (let k = 0; k < 8; k++) { c = (c + 1) % 8; if (!used.has(c)) break; }
+      if (!used.has(c)) { slots[i].color = c; if (i === 0) { color = c; store.set('color', String(c)); } }
+      saveSlots(); return showSetup();
+    }
+    const pr = t.closest('[data-preset]')?.getAttribute('data-preset');
+    if (pr) { slots = preset(pr as '1v1', slots[0].civ); saveSlots(); return showSetup(); }
+    if (t.closest('[data-add]')) {
+      const used = new Set(slots.map((s) => s.color));
+      const c = [0, 1, 2, 3, 4, 5, 6, 7].find((x) => !used.has(x)) ?? 0;
+      slots.push({ ai: true, civ: 'random', team: slots.some((s) => s.team === 2) ? 2 : 0, color: c, difficulty });
+      saveSlots(); return showSetup();
+    }
+    const rm = t.closest('[data-rm]')?.getAttribute('data-rm');
+    if (rm && slots.length > 2) { slots.splice(Number(rm), 1); saveSlots(); return showSetup(); }
     const mp = t.closest('[data-map]')?.getAttribute('data-map');
-    if (mp) { mapSel = mp as MapType; store.set('map', mp); return showSetup(mode); }
+    if (mp) { mapSel = mp as MapType; store.set('map', mp); return showSetup(); }
     const bi = t.closest('[data-biome]')?.getAttribute('data-biome');
-    if (bi) { biomeSel = bi as Biome; store.set('biome', bi); return showSetup(mode); }
-    const d = t.closest('[data-d]')?.getAttribute('data-d');
-    if (d) { difficulty = d as Difficulty; store.set('dif', d); return showSetup(mode); }
+    if (bi) { biomeSel = bi as Biome; store.set('biome', bi); return showSetup(); }
     if (t.closest('[data-back]')) return renderMenu();
-    if (t.closest('[data-go]')) start({ mode, difficulty, color, map: mapSel, biome: biomeSel, seed: Math.floor(Math.random() * 99999) });
+    if (t.closest('[data-go]') && sides.size >= 2) start({ mode: 'skirmish', difficulty, color, map: mapSel, biome: biomeSel, players: slots.map((s) => ({ ...s })), seed: Math.floor(Math.random() * 99999) });
   };
+}
+
+function showCivs() {
+  menu.innerHTML = `<div class="menu-inner">
+    <h2 class="pagetitle">🏛️ Civilizaciones</h2>
+    <div class="civgrid">${CIV_LIST.map((c) => civCard(c)).join('')}</div>
+    <button class="big" data-back>Volver</button>
+  </div>`;
+  menu.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-back]')) renderMenu(); };
 }
 
 const BIOME_ICON: Record<Biome, string> = { templado: '🌳', desierto: '🏜️', nieve: '❄️', tropical: '🌴', otono: '🍂' };
@@ -96,9 +190,12 @@ function showHowTo() {
       <li><b>Tocar</b> una unidad la selecciona. <b>Doble toque</b> selecciona todas las de ese tipo en pantalla.</li>
       <li>Con unidades elegidas, <b>tocá</b> el suelo para moverlas, un recurso para juntarlo o un enemigo para atacarlo.</li>
       <li><b>Arrastrá</b> con un dedo para mover la cámara y <b>pellizcá</b> para zoom. El botón ▢ activa selección por área.</li>
-      <li>💤 busca aldeanos sin trabajo y 🛡️ selecciona todo tu ejército.</li>
-      <li>Hacé 🏠 casas para crecer, y pasá a la 👑 Era de los Reinos para desbloquear jinetes, arietes y torres.</li>
-      <li><b>Piedra, papel o tijera:</b> lanceros 🔱 &gt; jinetes 🐎 &gt; arqueros 🏹 &gt; infantería 🗡️. Los arietes 🐏 rompen edificios.</li>
+      <li>💤 busca aldeanos sin trabajo, 🛡️ selecciona tu ejército y ⚓ tu flota.</li>
+      <li>Hacé 🏠 casas para crecer y avanzá por las 4 edades desde el 🏰 Centro Urbano: <b>Oscura → Media → Castillos → Imperial</b>.</li>
+      <li>Cada civilización tiene bonificaciones propias y una <b>unidad única</b> que se entrena en el 🏯 Castillo.</li>
+      <li><b>Piedra, papel o tijera:</b> lanceros 🔱 &gt; caballería 🐎 &gt; arqueros 🏹 &gt; infantería 🗡️; los escaramuzadores cazan arqueros. Arietes y fundíbulos rompen edificios.</li>
+      <li>El ⚓ Muelle va en el agua tocando la costa: entrena barcos pesqueros, galeones, barcos de fuego y galeones cañoneros.</li>
+      <li>La 🎓 Universidad investiga Albañilería, Química (desbloquea la pólvora), Balística y más.</li>
       <li>En computadora: clic izquierdo selecciona, clic derecho ordena, arrastrar selecciona por área, flechas mueven la cámara.</li>
     </ul>
     <button class="big" data-back>Volver</button>

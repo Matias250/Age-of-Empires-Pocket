@@ -10,21 +10,25 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 | Modo | Estado |
 |---|---|
 | 📜 **Historia: La Crónica de Varnia** — tutorial narrativo de 8 objetivos | ✅ Jugable |
-| ⚔️ **Escaramuza 1 vs 1 contra la IA** — Fácil, Normal y Difícil | ✅ Jugable |
+| ⚔️ **Escaramuza de 2 a 8 jugadores** — equipos, civilización, color y dificultad (Fácil, Normal, Difícil) por jugador | ✅ Jugable |
 | 🤝 **Cooperativo 2 vs 2** — vos + aliado IA contra 2 IA | ✅ Jugable (aliado IA) |
 | 🤝 Cooperativo online con amigos | 🛠️ Próxima etapa |
 | 🏆 Competitivo online (clasificatorias) | 🛠️ Próxima etapa |
 
 **Jugabilidad**
 
-- 4 recursos: comida, madera, oro y piedra. Bayas, árboles, minas, canteras y granjas.
-- 8 unidades: Aldeano, Espadachín, Lancero, Arquero, Jinete, Ariete, Monje (cura) y Guardia Real (élite del castillo).
-- 16 edificios: Centro Urbano, Casa, Granja, Molino, Aserradero, Campamento minero, Mercado, Cuartel, Galería de tiro, Establo,
-  Taller de asedio, Herrería, Monasterio, Empalizada, Torre y Castillo.
-- 6 investigaciones: Forja, Cota de malla, Hacha doble, Arado, Minería y Carretilla. Mercado para comprar y vender recursos.
-- 5 mapas (Continental, Río con vados, Lagos, Bosque cerrado, Oasis) y 5 biomas (Templado, Desierto, Nieve, Tropical, Otoño).
-- Elegís el color de tu ejército entre 8.
-- 2 eras (Clanes → Reinos) que desbloquean caballería, asedio y torres.
+- **4 edades:** Oscura → Media → de los Castillos → Imperial.
+- **10 civilizaciones**, cada una con 3 bonificaciones y una unidad única que se entrena en el Castillo:
+  Británicos (Arquero de arco largo), Francos (Lanzador de hachas), Españoles (Conquistador), Bizantinos (Catafracto),
+  Mongoles (Mangudai), Japoneses (Samurái), Chinos (Chu Ko Nu), Persas (Elefante de guerra), Vikingos (Berserker) y Turcos (Jenízaro).
+- **19 unidades comunes:** Aldeano, Espadachín, Lancero, Campeón, Arquero, Escaramuzador, Arquero a caballo, Arcabucero,
+  Explorador, Caballero, Ariete, Mangana (daño en área), Cañón de bombardeo, Fundíbulo, Monje (cura), Barco pesquero,
+  Galeón, Barco de fuego y Galeón cañonero.
+- **19 edificios**, entre ellos Muelle (va en el agua), Universidad, Castillo, Monasterio, Mercado, Herrería, Empalizada y Muralla de piedra.
+- **15 investigaciones:** Herrería (Forja, Cota de malla, Emplumado, Barda), Universidad (Albañilería, Arquitectura, Química,
+  Balística, Matacanes, Ingeniería de asedio) y economía (Telar, Carretilla, Hacha doble, Arado, Minería). Química desbloquea la pólvora.
+- **Agua y barcos:** pesca con barcos, batallas navales, barcos que bombardean la costa.
+- 6 mapas (Continental, Río, Lagos, Bosque cerrado, Oasis, Mediterráneo) y 5 biomas (Templado, Desierto, Nieve, Tropical, Otoño).
 - Niebla de guerra, minimapa, puntos de reunión, colas de entrenamiento.
 - **Regla de partida rápida:** el que pierde su Centro Urbano, pierde.
 
@@ -33,7 +37,7 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 - Tocar = seleccionar · doble toque = todas las unidades de ese tipo en pantalla.
 - Con unidades elegidas, tocar suelo / recurso / enemigo = mover / recolectar / atacar.
 - Arrastrar = mover cámara · pellizcar = zoom · ▢ = selección por área.
-- 💤 aldeano ocioso · 🛡️ todo el ejército · ⚔️ "Atacar zona".
+- 🔨 construir · 💤 aldeano ocioso · 🛡️ todo el ejército · ⚓ la flota · ⚔️ "Atacar zona".
 
 En computadora: clic izquierdo selecciona, clic derecho ordena, arrastrar selecciona por área, flechas o WASD mueven la cámara, espacio pausa.
 
@@ -67,7 +71,8 @@ y desde el celular se puede "Agregar a pantalla de inicio" para usarlo como app 
 ```
 src/
   sim/            # Simulación pura y determinista (sin pantalla)
-    data.ts       #   balance: unidades, edificios, costos, tiempos
+    data.ts       #   balance: unidades, edificios, edades, investigaciones
+    civs.ts       #   las 10 civilizaciones y sus bonificaciones
     world.ts      #   mundo, comandos, movimiento, combate, recolección, eras, victoria
     path.ts       #   A* sobre grilla
     ai.ts         #   IA (3 dificultades) que juega con los mismos comandos que un humano

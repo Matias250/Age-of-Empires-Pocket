@@ -34,7 +34,7 @@ test('Difícil le gana a Fácil', () => {
   m.ais[1] = new AI(m.world, 1, 'hard');
   const w = run(m, 1500);
   console.log('ganador equipo', w.winnerTeam, 'minuto', (w.tick / TICK_RATE / 60).toFixed(1));
-  assert.equal(w.winnerTeam, 1);
+  assert.equal(w.winnerTeam, 2);
 });
 
 test('Modo coop 2v2 arranca y progresa', () => {

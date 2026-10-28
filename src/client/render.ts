@@ -624,14 +624,50 @@ export class Renderer {
         break;
       }
       case 'market': {
-        // tres puestos con toldos a rayas
-        for (let i = 0; i < 3; i++) {
-          const px = x0 + 4 + i * 30, py = y0 + 26 + (i % 2) * 18;
-          g.fillStyle = '#8d6e4a'; g.fillRect(px + 2, py + 6, 22, 14);
-          for (let k = 0; k < 4; k++) { g.fillStyle = k % 2 ? '#f5efe0' : col; g.fillRect(px + k * 6.5, py - 4, 6.5, 10); }
-          g.fillStyle = ['#e74c3c', '#f1c40f', '#8bc34a'][i]; g.beginPath(); g.arc(px + 8, py + 10, 3, 0, 7); g.arc(px + 16, py + 11, 3, 0, 7); g.fill();
+        // plaza empedrada con aljibe, puestos con toldos, mercadería, barriles y cajones
+        g.fillStyle = '#c9b58f'; g.beginPath(); g.roundRect(x0 + 3, y0 + 8, s - 6, s - 11, 6); g.fill();
+        g.strokeStyle = 'rgba(90,70,40,0.18)'; g.lineWidth = 0.8; g.beginPath();
+        for (let yy = y0 + 14; yy < y0 + s - 4; yy += 7) { g.moveTo(x0 + 4, yy); g.lineTo(x0 + s - 4, yy); }
+        for (let yy = y0 + 8, r = 0; yy < y0 + s - 4; yy += 7, r++) for (let xx = x0 + 4 + (r % 2) * 5; xx < x0 + s - 4; xx += 10) { g.moveTo(xx, yy); g.lineTo(xx, yy + 7); }
+        g.stroke();
+        const goods = [['#d64541', '#e86a5a', '#c0392b'], ['#c58b4a', '#a86b32', '#d9a066'], ['#4a7bc8', '#e2c044', '#8e44ad'], ['#7cb342', '#9ccc65', '#f5d76e']];
+        const stall = (px: number, py: number, w: number, k: number) => {
+          // mostrador
+          g.fillStyle = '#7a5634'; g.fillRect(px, py, w, 9);
+          g.fillStyle = '#5d3f22'; g.fillRect(px, py + 7, w, 2);
+          g.strokeStyle = 'rgba(40,25,10,0.35)'; g.lineWidth = 0.7; g.beginPath(); for (let xx = px + 4; xx < px + w; xx += 4) { g.moveTo(xx, py + 2); g.lineTo(xx, py + 7); } g.stroke();
+          // mercadería
+          const gc = goods[k % goods.length];
+          for (let i = 0; i < 5; i++) { g.fillStyle = gc[i % 3]; g.beginPath(); g.ellipse(px + 4 + i * ((w - 8) / 4), py - 1, 2.6, 2, 0, 0, 7); g.fill(); }
+          // postes
+          g.fillStyle = '#4e351c'; g.fillRect(px, py - 15, 1.8, 15); g.fillRect(px + w - 1.8, py - 15, 1.8, 15);
+          // toldo a rayas con volado
+          const ay = py - 22;
+          for (let i = 0; i < 6; i++) {
+            const sx0 = px - 3 + (i * (w + 6)) / 6, sx1 = px - 3 + ((i + 1) * (w + 6)) / 6;
+            g.fillStyle = i % 2 ? '#f4ecd8' : col;
+            g.beginPath(); g.moveTo(sx0 + 2, ay); g.lineTo(sx1 + 2, ay); g.lineTo(sx1, ay + 8); g.lineTo(sx0, ay + 8); g.closePath(); g.fill();
+            g.beginPath(); g.arc((sx0 + sx1) / 2, ay + 8, (sx1 - sx0) / 2, 0, Math.PI); g.fill();
+          }
+          g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(px - 3, ay + 8, w + 6, 1.5);
+        };
+        // aljibe central
+        const wx = cx, wy = y0 + s * 0.55;
+        stall(x0 + 8, y0 + 30, 30, 0); stall(x0 + s - 38, y0 + 30, 30, 1);
+        g.fillStyle = '#8f8a81'; g.beginPath(); g.ellipse(wx, wy, 9, 5.5, 0, 0, 7); g.fill();
+        g.fillStyle = '#a9a39a'; g.fillRect(wx - 9, wy - 4, 18, 4);
+        g.fillStyle = '#3b7fb8'; g.beginPath(); g.ellipse(wx, wy - 4, 6.5, 3, 0, 0, 7); g.fill();
+        g.fillStyle = '#4e351c'; g.fillRect(wx - 8, wy - 16, 1.6, 12); g.fillRect(wx + 6.4, wy - 16, 1.6, 12);
+        g.fillStyle = '#7d5a3a'; g.beginPath(); g.moveTo(wx - 11, wy - 15); g.lineTo(wx, wy - 22); g.lineTo(wx + 11, wy - 15); g.closePath(); g.fill();
+        stall(x0 + 10, y0 + s - 14, 28, 2); stall(x0 + s - 40, y0 + s - 14, 28, 3);
+        // barriles y cajones
+        for (const [bx, by] of [[x0 + 8, y0 + s * 0.52], [x0 + 14, y0 + s * 0.58]]) {
+          g.fillStyle = '#8d6e4a'; g.beginPath(); g.ellipse(bx, by, 4, 5, 0, 0, 7); g.fill();
+          g.strokeStyle = '#3e2a1a'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(bx - 4, by - 2); g.lineTo(bx + 4, by - 2); g.moveTo(bx - 4, by + 2); g.lineTo(bx + 4, by + 2); g.stroke();
         }
-        this.banner(cx, y0 + 22, col, time, 18);
+        g.fillStyle = '#a07a50'; g.fillRect(x0 + s - 18, y0 + s * 0.5, 9, 8); g.fillRect(x0 + s - 14, y0 + s * 0.5 - 6, 8, 6);
+        g.strokeStyle = '#5d3f22'; g.lineWidth = 0.8; g.strokeRect(x0 + s - 18, y0 + s * 0.5, 9, 8); g.strokeRect(x0 + s - 14, y0 + s * 0.5 - 6, 8, 6);
+        this.banner(cx, y0 + 12, col, time, 16);
         break;
       }
       case 'monastery': {
@@ -957,7 +993,7 @@ export class Renderer {
     const flip = fx < 0 ? -1 : 1;
     if (d.mounted) this.horse(x, y + 1, flip, bob, t === 'cataphract' || t === 'knight' ? col : null, t === 'cataphract' ? '#8a8f96' : t === 'scout' ? '#a87a4a' : '#7b5232');
     const by = y - (d.mounted ? 9 : 2) - bob;
-    const body = t === 'monk' ? '#7a5a3a' : t === 'champion' || t === 'cataphract' ? '#b0b7bf' : t === 'samurai' ? '#b23a3a' : t === 'janissary' ? '#e8e2d0' : col;
+    const body = t === 'monk' ? '#7a5a3a' : t === 'champion' || t === 'cataphract' || t === 'teutonic' ? '#b0b7bf' : t === 'jaguar' ? '#d9a441' : t === 'samurai' ? '#b23a3a' : t === 'janissary' ? '#e8e2d0' : col;
     if (!d.mounted && t !== 'monk') {
       g.fillStyle = '#4a3a2a';
       const st = moving ? Math.sin(time * 12 + e.id) * 2 : 0;
@@ -981,6 +1017,24 @@ export class Renderer {
         g.beginPath(); g.moveTo(hx - 3, hy - 2); g.quadraticCurveTo(hx - 7, hy - 5, hx - 6, hy - 9); g.moveTo(hx + 3, hy - 2); g.quadraticCurveTo(hx + 7, hy - 5, hx + 6, hy - 9); g.stroke();
         break;
       case 'samurai': g.fillStyle = '#2b2b2b'; g.beginPath(); g.arc(hx, hy - 0.5, hr + 0.8, Math.PI, 0); g.fill(); g.fillStyle = '#d4a017'; g.fillRect(hx - 3, hy - hr - 3, 6, 1.6); break;
+      case 'jaguar':
+        g.fillStyle = '#e0a83a'; g.beginPath(); g.arc(hx, hy - 0.5, hr + 1.4, Math.PI * 0.9, Math.PI * 2.1); g.fill();
+        g.fillStyle = '#3a2a10'; for (const [ox, oy] of [[-2.5, -2.5], [1.5, -3.5], [3, -1]]) { g.beginPath(); g.arc(hx + ox, hy + oy, 0.8, 0, 7); g.fill(); }
+        g.fillStyle = '#f5f0e0'; g.fillRect(hx - 3, hy + 0.5, 6, 1);
+        g.fillStyle = '#3a2a10'; for (const ox of [-6, 2, 9]) { g.beginPath(); g.arc(x + ox * 0.5, by + 1, 1, 0, 7); g.fill(); }
+        break;
+      case 'teutonic':
+        g.fillStyle = '#9aa4ad'; g.fillRect(hx - hr - 0.8, hy - hr - 1.5, (hr + 0.8) * 2, hr * 2 + 1.5);
+        g.fillStyle = '#2b2b2b'; g.fillRect(hx - hr, hy - 0.5, hr * 2, 1.2);
+        g.fillStyle = '#f2f2f2'; g.fillRect(x - 1, by - 4, 2, 8); g.fillRect(x - 3.5, by - 1, 7, 2);
+        break;
+      case 'plumed':
+        g.lineWidth = 1.6;
+        ['#2e9e5b', '#e0b52a', '#c23a2a', '#2e9e5b', '#1f6fb5'].forEach((c, k) => { const a = -Math.PI / 2 + (k - 2) * 0.35; g.strokeStyle = c; g.beginPath(); g.moveTo(hx, hy - hr + 1); g.lineTo(hx + Math.cos(a) * 8, hy - hr + 1 + Math.sin(a) * 8); g.stroke(); });
+        g.fillStyle = '#c9a227'; g.fillRect(hx - hr, hy - hr, hr * 2, 1.6);
+        break;
+      case 'tarkan': g.fillStyle = '#6b4a2a'; g.beginPath(); g.arc(hx, hy - 1, hr + 1, Math.PI, 0); g.fill(); g.fillStyle = '#a07a50'; g.fillRect(hx - hr - 1, hy - 1.5, hr * 2 + 2, 2); break;
+      case 'huskarl': g.fillStyle = '#8a939b'; g.beginPath(); g.arc(hx, hy - 0.5, hr + 0.6, Math.PI, 0); g.fill(); g.fillRect(hx + flip * 0.5 - 0.7, hy - 1, 1.4, 3.5); break;
       case 'janissary': g.fillStyle = '#f2ede0'; g.fillRect(hx - 2.5, hy - hr - 8, 5, 8); g.fillStyle = '#c9a227'; g.fillRect(hx - 3, hy - hr - 1, 6, 1.5); break;
       case 'conquistador': g.fillStyle = '#b0b7bf'; g.beginPath(); g.ellipse(hx, hy - 2, hr + 2, 2, 0, 0, 7); g.fill(); g.beginPath(); g.arc(hx, hy - 2.5, hr * 0.8, Math.PI, 0); g.fill(); break;
       case 'mangudai': case 'cavarcher': g.fillStyle = t === 'mangudai' ? '#6b4a2a' : '#9aa4ad'; g.beginPath(); g.arc(hx, hy - 1, hr + 0.6, Math.PI, 0); g.fill(); g.fillStyle = col; g.beginPath(); g.arc(hx, hy - hr - 1, 1.6, 0, 7); g.fill(); break;
@@ -1002,14 +1056,14 @@ export class Renderer {
         if (e.carry > 0 && e.carryRes) { g.fillStyle = RES_COLOR[e.carryRes]; g.fillRect(x - flip * 6 - 3, by - 4, 6, 6); }
         break;
       }
-      case 'militia': case 'champion': case 'samurai': {
-        const len = t === 'champion' ? 11 : t === 'samurai' ? 12 : 9;
+      case 'militia': case 'champion': case 'samurai': case 'huskarl': case 'teutonic': {
+        const len = t === 'champion' ? 11 : t === 'samurai' ? 12 : t === 'teutonic' ? 13 : 9;
         const a = flip > 0 ? -0.7 + sw * 1.25 : Math.PI + 0.7 - sw * 1.25;
         g.strokeStyle = '#e8eef3'; g.lineWidth = t === 'samurai' ? 1.8 : 2.5;
         g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(a) * len, ay + Math.sin(a) * len); g.stroke();
         g.strokeStyle = '#6d4c41'; g.lineWidth = 2; g.beginPath(); g.moveTo(ax + Math.cos(a + 1.57) * 3, ay + Math.sin(a + 1.57) * 3); g.lineTo(ax - Math.cos(a + 1.57) * 3, ay - Math.sin(a + 1.57) * 3); g.stroke();
         if (sw > 0.6) { g.strokeStyle = 'rgba(255,255,255,0.45)'; g.lineWidth = 1.5; g.beginPath(); g.arc(ax, ay, len, flip > 0 ? -0.7 : Math.PI - 0.5, flip > 0 ? 0.5 : Math.PI + 0.7); g.stroke(); }
-        if (t !== 'samurai') this.shield(x - flip * r * 0.55, by + 1, col, t === 'champion' ? 5 : 4);
+        if (t !== 'samurai') this.shield(x - flip * r * 0.55, by + 1, col, t === 'champion' || t === 'huskarl' || t === 'teutonic' ? 5.5 : 4);
         break;
       }
       case 'spearman': {
@@ -1026,7 +1080,7 @@ export class Renderer {
         for (const o of [-2, 1]) { g.beginPath(); g.moveTo(ax - flip * 3 + o, ay + 5); g.lineTo(ax + flip * 5 + o, ay - 9); g.stroke(); }
         this.shield(x - flip * r * 0.55, by + 1, col, 3.5);
         break;
-      case 'archer': case 'longbow': case 'cavarcher': case 'mangudai': {
+      case 'archer': case 'longbow': case 'cavarcher': case 'mangudai': case 'plumed': {
         const big = t === 'longbow' ? 10 : 7;
         g.strokeStyle = '#8d6e63'; g.lineWidth = 2;
         g.beginPath(); g.arc(ax, ay, big, e.facing - 1.2, e.facing + 1.2); g.stroke();
@@ -1053,7 +1107,7 @@ export class Renderer {
         g.beginPath(); g.moveTo(ax - fx * 3, ay + 2); g.lineTo(ax + fx * 12, ay + fy * 12 - 2); g.stroke();
         g.strokeStyle = '#6d4c41'; g.lineWidth = 3; g.beginPath(); g.moveTo(ax - fx * 5, ay + 3); g.lineTo(ax, ay + 1); g.stroke();
         break;
-      case 'axeman': case 'berserker': {
+      case 'axeman': case 'berserker': case 'jaguar': {
         const a = flip > 0 ? -0.7 + sw * 1.3 : Math.PI + 0.7 - sw * 1.3;
         g.strokeStyle = '#6d4c41'; g.lineWidth = 2;
         g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(a) * 10, ay + Math.sin(a) * 10); g.stroke();
@@ -1061,7 +1115,7 @@ export class Renderer {
         if (t === 'berserker') this.shield(x - flip * r * 0.55, by + 1, col, 4.5);
         break;
       }
-      case 'knight': case 'cataphract': case 'scout':
+      case 'knight': case 'cataphract': case 'scout': case 'tarkan':
         g.strokeStyle = t === 'cataphract' ? '#8d6e63' : '#e8eef3'; g.lineWidth = t === 'cataphract' ? 2 : 2.5;
         if (t === 'cataphract') {
           const th = Math.max(0, sw) * 6;
@@ -1250,29 +1304,52 @@ export class Renderer {
     const g = this.ctx;
     const t = e.type as UnitType;
     const x = e.x, y = e.y;
-    const big = t === 'galleon' || t === 'cannongalleon' ? 1.15 : t === 'fireship' ? 1.05 : 0.8;
+    const cg = t === 'cannongalleon';
+    const big = cg ? 1.35 : t === 'galleon' ? 1.1 : t === 'fireship' ? 1.05 : 0.8;
     const roll = Math.sin(time * 2 + e.id) * 0.05;
     g.save(); g.translate(x, y); g.rotate(e.facing + roll);
     // estela
     if (e.path.length) { g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-14 * big, -5); g.lineTo(-24 * big, -9); g.moveTo(-14 * big, 5); g.lineTo(-24 * big, 9); g.stroke(); }
     g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(2, 3, 17 * big, 7 * big, 0, 0, 7); g.fill();
     // casco
-    g.fillStyle = t === 'fireship' ? '#4e342e' : '#6d4c2e';
+    g.fillStyle = t === 'fireship' ? '#4e342e' : cg ? '#1f1a17' : '#8a6440';
     g.beginPath(); g.moveTo(18 * big, 0); g.quadraticCurveTo(8 * big, -9 * big, -14 * big, -7 * big); g.lineTo(-14 * big, 7 * big); g.quadraticCurveTo(8 * big, 9 * big, 18 * big, 0); g.fill();
-    g.fillStyle = '#8d6e4a'; g.beginPath(); g.moveTo(14 * big, 0); g.quadraticCurveTo(6 * big, -6 * big, -11 * big, -4.5 * big); g.lineTo(-11 * big, 4.5 * big); g.quadraticCurveTo(6 * big, 6 * big, 14 * big, 0); g.fill();
+    g.fillStyle = cg ? '#6d4c2e' : '#b08a5c'; g.beginPath(); g.moveTo(14 * big, 0); g.quadraticCurveTo(6 * big, -6 * big, -11 * big, -4.5 * big); g.lineTo(-11 * big, 4.5 * big); g.quadraticCurveTo(6 * big, 6 * big, 14 * big, 0); g.fill();
     g.fillStyle = col; g.fillRect(-14 * big, -7 * big, 3, 14 * big);
-    if (t === 'cannongalleon') { g.fillStyle = '#2b2b2b'; for (const s of [-1, 1]) for (let i = -6; i <= 6; i += 6) g.fillRect(i * big - 1.5, s * 6.5 * big - 1, 3, 2); }
+    if (cg) {
+      // franja dorada, castillo de popa y cañones asomando por las troneras
+      g.strokeStyle = '#c9a227'; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(16 * big, 0); g.quadraticCurveTo(8 * big, -7.6 * big, -13 * big, -6 * big); g.moveTo(16 * big, 0); g.quadraticCurveTo(8 * big, 7.6 * big, -13 * big, 6 * big); g.stroke();
+      g.fillStyle = '#3a2a1c'; g.fillRect(-13 * big, -5 * big, 7 * big, 10 * big);
+      g.fillStyle = '#c9a227'; g.fillRect(-13 * big, -5 * big, 7 * big, 1.2); g.fillRect(-13 * big, 5 * big - 1.2, 7 * big, 1.2);
+      g.fillStyle = '#ffd36b'; g.fillRect(-12 * big, -1.2, 1.6, 1.2); g.fillRect(-12 * big, 0.6, 1.6, 1.2);
+      const since = (this.w.tick - e.lastAtk) / 20;
+      const rec = since >= 0 && since < 0.3 ? 1.5 : 0;
+      for (const sd of [-1, 1]) for (let i = -7; i <= 9; i += 4) {
+        g.fillStyle = '#111'; g.fillRect(i * big - 1.4, sd * 7.2 * big - 1.1, 2.8, 2.2);
+        g.fillStyle = '#4a4a4a'; g.fillRect(i * big - 0.9, sd * (7.2 * big + 1) - (sd < 0 ? 3.2 - rec : rec), 1.8, 3.2);
+      }
+      if (since >= 0 && since < 0.5) {
+        g.fillStyle = `rgba(200,200,200,${0.7 * (1 - since / 0.5)})`;
+        for (let i = -7; i <= 9; i += 4) for (const sd of [-1, 1]) { g.beginPath(); g.arc(i * big, sd * (11 + since * 14), 2.5 + since * 6, 0, 7); g.fill(); }
+      }
+    }
+    if (t === 'galleon') {
+      // galeón: cubierta clara y arqueros en cubierta
+      g.fillStyle = '#f0c8a0'; for (const i of [-4, 4]) { g.beginPath(); g.arc(i * big, 0, 1.8, 0, 7); g.fill(); }
+      g.fillStyle = col; for (const i of [-4, 4]) { g.beginPath(); g.arc(i * big, 0, 1, 0, 7); g.fill(); }
+    }
     if (t === 'fishship') { g.strokeStyle = 'rgba(240,240,240,0.6)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(-10, 0); g.lineTo(-20, 6); g.stroke(); }
     g.restore();
     // vela (no rota con el barco, siempre hacia arriba)
-    const masts = t === 'galleon' || t === 'cannongalleon' ? [-5, 5] : [0];
+    const masts = cg ? [-8, 0, 8] : t === 'galleon' ? [-5, 5] : [0];
     for (const m of masts) {
       const mx = x + Math.cos(e.facing) * m * big, my = y + Math.sin(e.facing) * m * big;
       g.strokeStyle = '#4e342e'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(mx, my); g.lineTo(mx, my - 20 * big); g.stroke();
       const billow = Math.sin(time * 3 + e.id) * 1.5;
-      g.fillStyle = t === 'fireship' ? '#3a2a20' : '#f3ecd8';
+      g.fillStyle = t === 'fireship' ? '#3a2a20' : cg ? '#d9caa4' : '#f8f3e6';
       g.beginPath(); g.moveTo(mx - 7 * big, my - 18 * big); g.quadraticCurveTo(mx + billow, my - 13 * big, mx - 7 * big, my - 6 * big); g.lineTo(mx + 7 * big, my - 6 * big); g.quadraticCurveTo(mx + 3 + billow, my - 13 * big, mx + 7 * big, my - 18 * big); g.closePath(); g.fill();
-      g.fillStyle = col; g.fillRect(mx - 7 * big, my - 13 * big, 14 * big, 2.5);
+      if (cg) { g.fillStyle = col; g.fillRect(mx - 1.2, my - 18 * big, 2.4, 12 * big); g.fillRect(mx - 7 * big, my - 13 * big, 14 * big, 2.4); } else { g.fillStyle = col; g.fillRect(mx - 7 * big, my - 13 * big, 14 * big, 2.5); }
       g.beginPath(); g.moveTo(mx, my - 20 * big); g.lineTo(mx + 7, my - 18 * big); g.lineTo(mx, my - 16 * big); g.fill();
     }
     if (t === 'fireship') {

@@ -13,6 +13,7 @@ export const UNIT_ICON: Record<UnitType, string> = {
   archer: '🏹', skirmisher: '🎯', cavarcher: '🏇', handcannon: '🔫',
   scout: '🐎', knight: '🛡️', ram: '🐏', mangonel: '🪨', bombard: '💣', trebuchet: '🏗️', monk: '🧙',
   fishship: '🎣', galleon: '⛵', fireship: '🔥', cannongalleon: '🚢',
+  huskarl: '🛡️', jaguar: '🐆', tarkan: '🔥', teutonic: '⚜️', plumed: '🪶',
   longbow: '🏹', axeman: '🪓', conquistador: '🤠', cataphract: '🐴', mangudai: '🏇',
   samurai: '🗡️', chukonu: '🎯', elephant: '🐘', berserker: '🪓', janissary: '🔫',
 };
@@ -278,6 +279,7 @@ export class Hud {
     const st = w.players[g.me].stats;
     const mins = Math.floor(w.tick / TICK_RATE / 60), secs = Math.floor(w.tick / TICK_RATE) % 60;
     const tut = g.match.cfg.mode === 'tutorial';
+    const fresh = g.ach.end(win);
     const o = $('overlay');
     o.hidden = false;
     o.innerHTML = `<div class="card end ${win ? 'win' : 'lose'}">
@@ -291,6 +293,7 @@ export class Hud {
       </div>
       <div class="end-res">${RES_LIST.map((r) => `${RES_ICON[r]} ${st.gathered[r]}`).join(' · ')}</div>
       ${tut ? '' : this.playersTable()}
+      ${fresh.length ? `<div class="end-ach"><b>🏅 Logros nuevos</b>${fresh.map((a) => `<span>${a.icon} ${a.name}</span>`).join('')}</div>` : ''}
       <div class="end-btns">
         ${tut ? '' : '<button class="big" data-o="again">Revancha</button>'}
         <button class="big ghost" data-o="exit">Menú principal</button>

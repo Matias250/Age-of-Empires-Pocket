@@ -1,9 +1,10 @@
-// Las 10 civilizaciones: cada una tiene una unidad única y bonificaciones propias.
+// Las 15 civilizaciones (5 se desbloquean con logros): cada una tiene una unidad única y bonificaciones propias.
 import { Age, ResBag, TechType, UnitType } from './data.js';
 
 export type CivId =
   | 'britanos' | 'francos' | 'espanoles' | 'bizantinos' | 'mongoles'
-  | 'japoneses' | 'chinos' | 'persas' | 'vikingos' | 'turcos';
+  | 'japoneses' | 'chinos' | 'persas' | 'vikingos' | 'turcos'
+  | 'godos' | 'aztecas' | 'hunos' | 'teutones' | 'mayas';
 
 export interface CivMods {
   buildSpeed?: number;
@@ -43,6 +44,8 @@ export interface CivDef {
   unique: UnitType;
   bonuses: string[];
   mods: CivMods;
+  /** logros necesarios para poder elegirla */
+  unlock?: number;
 }
 
 export const CIVS: Record<CivId, CivDef> = {
@@ -95,6 +98,32 @@ export const CIVS: Record<CivId, CivDef> = {
     name: 'Turcos', emblem: '🌙', region: 'Anatolia', unique: 'janissary',
     bonuses: ['Unidades de pólvora +25% de vida', 'Química gratis', 'Extracción de oro 20% más rápida'],
     mods: { gunpowderHp: 1.25, freeTechs: ['chemistry'], goldRate: 1.2 },
+  },
+  // ---------- se desbloquean con logros
+  godos: {
+    name: 'Godos', emblem: '🪓', region: 'Europa Oriental', unique: 'huskarl', unlock: 2,
+    bonuses: ['Infantería 20% más barata', 'Infantería ataca 15% más rápido', 'Hacha doble gratis'],
+    mods: { unitDiscount: { militia: 0.8, spearman: 0.8, champion: 0.8, huskarl: 0.8 }, infantryAtkSpeed: 1.15, freeTechs: ['axe'] },
+  },
+  aztecas: {
+    name: 'Aztecas', emblem: '🐆', region: 'Mesoamérica', unique: 'jaguar', unlock: 5,
+    bonuses: ['Infantería +10% de vida', 'Tecnologías 10% más baratas', 'Empiezan con +50 de oro'],
+    mods: { infantryHp: 1.1, techDiscount: 0.9, startBonus: { gold: 50 } },
+  },
+  hunos: {
+    name: 'Hunos', emblem: '🐺', region: 'Estepas de Europa', unique: 'tarkan', unlock: 8,
+    bonuses: ['Caballería 20% más barata', 'Unidades montadas 10% más rápidas', 'Empiezan con +100 de madera'],
+    mods: { unitDiscount: { scout: 0.8, knight: 0.8, cavarcher: 0.8, tarkan: 0.8 }, mountedSpeed: 1.1, startBonus: { wood: 100 } },
+  },
+  teutones: {
+    name: 'Teutones', emblem: '✠', region: 'Europa Central', unique: 'teutonic', unlock: 12,
+    bonuses: ['Edificios +20% de vida', 'Granjas +20% de comida', 'Cota de malla gratis'],
+    mods: { buildingHp: 1.2, farmRate: 1.2, freeTechs: ['mail'] },
+  },
+  mayas: {
+    name: 'Mayas', emblem: '🌽', region: 'Mesoamérica', unique: 'plumed', unlock: 16,
+    bonuses: ['Empiezan con 1 aldeano extra y 50 de comida menos', 'Extracción de oro 15% más rápida', 'Galerías de tiro trabajan 20% más rápido'],
+    mods: { extraVillagers: 1, startBonus: { food: -50 }, goldRate: 1.15, rangeTrainSpeed: 1.2 },
   },
 };
 

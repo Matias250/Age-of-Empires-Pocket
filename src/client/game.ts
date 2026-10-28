@@ -5,6 +5,7 @@ import { Entity, World } from '../sim/world.js';
 import { Camera, Renderer } from './render.js';
 import { Hud } from './hud.js';
 import { Tutorial } from './tutorial.js';
+import { AchTracker } from './achievements.js';
 
 export type InputMode = 'normal' | 'attack' | 'rally' | 'box';
 
@@ -32,6 +33,7 @@ export class Game {
   time = 0;
   hud: Hud;
   tutorial?: Tutorial;
+  ach: AchTracker;
   renderer: Renderer;
 
   private ctx: CanvasRenderingContext2D;
@@ -56,6 +58,7 @@ export class Game {
     this.ctx = canvas.getContext('2d')!;
     this.renderer = new Renderer(this.ctx, this.world);
     this.hud = new Hud(this);
+    this.ach = new AchTracker(this);
     if (cfg.mode === 'tutorial') this.tutorial = new Tutorial(this);
     this.resize();
     const tc = this.world.buildingsOf(this.me, 'towncenter')[0];
@@ -95,6 +98,7 @@ export class Game {
       }
       this.consumeEvents();
       this.tutorial?.update();
+      this.ach.update();
       if (w.winnerTeam >= 0 && !this.over) {
         this.over = true;
         setTimeout(() => this.hud.showEnd(w.winnerTeam === w.players[this.me].team), 900);

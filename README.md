@@ -17,9 +17,11 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 **Jugabilidad**
 
 - **4 edades:** Oscura → Media → de los Castillos → Imperial.
-- **10 civilizaciones**, cada una con 3 bonificaciones y una unidad única que se entrena en el Castillo:
+- **15 civilizaciones** (5 se desbloquean con logros), cada una con 3 bonificaciones y una unidad única que se entrena en el Castillo:
   Británicos (Arquero de arco largo), Francos (Lanzador de hachas), Españoles (Conquistador), Bizantinos (Catafracto),
-  Mongoles (Mangudai), Japoneses (Samurái), Chinos (Chu Ko Nu), Persas (Elefante de guerra), Vikingos (Berserker) y Turcos (Jenízaro).
+  Mongoles (Mangudai), Japoneses (Samurái), Chinos (Chu Ko Nu), Persas (Elefante de guerra), Vikingos (Berserker) y Turcos (Jenízaro);
+  desbloqueables: Godos (Huscarle), Aztecas (Guerrero jaguar), Hunos (Tarkán), Teutones (Caballero teutón) y Mayas (Arquero emplumado).
+- **20 logros** (victorias, economía, combate, mapas, civilizaciones…) que se guardan en el teléfono y desbloquean civilizaciones con 2, 5, 8, 12 y 16 logros.
 - **19 unidades comunes:** Aldeano, Espadachín, Lancero, Campeón, Arquero, Escaramuzador, Arquero a caballo, Arcabucero,
   Explorador, Caballero, Ariete, Mangana (daño en área), Cañón de bombardeo, Fundíbulo, Monje (cura), Barco pesquero,
   Galeón, Barco incendiario y Galeón cañonero.

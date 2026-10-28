@@ -27,7 +27,8 @@ export type UnitType =
   | 'fishship' | 'galleon' | 'fireship' | 'cannongalleon'
   // unidades únicas de cada civilización
   | 'longbow' | 'axeman' | 'conquistador' | 'cataphract' | 'mangudai'
-  | 'samurai' | 'chukonu' | 'elephant' | 'berserker' | 'janissary';
+  | 'samurai' | 'chukonu' | 'elephant' | 'berserker' | 'janissary'
+  | 'huskarl' | 'jaguar' | 'tarkan' | 'teutonic' | 'plumed';
 
 export type BuildingType =
   | 'towncenter' | 'house' | 'barracks' | 'range' | 'stable' | 'workshop'
@@ -229,6 +230,31 @@ export const UNITS: Record<UnitType, UnitDef> = {
     name: 'Jenízaro', hp: 40, atk: 17, atkType: 'pierce', cooldown: 3.4, range: 7 * T, armorMelee: 1, armorPierce: 0,
     speed: 46, radius: 8, sight: 8, cost: { food: 60, gold: 55 }, trainTime: 16, age: 3, cls: 'archer', gunpowder: true,
     unique: true, bonus: { infantry: 2 }, projectile: 'ball', desc: 'Única de los Turcos. Arcabucero de élite.',
+  },
+  huskarl: {
+    name: 'Huscarle', hp: 60, atk: 10, atkType: 'melee', cooldown: 2, range: 4, armorMelee: 0, armorPierce: 6,
+    speed: 56, radius: 8, sight: 5, cost: { food: 52, gold: 26 }, trainTime: 13, age: 3, cls: 'infantry', unique: true,
+    bonus: { archer: 6, building: 2 }, desc: 'Única de los Godos. Casi inmune a las flechas: caza arqueros.',
+  },
+  jaguar: {
+    name: 'Guerrero jaguar', hp: 65, atk: 10, atkType: 'melee', cooldown: 2, range: 4, armorMelee: 1, armorPierce: 1,
+    speed: 54, radius: 8, sight: 5, cost: { food: 60, gold: 30 }, trainTime: 15, age: 3, cls: 'infantry', unique: true,
+    bonus: { infantry: 10 }, desc: 'Única de los Aztecas. Destroza a la infantería enemiga.',
+  },
+  tarkan: {
+    name: 'Tarkán', hp: 100, atk: 8, atkType: 'melee', cooldown: 2.1, range: 4, armorMelee: 1, armorPierce: 3,
+    speed: 82, radius: 10, sight: 6, cost: { food: 60, gold: 60 }, trainTime: 16, age: 3, cls: 'cavalry', mounted: true, unique: true,
+    bonus: { building: 10 }, desc: 'Única de los Hunos. Jinete incendiario que arrasa edificios.',
+  },
+  teutonic: {
+    name: 'Caballero teutón', hp: 90, atk: 12, atkType: 'melee', cooldown: 2, range: 4, armorMelee: 5, armorPierce: 2,
+    speed: 38, radius: 9, sight: 5, cost: { food: 85, gold: 40 }, trainTime: 16, age: 3, cls: 'infantry', unique: true,
+    bonus: { cavalry: 2, infantry: 2 }, desc: 'Única de los Teutones. Lento, pero una muralla de acero.',
+  },
+  plumed: {
+    name: 'Arquero emplumado', hp: 50, atk: 5, atkType: 'pierce', cooldown: 1.9, range: 5 * T, armorMelee: 0, armorPierce: 1,
+    speed: 64, radius: 7, sight: 7, cost: { wood: 46, gold: 46 }, trainTime: 13, age: 3, cls: 'archer', unique: true,
+    bonus: { infantry: 1 }, projectile: 'arrow', desc: 'Única de los Mayas. Arquero rápido y resistente.',
   },
 };
 

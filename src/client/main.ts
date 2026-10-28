@@ -6,6 +6,7 @@ import { CIV_LIST, CIVS, CivId } from '../sim/civs.js';
 import { UNITS } from '../sim/data.js';
 import { saveSettings, settings, Settings } from './settings.js';
 import { Game } from './game.js';
+import { ACHIEVEMENTS, achCount, achDone, achProgress, civUnlocked, unlockedCivs } from './achievements.js';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const menu = document.getElementById('menu')!;
@@ -62,6 +63,7 @@ function renderMenu() {
     <div class="modes">
       <button class="mode" data-m="tutorial"><i>📜</i><div><b>Historia: La Crónica de Varnia</b><small>Tutorial guiado · 10 minutos</small></div></button>
       <button class="mode" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza</b><small>1 contra 1, cooperativo con aliados IA o hasta 8 jugadores</small></div></button>
+      <button class="mode" data-m="logros"><i>🏅</i><div><b>Logros · ${achCount()}/${ACHIEVEMENTS.length}</b><small>Desbloquean 5 civilizaciones nuevas</small></div></button>
       <button class="mode" data-m="civs"><i>🏛️</i><div><b>Civilizaciones</b><small>Bonificaciones y unidad única de cada una</small></div></button>
       <button class="mode soon" data-m="ranked" disabled><i>🏆</i><div><b>Competitivo online</b><small>Próximamente · partidas clasificatorias</small></div></button>
     </div>
@@ -80,6 +82,7 @@ function renderMenu() {
     const m = t.closest('[data-m]')?.getAttribute('data-m');
     if (m === 'howto') { showHowTo(); return; }
     if (m === 'civs') { showCivs(); return; }
+    if (m === 'logros') { showAchievements(); return; }
     if (m === 'settings') { showSettings(); return; }
     if (m === 'tutorial') start({ mode: 'tutorial', difficulty, color, biome: biomeSel, seed: Math.floor(Math.random() * 99999) });
     if (m === 'skirmish') showSetup();
@@ -96,17 +99,25 @@ function setMyColor(c: number) {
 
 const swatch = (i: number) => `<button class="swatch ${i === color ? 'on' : ''}" data-c="${i}" style="--c:${PLAYER_COLORS[i].hex}" aria-label="${PLAYER_COLORS[i].name}"></button>`;
 
-const civOptions = (sel: CivId | 'random') => `<option value="random" ${sel === 'random' ? 'selected' : ''}>🎲 Al azar</option>` +
-  CIV_LIST.map((c) => `<option value="${c}" ${sel === c ? 'selected' : ''}>${CIVS[c].emblem} ${CIVS[c].name}</option>`).join('');
+const civOptions = (sel: CivId | 'random', mine = false) => `<option value="random" ${sel === 'random' ? 'selected' : ''}>🎲 Al azar</option>` +
+  CIV_LIST.map((c) => { const lk = mine && !civUnlocked(c); return `<option value="${c}" ${sel === c ? 'selected' : ''} ${lk ? 'disabled' : ''}>${CIVS[c].emblem} ${CIVS[c].name}${lk ? ` 🔒 ${CIVS[c].unlock} logros` : ''}</option>`; }).join('');
 const teamOptions = (sel: number) => [0, 1, 2, 3, 4].map((t) => `<option value="${t}" ${sel === t ? 'selected' : ''}>${t ? 'Equipo ' + t : 'Sin equipo'}</option>`).join('');
 const difOptions = (sel: Difficulty) => DIFF_LIST.map((d) => `<option value="${d}" ${sel === d ? 'selected' : ''}>${DIFF_NAME[d]}</option>`).join('');
 
 function civCard(c: CivId | 'random'): string {
-  if (c === 'random') return `<div class="civcard"><b>🎲 Civilización al azar</b><small>Te toca una de las 10 al empezar.</small></div>`;
+  if (c === 'random') return `<div class="civcard"><b>🎲 Civilización al azar</b><small>Te toca una de las que tengas desbloqueadas.</small></div>`;
   const d = CIVS[c];
+  if (!civUnlocked(c)) return `<div class="civcard locked"><b>🔒 ${d.emblem} ${d.name}</b> <small>${d.region}</small>
+    <p>Se desbloquea con <b>${d.unlock} logros</b> (tenés ${achCount()}). Unidad única: <b>${UNITS[d.unique].name}</b>.</p></div>`;
   return `<div class="civcard"><b>${d.emblem} ${d.name}</b> <small>${d.region}</small>
     <ul>${d.bonuses.map((x) => `<li>${x}</li>`).join('')}</ul>
     <p>Unidad única: <b>${UNITS[d.unique].name}</b> — ${UNITS[d.unique].desc.replace(/^Única? de los? [^.]+\. ?/, '')}</p></div>`;
+}
+
+/** Lugares para jugar: si tu civilización es al azar, sale de las desbloqueadas (fija por semilla, igual que la vista previa) */
+function playSlots(): SlotCfg[] {
+  const un = unlockedCivs();
+  return slots.map((s, i) => ({ ...s, civ: i === 0 && s.civ === 'random' ? un[nextSeed % un.length] : i === 0 && !civUnlocked(s.civ as CivId) ? 'random' : s.civ }));
 }
 
 const LAND: Record<Biome, string> = { templado: '#5f8f3e', desierto: '#c9a86a', nieve: '#dfe7ee', tropical: '#4c9a42', otono: '#8f8a3e' };
@@ -115,7 +126,7 @@ function mapPreview(map: MapType): string {
   const key = [map, sizeSel, nextSeed, biomeSel, JSON.stringify(slots)].join('|');
   const hit = previewCache.get(key);
   if (hit) return hit;
-  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: nextSeed, map, biome: biomeSel, size: sizeSel, players: slots.map((s) => ({ ...s })) });
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: nextSeed, map, biome: biomeSel, size: sizeSel, players: playSlots() });
   const w = m.world, k = 2;
   const c = document.createElement('canvas'); c.width = w.w * k; c.height = w.h * k;
   const g = c.getContext('2d')!;
@@ -170,7 +181,7 @@ function showSetup() {
     <div class="slot">
       <button class="swatch sm" data-slotcolor="${i}" style="--c:${PLAYER_COLORS[s.color].hex}" aria-label="Cambiar color"></button>
       <b class="sname">${i === 0 ? 'Vos' : 'IA ' + i}</b>
-      <select data-k="civ" data-i="${i}" aria-label="Civilización">${civOptions(s.civ)}</select>
+      <select data-k="civ" data-i="${i}" aria-label="Civilización">${civOptions(s.civ, i === 0)}</select>
       <select data-k="team" data-i="${i}" aria-label="Equipo">${teamOptions(s.team)}</select>
       ${s.ai ? `<select data-k="dif" data-i="${i}" aria-label="Dificultad">${difOptions(s.difficulty ?? difficulty)}</select>
         <button class="rm" data-rm="${i}" aria-label="Quitar" ${slots.length <= 2 ? 'disabled' : ''}>✖</button>` : '<span class="mine">⭐</span>'}
@@ -246,7 +257,7 @@ function showSetup() {
     const bi = t.closest('[data-biome]')?.getAttribute('data-biome');
     if (bi) { biomeSel = bi as Biome; store.set('biome', bi); return showSetup(); }
     if (t.closest('[data-back]')) return renderMenu();
-    if (t.closest('[data-go]') && sides.size >= 2) { const seed = nextSeed; nextSeed = Math.floor(Math.random() * 99999); start({ mode: 'skirmish', difficulty, color, map: mapSel, biome: biomeSel, size: sizeSel, start: startSel, players: slots.map((s) => ({ ...s })), seed }); }
+    if (t.closest('[data-go]') && sides.size >= 2) { const seed = nextSeed; nextSeed = Math.floor(Math.random() * 99999); start({ mode: 'skirmish', difficulty, color, map: mapSel, biome: biomeSel, size: sizeSel, start: startSel, players: playSlots(), seed }); }
   };
   fillPreviews();
 }
@@ -268,6 +279,22 @@ function showSettings() {
     const k = t.getAttribute('data-set') as keyof Settings | null;
     if (k) { settings[k] = t.checked; saveSettings(); }
   };
+  menu.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-back]')) renderMenu(); };
+}
+
+function showAchievements() {
+  const n = achCount(), pr = achProgress();
+  const locked = CIV_LIST.filter((c) => CIVS[c].unlock);
+  menu.innerHTML = `<div class="menu-inner">
+    <h2 class="pagetitle">🏅 Logros · ${n}/${ACHIEVEMENTS.length}</h2>
+    <div class="achbar"><i style="width:${(n / ACHIEVEMENTS.length) * 100}%"></i></div>
+    <div class="unlocks">${locked.map((c) => `<div class="unl ${civUnlocked(c) ? 'on' : ''}"><b>${CIVS[c].emblem}</b><span>${CIVS[c].name}</span><small>${civUnlocked(c) ? '✔ Disponible' : `🔒 ${CIVS[c].unlock} logros`}</small></div>`).join('')}</div>
+    <div class="achs">${ACHIEVEMENTS.map((a) => {
+      const extra = a.id === 'legend' ? ` (${Math.min(10, pr.wins)}/10)` : a.id === 'travel' ? ` (${Math.min(5, pr.maps)}/5)` : a.id === 'collect' ? ` (${Math.min(5, pr.civs)}/5)` : '';
+      return `<div class="ach ${achDone(a.id) ? 'done' : ''}"><i>${a.icon}</i><div><b>${a.name}</b><small>${a.desc}${achDone(a.id) ? '' : extra}</small></div><em>${achDone(a.id) ? '✔' : ''}</em></div>`;
+    }).join('')}</div>
+    <button class="big" data-back>Volver</button>
+  </div>`;
   menu.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-back]')) renderMenu(); };
 }
 

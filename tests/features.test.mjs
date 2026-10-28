@@ -189,3 +189,14 @@ test('Combate imperial: edad 4, 2000 de recursos, mejoras listas y la partida te
   console.log('imperial: ganador', w.winnerTeam, 'min', (w.tick / TICK_RATE / 60).toFixed(1));
   assert.equal(w.winnerTeam, 2);
 });
+
+test('15 civilizaciones: cada una con su unidad única en el castillo', async () => {
+  const { CIV_LIST, CIVS } = await import('../dist/sim/civs.js');
+  assert.equal(CIV_LIST.length, 15);
+  assert.equal(CIV_LIST.filter((c) => CIVS[c].unlock).length, 5);
+  for (const civ of CIV_LIST) {
+    const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 2, map: 'continental', biome: 'templado', players: [
+      { ai: false, civ, team: 1, color: 0 }, { ai: true, civ: 'random', team: 2, color: 1 }] });
+    assert.ok(m.world.trainsOf(0, 'castle').includes(CIVS[civ].unique), civ);
+  }
+});

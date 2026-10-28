@@ -6,6 +6,9 @@ import { CIV_LIST, CIVS, CivId } from '../sim/civs.js';
 import { UNITS } from '../sim/data.js';
 import { saveSettings, settings, Settings } from './settings.js';
 import { Game } from './game.js';
+import { CAMPAIGNS, findScenario } from '../sim/campaigns.js';
+import { campaignCount, storyDone, storyOpen } from './scenario.js';
+import { drawWorldMap } from './worldmap.js';
 import { ACHIEVEMENTS, achCount, achDone, achProgress, civUnlocked, unlockedCivs } from './achievements.js';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -58,10 +61,11 @@ function renderMenu() {
     <div class="logo">
       <div class="crest">⚜️</div>
       <h1>Imperios <span>Rápidos</span></h1>
-      <p>Estrategia en tiempo real · 10 civilizaciones · 4 edades</p>
+      <p>Estrategia en tiempo real · 15 civilizaciones · 25 historias</p>
     </div>
     <div class="modes">
-      <button class="mode" data-m="tutorial"><i>📜</i><div><b>Historia: La Crónica de Varnia</b><small>Tutorial guiado · 10 minutos</small></div></button>
+      <button class="mode" data-m="stories"><i>🗺️</i><div><b>Historias</b><small>7 campañas · 25 escenarios · ${CAMPAIGNS.reduce((a, c) => a + campaignCount(c), 0)}/25 completados</small></div></button>
+      <button class="mode" data-m="tutorial"><i>📜</i><div><b>Tutorial</b><small>Aprendé lo básico · 10 minutos</small></div></button>
       <button class="mode" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza</b><small>1 contra 1, cooperativo con aliados IA o hasta 8 jugadores</small></div></button>
       <button class="mode" data-m="logros"><i>🏅</i><div><b>Logros · ${achCount()}/${ACHIEVEMENTS.length}</b><small>Desbloquean 5 civilizaciones nuevas</small></div></button>
       <button class="mode" data-m="civs"><i>🏛️</i><div><b>Civilizaciones</b><small>Bonificaciones y unidad única de cada una</small></div></button>
@@ -83,6 +87,7 @@ function renderMenu() {
     if (m === 'howto') { showHowTo(); return; }
     if (m === 'civs') { showCivs(); return; }
     if (m === 'logros') { showAchievements(); return; }
+    if (m === 'stories') { showStories(); return; }
     if (m === 'settings') { showSettings(); return; }
     if (m === 'tutorial') start({ mode: 'tutorial', difficulty, color, biome: biomeSel, seed: Math.floor(Math.random() * 99999) });
     if (m === 'skirmish') showSetup();
@@ -281,6 +286,58 @@ function showSettings() {
   };
   menu.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-back]')) renderMenu(); };
 }
+
+function showStories() {
+  menu.innerHTML = `<div class="menu-inner">
+    <h2 class="pagetitle">🗺️ Historias</h2>
+    <p class="dim">Cada campaña cuenta una historia en 3 o 4 escenarios. Completá uno para habilitar el siguiente.</p>
+    <div class="camps">${CAMPAIGNS.map((c) => {
+      const n = campaignCount(c);
+      return `<button class="camp" data-camp="${c.id}"><i>${c.emblem}</i><div><b>${c.name}</b><small>${c.desc}</small>
+        <span class="cprog"><em style="width:${(n / c.scenarios.length) * 100}%"></em></span><small>${CIVS[c.civ].emblem} ${CIVS[c.civ].name} · ${n}/${c.scenarios.length}</small></div></button>`;
+    }).join('')}</div>
+    <button class="big" data-back>Volver</button>
+  </div>`;
+  menu.onclick = (e) => {
+    const t = e.target as HTMLElement;
+    const c = t.closest('[data-camp]')?.getAttribute('data-camp');
+    if (c) return showCampaign(c);
+    if (t.closest('[data-back]')) renderMenu();
+  };
+}
+
+function showCampaign(id: string, sel?: number) {
+  const camp = CAMPAIGNS.find((c) => c.id === id);
+  if (!camp) return showStories();
+  if (sel === undefined) { sel = camp.scenarios.findIndex((s) => !storyDone(s.id)); if (sel < 0) sel = 0; }
+  const s = camp.scenarios[sel];
+  const open = storyOpen(camp, sel);
+  const intro = s.intro.map((l) => `<p><b>${l.icon} ${l.who}:</b> ${l.text}</p>`).join('');
+  menu.innerHTML = `<div class="menu-inner camppage">
+    <h2 class="pagetitle">${camp.emblem} ${camp.name}</h2>
+    <canvas id="wmap" class="wmap"></canvas>
+    <div class="scnlist">${camp.scenarios.map((x, i) => `<button class="scn ${i === sel ? 'on' : ''} ${storyDone(x.id) ? 'done' : ''} ${storyOpen(camp, i) ? '' : 'locked'}" data-scn="${i}">
+      <b>${storyDone(x.id) ? '✓' : storyOpen(camp, i) ? i + 1 : '🔒'}</b><span>${x.title}</span></button>`).join('')}</div>
+    <div class="brief">
+      <h3>${s.title}</h3><small>${s.place} · ${s.year}</small>
+      ${open ? intro : '<p class="dim">Completá el escenario anterior para conocer esta parte de la historia.</p>'}
+      <p class="goal">🎯 ${s.goalText}${s.hero ? ` · 👑 ${s.hero.name} no debe morir` : ''}</p>
+    </div>
+    <div class="setup-actions"><button class="big ghost" data-back>Volver</button><button class="big" data-play ${open ? '' : 'disabled'}>${open ? (storyDone(s.id) ? '↻ Jugar de nuevo' : '▶ Jugar') : '🔒 Bloqueado'}</button></div>
+  </div>`;
+  const cv = document.getElementById('wmap') as HTMLCanvasElement;
+  const draw = () => drawWorldMap(cv, camp, sel!, storyDone, (i) => storyOpen(camp, i));
+  requestAnimationFrame(draw);
+  menu.onclick = (e) => {
+    const t = e.target as HTMLElement;
+    const i = t.closest('[data-scn]')?.getAttribute('data-scn');
+    if (i) return showCampaign(id, Number(i));
+    if (t.closest('[data-back]')) return showStories();
+    if (t.closest('[data-play]') && open) start({ mode: 'scenario', scenario: s.id, difficulty, color, seed: 1 });
+  };
+}
+window.addEventListener('open-campaign', (e) => showCampaign((e as CustomEvent<string>).detail));
+void findScenario;
 
 function showAchievements() {
   const n = achCount(), pr = achProgress();

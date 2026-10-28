@@ -1133,6 +1133,17 @@ export class Renderer {
         break;
     }
     g.restore();
+    if (e.hero) this.heroMark(e, time);
+  }
+
+  /** Corona y halo dorado sobre el héroe de una historia */
+  private heroMark(e: Entity, time: number) {
+    const g = this.ctx;
+    const d = UNITS[e.type as UnitType];
+    const y = e.y - e.radius - (d.mounted ? 30 : 22) + Math.sin(time * 3) * 1.2;
+    g.fillStyle = 'rgba(255,215,90,0.22)'; g.beginPath(); g.ellipse(e.x, e.y + e.radius * 0.7, e.radius + 7, (e.radius + 7) * 0.5, 0, 0, 7); g.fill();
+    g.fillStyle = '#f5c542'; g.strokeStyle = '#7a5a10'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(e.x - 6, y + 4); g.lineTo(e.x - 6, y - 2); g.lineTo(e.x - 3, y + 1); g.lineTo(e.x, y - 4); g.lineTo(e.x + 3, y + 1); g.lineTo(e.x + 6, y - 2); g.lineTo(e.x + 6, y + 4); g.closePath(); g.fill(); g.stroke();
   }
 
   /** Fase del golpe: 0 sin ataque; -1 = arma levantada (carga), +1 = impacto */

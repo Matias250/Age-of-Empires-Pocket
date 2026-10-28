@@ -1,6 +1,8 @@
 // Controlador de una partida en curso: bucle, cámara, input táctil/mouse y selección.
 import { AGE_NAME, BUILDINGS, BuildingType, isLandArmy, NODES, NodeType, TICK_RATE, TILE, UNITS, UnitType } from '../sim/data.js';
 import { createMatch, Match, MatchConfig } from '../sim/match.js';
+import { createScenario, findScenario } from '../sim/campaigns.js';
+import { ScenarioRunner } from './scenario.js';
 import { Entity, World } from '../sim/world.js';
 import { Camera, Renderer } from './render.js';
 import { Hud } from './hud.js';
@@ -33,6 +35,7 @@ export class Game {
   time = 0;
   hud: Hud;
   tutorial?: Tutorial;
+  story?: ScenarioRunner;
   ach: AchTracker;
   renderer: Renderer;
 
@@ -52,7 +55,8 @@ export class Game {
   private listeners: [EventTarget, string, EventListener][] = [];
 
   constructor(private canvas: HTMLCanvasElement, cfg: MatchConfig, private onExit: () => void) {
-    this.match = createMatch(cfg);
+    const found = cfg.mode === 'scenario' && cfg.scenario ? findScenario(cfg.scenario) : undefined;
+    this.match = found ? createScenario(found.scn, cfg.color ?? 0) : createMatch(cfg);
     this.world = this.match.world;
     this.me = this.match.human;
     this.ctx = canvas.getContext('2d')!;
@@ -60,6 +64,7 @@ export class Game {
     this.hud = new Hud(this);
     this.ach = new AchTracker(this);
     if (cfg.mode === 'tutorial') this.tutorial = new Tutorial(this);
+    if (found) this.story = new ScenarioRunner(this, found.scn);
     this.resize();
     const tc = this.world.buildingsOf(this.me, 'towncenter')[0];
     if (tc) this.centerOn(tc.x, tc.y);
@@ -69,6 +74,7 @@ export class Game {
     this.last = performance.now();
     this.raf = requestAnimationFrame((t) => this.frame(t));
     this.tutorial?.start();
+    this.story?.start();
   }
 
   destroy() {
@@ -76,6 +82,7 @@ export class Game {
     for (const [t, n, f] of this.listeners) t.removeEventListener(n, f);
     this.hud.destroy();
     this.tutorial?.destroy();
+    this.story?.destroy();
   }
 
   exit() { this.destroy(); this.onExit(); }
@@ -93,11 +100,13 @@ export class Game {
       while (this.acc >= 1 / TICK_RATE && steps < 8) {
         for (const ai of this.match.ais) ai.update();
         w.step();
+        this.story?.tick();
         this.acc -= 1 / TICK_RATE;
         steps++;
       }
       this.consumeEvents();
       this.tutorial?.update();
+      this.story?.update();
       this.ach.update();
       if (w.winnerTeam >= 0 && !this.over) {
         this.over = true;

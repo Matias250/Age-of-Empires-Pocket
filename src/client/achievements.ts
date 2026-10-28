@@ -6,7 +6,7 @@ import type { Game } from './game.js';
 export interface AchDef { id: string; icon: string; name: string; desc: string }
 
 export const ACHIEVEMENTS: AchDef[] = [
-  { id: 'tutorial', icon: '📜', name: 'Aprendiz de Varnia', desc: 'Completá la Historia.' },
+  { id: 'tutorial', icon: '📜', name: 'Aprendiz de Varnia', desc: 'Completá el Tutorial.' },
   { id: 'first', icon: '🏆', name: 'Primera victoria', desc: 'Ganá una escaramuza.' },
   { id: 'hard', icon: '💀', name: 'Sin miedo', desc: 'Ganale a una IA en Difícil.' },
   { id: 'fastimp', icon: '👑', name: 'Imperio veloz', desc: 'Llegá a la Edad Imperial antes de los 18 minutos (modo Normal).' },
@@ -107,6 +107,7 @@ export class AchTracker {
     this.next = 0; this.update();
     const me = g.me, pl = w.players[me];
     if (cfg.mode === 'tutorial') { if (win) this.give('tutorial'); return this.fresh; }
+    if (cfg.mode === 'scenario') return this.fresh;
     if (!win) return this.fresh;
     const normal = cfg.start !== 'imperial';
     prog.wins++;

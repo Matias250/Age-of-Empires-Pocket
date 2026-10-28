@@ -27,6 +27,8 @@ export interface Entity {
   cat: 'unit' | 'building' | 'node';
   type: UnitType | BuildingType | NodeType;
   owner: number;
+  /** héroe de una historia: nombre propio y se cura solo */
+  hero?: string;
   x: number; y: number;
   tx: number; ty: number; size: number;
   /** huella en casillas (ancho y alto); el portón puede ser 3×1 o 1×3 */
@@ -48,6 +50,8 @@ export interface Entity {
   /** órdenes en cola (como mantener Shift en el AoE) */
   cmdQueue: Order[];
   lastAtk: number;
+  /** ángulo de llegada al objetivo cuerpo a cuerpo (para rodearlo en vez de amontonarse) */
+  appAng?: number; appTarget?: number;
   home?: { x: number; y: number };
   // edificios
   locked?: boolean;
@@ -902,7 +906,7 @@ export class World implements Grid {
 
   private dealDamage(src: Entity, t: Entity, atk: number, type: 'melee' | 'pierce', bonus: Partial<Record<ArmorClass, number>> | undefined) {
     if (t.hp <= 0) return;
-    t.hp -= this.damageOf(atk, type, bonus, t, src);
+    t.hp -= this.damageOf(atk, type, bonus, t, src) * (t.hero ? 0.5 : 1); // los héroes resisten el doble
     t.lastHitBy = src.id;
     this.events.push({ t: 'hit', x: t.x, y: t.y });
     const tp = this.players[t.owner];
@@ -921,7 +925,7 @@ export class World implements Grid {
   private updateUnit(u: Entity) {
     const d = UNITS[u.type as UnitType];
     if (u.cooldown > 0) u.cooldown -= DT;
-    if (d.regen && u.hp < u.maxHp) u.hp = Math.min(u.maxHp, u.hp + d.regen * DT);
+    if ((d.regen || u.hero) && u.hp < u.maxHp) u.hp = Math.min(u.maxHp, u.hp + (d.regen ?? 0) * DT + (u.hero ? 3 * DT : 0));
     const o = u.order;
     if (!o) { this.idleBehaviour(u, d); return; }
     switch (o.t) {
@@ -1054,6 +1058,34 @@ export class World implements Grid {
         }
       }
       return true;
+    }
+    // cuerpo a cuerpo: golpe de oportunidad, persecución directa y rodear al objetivo
+    if (range <= TILE && !d.projectile && !this.isNaval(u)) {
+      if (t.cat === 'unit') {
+        let alt: Entity | undefined, ad = range;
+        this.forUnitsNear(u.x, u.y, 48, (e) => {
+          if (e === t || e.hp <= 0 || !this.isEnemy(u.owner, e.owner) || !this.canTarget(u, e) || this.isNaval(e)) return;
+          const de = this.edgeDist(u, e);
+          if (de <= ad) { ad = de; alt = e; }
+        });
+        const o = u.order;
+        if (alt && o && (o.t === 'attack' || o.t === 'attackMove') && (o.t === 'attackMove' || o.auto || dist > 2 * TILE)) {
+          if (o.t === 'attack') o.target = alt.id; else o.sub = alt.id;
+          return this.attackStep(u, d, alt);
+        }
+      }
+      const grid = this.gridOf(u);
+      const dc = Math.hypot(t.x - u.x, t.y - u.y);
+      if (t.cat === 'unit' && dc < 5 * TILE && lineClear(grid, TILE, u.x, u.y, t.x, t.y)) {
+        if (u.appTarget !== t.id) { u.appTarget = t.id; u.appAng = Math.atan2(u.y - t.y, u.x - t.x) + ((u.id % 5) - 2) * 0.4; }
+        u.path = []; u.pathKey = '';
+        const rr = t.radius + u.radius + 1;
+        // lejos: directo al objetivo; cerca: a su lugar alrededor
+        const k = Math.max(0, Math.min(1, (2.5 * TILE - dc) / (1.5 * TILE)));
+        const ang = Math.atan2(u.y - t.y, u.x - t.x) * (1 - k) + this.lerpAng(Math.atan2(u.y - t.y, u.x - t.x), u.appAng!) * k;
+        this.stepToward(u, t.x + Math.cos(ang) * rr, t.y + Math.sin(ang) * rr);
+        return true;
+      }
     }
     if (this.approach(u, t, range)) return true;
     // ¿lo tapa una muralla o puerta enemiga? entonces atacarla primero
@@ -1260,6 +1292,13 @@ export class World implements Grid {
 
   // ---------------------------------------------------------- movimiento
   gridOf(u: Entity): Grid { return this.isNaval(u) ? this.nav : this.teamGrid(this.players[u.owner].team); }
+
+  private lerpAng(a: number, b: number): number {
+    let d = b - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return a + d;
+  }
 
   /** Acercarse a una entidad hasta `range` px de su borde. Devuelve false si es inalcanzable. */
   private approach(u: Entity, t: Entity, range: number): boolean {

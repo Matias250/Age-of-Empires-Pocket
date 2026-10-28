@@ -3,13 +3,14 @@
 Juego de estrategia en tiempo real inspirado en los clásicos del género (aldeanos, recursos, eras, ejércitos),
 pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 
-> Prototipo jugable v0.6 — arte y código originales.
+> Prototipo jugable v0.8 — arte y código originales.
 
 ## Qué incluye
 
 | Modo | Estado |
 |---|---|
-| 📜 **Historia: La Crónica de Varnia** — tutorial narrativo de 8 objetivos | ✅ Jugable |
+| 🗺️ **Historias** — 7 campañas y 25 escenarios (Juana de Arco, Gengis Kan, El Cid, Belisario, Minamoto no Yoshitsune, Sagas del Norte y Atila), cada uno con su relato, su objetivo y un mapa antiguo que muestra dónde ocurrió | ✅ Jugable |
+| 📜 **Tutorial** — 8 objetivos guiados para aprender lo básico | ✅ Jugable |
 | ⚔️ **Escaramuza de 2 a 8 jugadores** — equipos (cooperativo con aliados IA), civilización, color y dificultad por jugador; 4 tamaños de mapa | ✅ Jugable |
 | 🤝 Cooperativo online con amigos | 🛠️ Próxima etapa |
 | 🏆 Competitivo online (clasificatorias) | 🛠️ Próxima etapa |

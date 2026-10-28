@@ -5,6 +5,7 @@ import {
 } from '../sim/data.js';
 import { CIVS } from '../sim/civs.js';
 import { Entity, Stance, STANCE_NAME } from '../sim/world.js';
+import { findScenario } from '../sim/campaigns.js';
 import type { Game } from './game.js';
 import { saveSettings, settings } from './settings.js';
 
@@ -280,11 +281,15 @@ export class Hud {
     const mins = Math.floor(w.tick / TICK_RATE / 60), secs = Math.floor(w.tick / TICK_RATE) % 60;
     const tut = g.match.cfg.mode === 'tutorial';
     const fresh = g.ach.end(win);
+    const story = g.story ? findScenario(g.story.scn.id) : undefined;
+    const next = story && win ? story.camp.scenarios[story.index + 1] : undefined;
+    const lost = g.story && !win ? (g.story.scn.hero && !w.entities.has(g.story.state.heroId) ? `${g.story.scn.hero.name} cayó en combate. La historia quedó sin terminar.` : 'La historia quedó sin terminar. Podés intentarlo de nuevo.') : '';
     const o = $('overlay');
     o.hidden = false;
     o.innerHTML = `<div class="card end ${win ? 'win' : 'lose'}">
       <h1>${win ? '¡Victoria!' : 'Derrota'}</h1>
-      <p>${tut && win ? 'Los Cuervos Negros huyeron de Varnia. La frontera vuelve a estar a salvo… por ahora.' : win ? 'Tu reino domina la región.' : 'Tu Centro Urbano cayó.'}</p>
+      ${story ? `<div class="end-story"><small>${story.camp.emblem} ${story.camp.name} · ${story.index + 1}/${story.camp.scenarios.length}</small><b>${story.scn.title}</b></div>` : ''}
+      <p>${story ? (win ? story.scn.outro : lost) : tut && win ? 'Los Cuervos Negros huyeron de Varnia. La frontera vuelve a estar a salvo… por ahora.' : win ? 'Tu reino domina la región.' : 'Tu Centro Urbano cayó.'}</p>
       <div class="end-stats">
         <div><b>${mins}:${String(secs).padStart(2, '0')}</b><small>Tiempo</small></div>
         <div><b>${st.trained}</b><small>Entrenadas</small></div>
@@ -292,17 +297,21 @@ export class Hud {
         <div><b>${st.lost}</b><small>Pérdidas</small></div>
       </div>
       <div class="end-res">${RES_LIST.map((r) => `${RES_ICON[r]} ${st.gathered[r]}`).join(' · ')}</div>
-      ${tut ? '' : this.playersTable()}
+      ${tut || story ? '' : this.playersTable()}
       ${fresh.length ? `<div class="end-ach"><b>🏅 Logros nuevos</b>${fresh.map((a) => `<span>${a.icon} ${a.name}</span>`).join('')}</div>` : ''}
       <div class="end-btns">
-        ${tut ? '' : '<button class="big" data-o="again">Revancha</button>'}
-        <button class="big ghost" data-o="exit">Menú principal</button>
+        ${story ? (next ? `<button class="big" data-o="next">Siguiente: ${next.title} ▸</button>` : win ? '' : '<button class="big" data-o="retry">Reintentar</button>')
+          : tut ? '' : '<button class="big" data-o="again">Revancha</button>'}
+        <button class="big ghost" data-o="${story ? 'stories' : 'exit'}">${story ? '🗺️ Mapa de la campaña' : 'Menú principal'}</button>
       </div>
     </div>`;
     this.fitOverlay();
     o.onclick = (e) => {
       const a = (e.target as HTMLElement).getAttribute('data-o');
       if (a === 'exit') g.exit();
+      if (a === 'stories' && story) { g.exit(); window.dispatchEvent(new CustomEvent('open-campaign', { detail: story.camp.id })); }
+      if (a === 'retry' && story) { const cfg = { ...g.match.cfg }; g.exit(); window.dispatchEvent(new CustomEvent('start-match', { detail: cfg })); }
+      if (a === 'next' && next) { const cfg = { ...g.match.cfg, scenario: next.id }; g.exit(); window.dispatchEvent(new CustomEvent('start-match', { detail: cfg })); }
       if (a === 'again') { const cfg = { ...g.match.cfg, seed: (g.match.cfg.seed * 31 + 7) % 100000 }; g.exit(); window.dispatchEvent(new CustomEvent('start-match', { detail: cfg })); }
     };
   }
@@ -546,7 +555,7 @@ export class Hud {
       const u = units[0], d = UNITS[u.type as UnitType];
       const doing = !u.order ? 'Ocioso' : u.order.t === 'gather' ? `${d.naval ? 'Pescando' : 'Recolectando'} ${RES_ICON[u.order.res]}` : u.order.t === 'build' ? 'Construyendo' : u.order.t === 'move' ? 'Moviéndose' : u.order.t === 'heal' ? 'Curando' : 'Atacando';
       const range = d.range > TILE ? ` · 🎯 ${Math.round(w.rangeOf(u) / TILE)}` : '';
-      info = `<div class="title">${UNIT_ICON[u.type as UnitType]} ${d.name}${ownerTag}</div>
+      info = `<div class="title">${UNIT_ICON[u.type as UnitType]} ${u.hero ? `👑 ${u.hero} <small>(${d.name})</small>` : d.name}${ownerTag}</div>
         <div class="sub">❤️ <span data-hp>${Math.ceil(u.hp)}/${u.maxHp}</span>${d.atk ? ` · ⚔️ ${w.attackOf(u)}` : ''} · 🛡️ ${d.armorMelee}/${d.armorPierce}${range}</div>
         <div class="sub dim">${mine ? doing + (u.carry ? ` · lleva ${u.carry} ${RES_ICON[u.carryRes!]}` : '') + (u.cmdQueue.length ? ` · ${u.cmdQueue.length} en cola` : '') : d.desc}</div>`;
     } else {

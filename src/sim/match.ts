@@ -6,7 +6,7 @@ import { findPath } from './path.js';
 import { Rng } from './rng.js';
 import { CIV_LIST, CIVS, CivId } from './civs.js';
 
-export type Mode = 'skirmish' | 'coop' | 'tutorial' | 'aivsai';
+export type Mode = 'skirmish' | 'coop' | 'tutorial' | 'aivsai' | 'scenario';
 export type MapType = 'continental' | 'rio' | 'lagos' | 'bosque' | 'oasis' | 'mediterraneo' | 'islas' | 'costa' | 'canales' | 'arena';
 export type StartMode = 'normal' | 'imperial';
 export const START_MODES: Record<StartMode, { name: string; desc: string }> = {
@@ -37,6 +37,8 @@ export interface SlotCfg {
 export interface MatchConfig {
   mode: Mode; difficulty: Difficulty; seed: number;
   color?: number; map?: MapType | 'random'; biome?: Biome | 'random'; size?: MapSize; start?: StartMode;
+  /** id del escenario de una historia */
+  scenario?: string;
   players?: SlotCfg[];
 }
 export interface Match { world: World; ais: AI[]; human: number; cfg: MatchConfig }

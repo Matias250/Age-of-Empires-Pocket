@@ -45,7 +45,7 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 
 **Controles táctiles**
 
-- Tocar = seleccionar · doble toque = todas las unidades de ese tipo en pantalla.
+- Tocar = seleccionar · doble toque = todas las unidades o edificios de ese tipo en pantalla (con varios cuarteles, lo que entrenás se reparte).
 - Con unidades elegidas, tocar suelo / recurso / enemigo = mover / recolectar / atacar.
 - Arrastrar = mover cámara · pellizcar = zoom · ▢ = selección por área.
 - 🔨 construir · 💤 aldeano ocioso · 🛡️ todo el ejército · ⚓ la flota · ⚔️ "Atacar zona".

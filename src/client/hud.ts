@@ -325,7 +325,7 @@ export class Hud {
       case 'cancelplace': g.placing = null; g.ghost = null; g.wallStart = null; g.placedInQueue = 0; break;
       case 'train': g.train(arg as UnitType); break;
       case 'age': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'age', p: g.me, bid: b.id }); break; }
-      case 'cancel': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'cancel', p: g.me, bid: b.id, what: arg === 'tech' ? 'tech' : 'unit' }); break; }
+      case 'cancel': { const b = arg === 'tech' ? w.get(g.sel[0]) : g.sel.map((id) => w.get(id)).filter((x): x is Entity => !!x).sort((a2, b2) => b2.queue.length - a2.queue.length)[0]; if (b) w.issue({ t: 'cancel', p: g.me, bid: b.id, what: arg === 'tech' ? 'tech' : 'unit' }); break; }
       case 'rally': g.mode = 'rally'; this.toast('Tocá el mapa para marcar el punto de reunión'); break;
       case 'stop': w.issue({ t: 'stop', p: g.me, ids: selIds() }); break;
       case 'stance': w.issue({ t: 'stance', p: g.me, ids: selIds(), stance: arg as Stance }); this.toast(`Actitud ${STANCE_NAME[arg as Stance]}`); break;
@@ -402,6 +402,7 @@ export class Hud {
       if (tcA) abar.style.width = ((tcA.ageT / AGE_UPS[(pl.age + 1) as 2 | 3 | 4].time) * 100).toFixed(1) + '%';
     }
     $('btnBox').classList.toggle('on', g.mode === 'box');
+    $('btnClose').hidden = !g.sel.length;
 
     const sig = this.signature();
     if (sig !== this.sig) {
@@ -419,7 +420,8 @@ export class Hud {
       }
     }
     // barras y números en vivo
-    const b = g.sel.length === 1 ? w.get(g.sel[0]) : undefined;
+    const b0 = g.sel.length >= 1 ? w.get(g.sel[0]) : undefined;
+    const b = b0 && (g.sel.length === 1 || b0.cat === 'building') ? (b0.cat === 'building' && !b0.queue.length && b0.ageT < 0 ? g.sel.map((id) => w.get(id)).find((x) => x && x.queue.length) ?? b0 : b0) : undefined;
     if (b) {
       const pb = this.panel.querySelector<HTMLElement>('[data-progress]');
       if (pb) {
@@ -430,7 +432,7 @@ export class Hud {
         pb.style.width = (f * 100).toFixed(1) + '%';
       }
       const tb = this.panel.querySelector<HTMLElement>('[data-tprogress]');
-      if (tb && b.tech) tb.style.width = ((b.techT / TECHS[b.tech].time) * 100).toFixed(1) + '%';
+      if (tb && b0?.tech) tb.style.width = ((b0.techT / TECHS[b0.tech].time) * 100).toFixed(1) + '%';
       const hp = this.panel.querySelector<HTMLElement>('[data-hp]');
       if (hp && b.cat !== 'node') hp.textContent = `${Math.ceil(b.hp)}/${b.maxHp}`;
       const amt = this.panel.querySelector<HTMLElement>('[data-amt]');
@@ -446,6 +448,7 @@ export class Hud {
       const e = w.get(g.sel[0]);
       if (e) parts.push(e.queue.join(''), e.progress >= 1 ? 1 : 0, e.ageT >= 0 ? 1 : 0, e.order?.t ?? '', e.carry > 0 ? 1 : 0, e.tech ?? '', e.techQueue.join(''), e.locked ? 1 : 0, e.cmdQueue.length);
       parts.push(g.selUnits().map((u) => u.stance).join(''));
+      parts.push(g.sel.map((id) => w.get(id)?.queue.length ?? 0).join('.'));
     }
     return parts.join('|');
   }
@@ -466,7 +469,7 @@ export class Hud {
     }
     if (!ents.length) {
       return `<div class="info"><div class="hint">Tocá una unidad o edificio · Arrastrá para mover la cámara · Pellizcá para hacer zoom · Mantené apretado un botón para ver qué hace</div></div>
-        <div class="acts"><button class="act" data-a="home"><i>🏰</i><span>Centro Urbano</span></button>
+        <div class="acts one"><button class="act" data-a="home"><i>🏰</i><span>Centro Urbano</span></button>
         <button class="act" data-a="idle"><i>💤</i><span>Aldeano ocioso</span></button>
         <button class="act" data-a="army"><i>🛡️</i><span>Ejército</span></button></div>`;
     }
@@ -475,7 +478,7 @@ export class Hud {
       return `<div class="info"><div class="title">${NODE_ICON[first.type as NodeType]} ${NODES[first.type as NodeType].name}</div>
         <div class="sub">Quedan <b data-amt>${Math.floor(first.amount)}</b> de ${RES_ICON[NODES[first.type as NodeType].res]}</div>
         ${first.type === 'fish' ? '<div class="sub dim">Lo pescan los barcos pesqueros del muelle.</div>' : ''}</div>
-        <div class="acts"><button class="act" data-a="deselect"><i>✖️</i><span>Cerrar</span></button></div>`;
+        <div class="acts"></div>`;
     }
     const mine = first.owner === g.me;
     const owner = w.players[first.owner];
@@ -483,12 +486,17 @@ export class Hud {
     // ----- edificio
     if (first.cat === 'building') {
       const b = first, d = BUILDINGS[b.type as BuildingType];
-      let html = `<div class="info"><div class="title">${BUILD_ICON[b.type as BuildingType]} ${d.name}${ownerTag}</div>
-        <div class="sub">❤️ <span data-hp>${Math.ceil(b.hp)}/${b.maxHp}</span>${b.type === 'farm' ? ` · 🍖 <b data-amt>${Math.floor(b.amount)}</b>` : ''}${b.type === 'gate' ? (b.locked ? ' · 🔒 Bloqueado' : ' · 🔓 Abierto para tu equipo') : ''}</div>`;
-      if (b.progress < 1) html += `<div class="sub">En construcción</div><div class="bar"><div data-progress></div></div>`;
-      else if (b.ageT >= 0 && pl.age < 4) html += `<div class="sub">Avanzando a la ${AGE_NAME[(pl.age + 1) as Age]}…</div><div class="bar"><div data-progress></div></div>`;
-      else if (b.queue.length) html += `<div class="sub">Entrenando ${UNITS[b.queue[0]].name} ${b.queue.length > 1 ? `(+${b.queue.length - 1} en cola · máx. 10)` : ''}</div><div class="bar"><div data-progress></div></div>${mine && b.trainT === 0 && w.popOf(g.me) >= w.popCap(g.me) ? '<div class="sub warn">⚠️ Sin población: construí casas</div>' : ''}`;
-      if (b.tech) html += `<div class="sub">📜 ${TECHS[b.tech].name}${b.techQueue.length ? ` (+${b.techQueue.length} en cola)` : ''}</div><div class="bar tech"><div data-tprogress></div></div>`;
+      const group = ents.filter((x) => x.cat === 'building' && x.type === b.type);
+      const allQ = group.flatMap((x) => x.queue);
+      const bar = (attr: string, tech = false) => `<div class="bar${tech ? ' tech' : ''}"><div ${attr}></div></div>`;
+      let html = `<div class="info"><div class="title">${BUILD_ICON[b.type as BuildingType]} ${d.name}${group.length > 1 ? ` <b class="mult">×${group.length}</b>` : ''}${ownerTag}
+          <small class="hpl">❤️ <span data-hp>${Math.ceil(b.hp)}/${b.maxHp}</span>${b.type === 'farm' ? ` · 🍖 <b data-amt>${Math.floor(b.amount)}</b>` : ''}</small></div>`;
+      if (b.type === 'gate') html += `<div class="sub">${b.locked ? '🔒 Bloqueado' : '🔓 Abierto para tu equipo'}</div>`;
+      if (b.progress < 1) html += `<div class="prow"><span>🔨 En construcción</span>${bar('data-progress')}</div>`;
+      else if (b.ageT >= 0 && pl.age < 4) html += `<div class="prow"><span>👑 ${AGE_NAME[(pl.age + 1) as Age]}</span>${bar('data-progress')}</div>`;
+      else if (allQ.length) html += `<div class="prow"><span>${UNIT_ICON[(b.queue[0] ?? allQ[0])]} ${UNITS[b.queue[0] ?? allQ[0]].name}${allQ.length > 1 ? ` <em>+${allQ.length - 1}</em>` : ''}</span>${bar('data-progress')}</div>`;
+      if (b.tech) html += `<div class="prow"><span>📜 ${TECHS[b.tech].name}${b.techQueue.length ? ` <em>+${b.techQueue.length}</em>` : ''}</span>${bar('data-tprogress', true)}</div>`;
+      if (mine && allQ.length && b.trainT === 0 && w.popOf(g.me) >= w.popCap(g.me)) html += '<div class="sub warn">⚠️ Sin población: construí casas</div>';
       if (!b.tech && b.progress >= 1 && b.ageT < 0 && !b.queue.length) html += `<div class="sub dim">${d.desc}</div>`;
       html += `</div><div class="acts">`;
       if (mine && b.progress >= 1) {
@@ -502,7 +510,7 @@ export class Hud {
           const locked = pl.age < ud.age;
           const needs = ud.requires && !pl.techs.has(ud.requires);
           const cost = w.unitCost(g.me, u);
-          const n = b.queue.filter((q) => q === u).length;
+          const n = allQ.filter((q) => q === u).length;
           html += `<button class="act ${ud.unique ? 'uniq' : ''}" data-a="train:${u}" ${locked || needs || !w.canAfford(g.me, cost) ? 'data-dis' : ''}>
             <i>${UNIT_ICON[u]}</i><span>${ud.name}</span><em>${locked ? lock(ud.age) : needs ? `🔒 ${TECHS[ud.requires!].name}` : costHtml(cost, pl.res)}</em>${n ? `<b class="badge">${n}</b>` : ''}</button>`;
         }
@@ -528,7 +536,7 @@ export class Hud {
         if (d.trains) html += `<button class="act" data-a="rally"><i>🚩</i><span>Reunión</span></button>`;
       }
       if (mine) html += this.delBtn('Destruir');
-      html += `<button class="act" data-a="deselect"><i>✖️</i><span>Cerrar</span></button></div>`;
+      html += `</div>`;
       return html;
     }
     // ----- unidades
@@ -560,8 +568,7 @@ export class Hud {
       }
       acts += `<button class="act" data-a="stop"><i>✋</i><span>Detener</span></button>`;
       acts += this.delBtn('Eliminar');
-      acts += `<button class="act" data-a="deselect"><i>✖️</i><span>Cerrar</span></button>`;
-    } else acts = `<button class="act" data-a="deselect"><i>✖️</i><span>Cerrar</span></button>`;
+    }
     return `<div class="info">${info}</div><div class="acts">${acts}</div>`;
   }
 

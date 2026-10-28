@@ -401,8 +401,8 @@ export class Game {
     }
     const hit = this.pick(p.x, p.y);
     if (this.mode === 'rally') {
-      const b = w.get(this.sel[0]);
-      if (b) { w.issue({ t: 'rally', p: this.me, bid: b.id, x: p.x, y: p.y }); this.mark(p.x, p.y, '#fff'); }
+      for (const id of this.sel) { const b = w.get(id); if (b && b.cat === 'building') w.issue({ t: 'rally', p: this.me, bid: b.id, x: p.x, y: p.y }); }
+      this.mark(p.x, p.y, '#fff');
       this.mode = 'normal';
       return;
     }
@@ -426,12 +426,13 @@ export class Game {
     // selección
     if (!hit) { if (this.sel.length && !units.length) this.select([]); return; }
     const now = performance.now();
-    if (hit.cat === 'unit' && hit.owner === this.me && this.lastTap.id === hit.id && now - this.lastTap.t < 350) {
-      // doble toque: todas las de ese tipo en pantalla
-      const all: number[] = [];
+    if (hit.cat !== 'node' && hit.owner === this.me && this.lastTap.id === hit.id && now - this.lastTap.t < 400) {
+      // doble toque: todas las unidades (o edificios terminados) de ese tipo en pantalla
+      const all: number[] = [hit.id];
       for (const e of w.entities.values())
-        if (e.cat === 'unit' && e.owner === this.me && e.type === hit.type && this.onScreen(e)) all.push(e.id);
+        if (e.id !== hit.id && e.cat === hit.cat && e.owner === this.me && e.type === hit.type && (e.cat === 'unit' || e.progress >= 1) && this.onScreen(e)) all.push(e.id);
       this.select(all);
+      if (hit.cat === 'building' && all.length > 1) this.hud.toast(`${all.length} edificios seleccionados: lo que entrenes se reparte`);
     } else this.select([hit.id]);
     this.lastTap = { t: now, id: hit.id };
   }
@@ -544,9 +545,13 @@ export class Game {
       }
     }
   }
+  /** Entrena en el edificio elegido con la cola más corta (si hay varios seleccionados, se reparte) */
   train(u: UnitType) {
-    const b = this.world.get(this.sel[0]);
-    if (b) this.world.issue({ t: 'train', p: this.me, bid: b.id, u });
+    const w = this.world;
+    const bs = this.sel.map((id) => w.get(id)).filter((b): b is Entity => !!b && b.cat === 'building' && b.owner === this.me && b.progress >= 1 && w.trainsOf(this.me, b.type as BuildingType).includes(u));
+    if (!bs.length) return;
+    bs.sort((a, b) => a.queue.length - b.queue.length || a.trainT - b.trainT);
+    w.issue({ t: 'train', p: this.me, bid: bs[0].id, u });
   }
   nodeName(e: Entity) { return NODES[e.type as NodeType].name; }
   get view() { return { w: this.vw, h: this.vh }; }

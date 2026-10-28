@@ -5,7 +5,7 @@ import { createMatch } from '../dist/sim/match.js';
 import { AI } from '../dist/sim/ai.js';
 import { TICK_RATE } from '../dist/sim/data.js';
 
-for (const map of ['continental', 'rio', 'lagos', 'bosque', 'oasis', 'mediterraneo']) {
+for (const map of ['continental', 'rio', 'lagos', 'bosque', 'oasis', 'mediterraneo', 'islas', 'costa', 'canales']) {
   test(`mapa ${map}: Difícil vence a Fácil`, () => {
     const m = createMatch({ mode: 'aivsai', difficulty: 'easy', seed: 21, map, biome: 'random' });
     m.ais[1] = new AI(m.world, 1, 'hard');

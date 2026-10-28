@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch } from '../dist/sim/match.js';
-import { TECHS } from '../dist/sim/data.js';
+import { TECHS, TICK_RATE } from '../dist/sim/data.js';
 
 function setup() {
   const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 5, map: 'continental', biome: 'templado' });
@@ -141,4 +141,37 @@ test('investigaciones en cola y en paralelo al entrenamiento', () => {
   assert.ok(p.techs.has('loom') && p.techs.has('wheelbarrow'));
   assert.ok(w.unitsOf(0, 'villager').length > v0, 'siguió entrenando aldeanos');
   assert.ok(w.score(0).tech > 0);
+});
+
+test('Principiante: ejército chico, sin ataques tempranos; Normal le gana', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'novice', seed: 12, map: 'continental', biome: 'templado', players: [
+    { ai: true, civ: 'random', team: 1, color: 0, difficulty: 'novice' }, { ai: true, civ: 'random', team: 2, color: 1, difficulty: 'normal' }] });
+  const w = m.world;
+  let maxArmy = 0, attackedEarly = false;
+  for (let i = 0; i < 1800 * TICK_RATE && w.winnerTeam < 0; i++) {
+    for (const ai of m.ais) ai.update(); w.step(); w.events.length = 0;
+    if (i % 100 === 0) {
+      const army = w.unitsOf(0).filter((u) => u.type !== 'villager' && u.type !== 'fishship');
+      maxArmy = Math.max(maxArmy, army.length);
+      if (w.tick < 15 * 60 * TICK_RATE && army.some((u) => Math.hypot(u.x - w.buildingsOf(1, 'towncenter')[0]?.x, u.y - w.buildingsOf(1, 'towncenter')[0]?.y) < 12 * 32)) attackedEarly = true;
+    }
+  }
+  console.log('principiante: ejército máx', maxArmy, 'ganador', w.winnerTeam, 'min', (w.tick / TICK_RATE / 60).toFixed(1));
+  assert.ok(maxArmy <= 8);
+  assert.ok(!attackedEarly);
+  assert.equal(w.winnerTeam, 2);
+});
+
+test('borrar unidades y edificios propios; cola de 10', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 5, map: 'continental', biome: 'templado' });
+  const w = m.world;
+  const v = w.unitsOf(0, 'villager')[0];
+  const enemy = w.unitsOf(1, 'villager')[0];
+  w.issue({ t: 'delete', p: 0, ids: [v.id, enemy.id] }); w.step();
+  assert.ok(!w.get(v.id)); assert.ok(w.get(enemy.id));
+  const tc = w.buildingsOf(0, 'towncenter')[0];
+  w.players[0].res.food = 9999;
+  for (let i = 0; i < 14; i++) w.issue({ t: 'train', p: 0, bid: tc.id, u: 'villager' });
+  w.step();
+  assert.equal(tc.queue.length, 10);
 });

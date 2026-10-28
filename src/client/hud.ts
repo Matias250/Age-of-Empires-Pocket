@@ -68,6 +68,7 @@ export class Hud {
   private sig = '';
   private topAt = 0;
   private scoreAt = 0;
+  private delAt = 0;
   private scoreOpen = false;
   private handlers: [EventTarget, string, EventListener][] = [];
   private pressTimer = 0;
@@ -89,6 +90,8 @@ export class Hud {
     });
     this.on($('sidebtns'), 'click', clickAction);
     this.on($('btnPause'), 'click', () => this.togglePause());
+    this.on(window, 'resize', () => { if (!$('overlay').hidden) setTimeout(() => this.fitOverlay(), 50); });
+    this.on($('overlay'), 'touchmove', (e) => e.preventDefault());
     this.on($('score'), 'click', () => { this.scoreOpen = !this.scoreOpen; this.scoreAt = 0; });
     // mantener apretado un botón: ficha con la descripción
     const down = (e: Event) => {
@@ -229,6 +232,16 @@ export class Hud {
     return html + '</table>';
   }
 
+  /** Escala la tarjeta para que entre completa en la pantalla (sin desplazarse) */
+  fitOverlay() {
+    const card = $('overlay').querySelector<HTMLElement>('.card');
+    if (!card) return;
+    card.style.transform = '';
+    const h = card.offsetHeight, wd = card.offsetWidth;
+    const k = Math.min(1, (window.innerHeight - 16) / h, (window.innerWidth - 12) / wd);
+    card.style.transform = k < 1 ? `scale(${k.toFixed(3)})` : '';
+  }
+
   togglePause() {
     const g = this.g;
     if (g.over) return;
@@ -248,6 +261,7 @@ export class Hud {
       <button class="big" data-o="resume">Continuar</button>
       <button class="big ghost" data-o="exit">Salir al menú</button>
     </div>`;
+    this.fitOverlay();
     o.onclick = (e) => {
       const t = e.target as HTMLElement;
       if (t.closest('[data-grid]')) { settings.grid = !settings.grid; saveSettings(); g.paused = false; this.togglePause(); return; }
@@ -269,17 +283,20 @@ export class Hud {
     o.innerHTML = `<div class="card end ${win ? 'win' : 'lose'}">
       <h1>${win ? '¡Victoria!' : 'Derrota'}</h1>
       <p>${tut && win ? 'Los Cuervos Negros huyeron de Varnia. La frontera vuelve a estar a salvo… por ahora.' : win ? 'Tu reino domina la región.' : 'Tu Centro Urbano cayó.'}</p>
-      <table>
-        <tr><td>Tiempo</td><td>${mins}:${String(secs).padStart(2, '0')}</td></tr>
-        <tr><td>Recursos juntados</td><td>${RES_LIST.map((r) => `${RES_ICON[r]} ${st.gathered[r]}`).join(' ')}</td></tr>
-        <tr><td>Unidades entrenadas</td><td>${st.trained}</td></tr>
-        <tr><td>Enemigos derrotados</td><td>${st.kills}</td></tr>
-        <tr><td>Pérdidas</td><td>${st.lost}</td></tr>
-      </table>
-      ${this.playersTable()}
-      ${tut ? '' : '<button class="big" data-o="again">Revancha</button>'}
-      <button class="big ghost" data-o="exit">Menú principal</button>
+      <div class="end-stats">
+        <div><b>${mins}:${String(secs).padStart(2, '0')}</b><small>Tiempo</small></div>
+        <div><b>${st.trained}</b><small>Entrenadas</small></div>
+        <div><b>${st.kills}</b><small>Derrotados</small></div>
+        <div><b>${st.lost}</b><small>Pérdidas</small></div>
+      </div>
+      <div class="end-res">${RES_LIST.map((r) => `${RES_ICON[r]} ${st.gathered[r]}`).join(' · ')}</div>
+      ${tut ? '' : this.playersTable()}
+      <div class="end-btns">
+        ${tut ? '' : '<button class="big" data-o="again">Revancha</button>'}
+        <button class="big ghost" data-o="exit">Menú principal</button>
+      </div>
     </div>`;
+    this.fitOverlay();
     o.onclick = (e) => {
       const a = (e.target as HTMLElement).getAttribute('data-o');
       if (a === 'exit') g.exit();
@@ -299,10 +316,10 @@ export class Hud {
       case 'research': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'research', p: g.me, bid: b.id, tech: arg as TechType }); break; }
       case 'buy': case 'sell': w.issue({ t: 'trade', p: g.me, res: arg as Res, buy: cmd === 'buy' }); break;
       case 'back': g.buildMenu = false; g.mode = 'normal'; break;
-      case 'place': g.buildMenu = false; g.startPlacing(arg as BuildingType); break;
+      case 'place': g.buildMenu = false; g.placedInQueue = 0; g.startPlacing(arg as BuildingType); break;
       case 'confirm': g.confirmPlacement(); this.sig = ''; return;
       case 'rotate': g.rotateGhost(); break;
-      case 'cancelplace': g.placing = null; g.ghost = null; g.wallStart = null; break;
+      case 'cancelplace': g.placing = null; g.ghost = null; g.wallStart = null; g.placedInQueue = 0; break;
       case 'train': g.train(arg as UnitType); break;
       case 'age': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'age', p: g.me, bid: b.id }); break; }
       case 'cancel': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'cancel', p: g.me, bid: b.id, what: arg === 'tech' ? 'tech' : 'unit' }); break; }
@@ -313,6 +330,12 @@ export class Hud {
       case 'gatelock': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'gateLock', p: g.me, bid: b.id }); break; }
       case 'attack': g.mode = g.mode === 'attack' ? 'normal' : 'attack'; if (g.mode === 'attack') this.toast('Tocá el destino: atacarán todo lo que encuentren'); break;
       case 'deselect': g.select([]); break;
+      case 'delete': {
+        const ids = g.sel.filter((id) => w.get(id)?.owner === g.me);
+        if (!ids.length) break;
+        if (!this.delAt || performance.now() - this.delAt > 2500) { this.delAt = performance.now(); this.toast('Tocá de nuevo para confirmar'); setTimeout(() => { this.sig = ''; }, 2600); break; }
+        this.delAt = 0; w.issue({ t: 'delete', p: g.me, ids }); g.select([]); break;
+      }
       case 'idle': g.selectIdleVillager(); break;
       case 'army': g.selectArmy(); break;
       case 'navy': g.selectNavy(); break;
@@ -351,7 +374,8 @@ export class Hud {
       if (tcAge && pl.age < 4) {
         const next = (pl.age + 1) as 2 | 3 | 4;
         const f = tcAge.ageT / AGE_UPS[next].time;
-        ab.innerHTML = `<span>👑 ${AGE_NAME[next]} · ${Math.floor(f * 100)}%</span><i style="width:${Math.round(f * 100)}%"></i>`;
+        if (!ab.firstChild) ab.innerHTML = '<span></span><i></i>';
+        ab.querySelector('span')!.textContent = `👑 ${AGE_NAME[next]} · ${Math.floor(f * 100)}%`;
       }
     }
     // puntuación
@@ -367,6 +391,12 @@ export class Hud {
         sc.innerHTML = `🏆 <b>${mine}</b>${team !== mine ? ` · Eq. ${team}` : ''} <small>rival ${best}</small>`;
       }
       sc.classList.toggle('open', this.scoreOpen);
+    }
+    // barra de edad: cada cuadro, sin saltos
+    const abar = $('agebar').querySelector('i') as HTMLElement | null;
+    if (abar && pl.age < 4) {
+      const tcA = w.buildingsOf(g.me, 'towncenter').find((b) => b.ageT >= 0);
+      if (tcA) abar.style.width = ((tcA.ageT / AGE_UPS[(pl.age + 1) as 2 | 3 | 4].time) * 100).toFixed(1) + '%';
     }
     $('btnBox').classList.toggle('on', g.mode === 'box');
 
@@ -394,10 +424,10 @@ export class Hud {
         if (b.progress < 1) f = b.progress;
         else if (b.ageT >= 0 && pl.age < 4) f = b.ageT / AGE_UPS[(pl.age + 1) as 2 | 3 | 4].time;
         else if (b.queue.length) f = b.trainT / UNITS[b.queue[0]].trainTime;
-        pb.style.width = Math.round(f * 100) + '%';
+        pb.style.width = (f * 100).toFixed(1) + '%';
       }
       const tb = this.panel.querySelector<HTMLElement>('[data-tprogress]');
-      if (tb && b.tech) tb.style.width = Math.round((b.techT / TECHS[b.tech].time) * 100) + '%';
+      if (tb && b.tech) tb.style.width = ((b.techT / TECHS[b.tech].time) * 100).toFixed(1) + '%';
       const hp = this.panel.querySelector<HTMLElement>('[data-hp]');
       if (hp && b.cat !== 'node') hp.textContent = `${Math.ceil(b.hp)}/${b.maxHp}`;
       const amt = this.panel.querySelector<HTMLElement>('[data-amt]');
@@ -407,7 +437,7 @@ export class Hud {
 
   private signature(): string {
     const g = this.g, w = g.world, pl = w.players[g.me];
-    const parts: (string | number)[] = [g.sel.join(','), g.mode, g.buildMenu ? 1 : 0, g.placing ?? '', g.ghostVertical ? 1 : 0, pl.age, w.isResearchingAge(g.me) ? 1 : 0, pl.techs.size, g.queueMode ? 1 : 0];
+    const parts: (string | number)[] = [w.popOf(g.me) >= w.popCap(g.me) ? 1 : 0, this.delAt ? 1 : 0, g.placedInQueue, g.sel.join(','), g.mode, g.buildMenu ? 1 : 0, g.placing ?? '', g.ghostVertical ? 1 : 0, pl.age, w.isResearchingAge(g.me) ? 1 : 0, pl.techs.size, g.queueMode ? 1 : 0];
     parts.push(RES_LIST.map((r) => Math.floor(pl.res[r] / 25)).join('.'));
     if (g.sel.length >= 1) {
       const e = w.get(g.sel[0]);
@@ -426,9 +456,10 @@ export class Hud {
         : d.onWall ? 'Ponelo sobre 3 tramos de tu muralla. Girá si hace falta.' : 'Tocá o arrastrá el contorno para ubicarlo y confirmá.';
       return `<div class="info"><div class="title">${BUILD_ICON[g.placing]} ${d.name}</div>
         <div class="sub">${hint}</div><div class="sub dim">${costHtml(w.buildingCost(g.me, g.placing), pl.res)}${d.line ? ' por tramo' : ''}</div></div>
-        <div class="acts"><button class="act no" data-a="cancelplace"><i>✖️</i><span>Cancelar</span></button>
+        <div class="acts"><button class="act yes" data-a="confirm"><i>✔️</i><span>${g.queuing ? 'A la cola' : 'Construir aquí'}</span></button>
+        <button class="act ${g.queueMode ? 'on' : ''}" data-a="queue"><i>➕</i><span>En cola${g.queueMode ? ' ✓' : ''}</span></button>
         ${d.onWall ? '<button class="act" data-a="rotate"><i>🔄</i><span>Girar</span></button>' : ''}
-        <button class="act yes" data-a="confirm"><i>✔️</i><span>${g.queuing ? 'Agregar a la cola' : 'Construir aquí'}</span></button></div>`;
+        ${g.placedInQueue ? '<button class="act gold" data-a="cancelplace"><i>👍</i><span>Listo</span></button>' : '<button class="act no" data-a="cancelplace"><i>✖️</i><span>Cancelar</span></button>'}</div>`;
     }
     if (!ents.length) {
       return `<div class="info"><div class="hint">Tocá una unidad o edificio · Arrastrá para mover la cámara · Pellizcá para hacer zoom · Mantené apretado un botón para ver qué hace</div></div>
@@ -453,7 +484,7 @@ export class Hud {
         <div class="sub">❤️ <span data-hp>${Math.ceil(b.hp)}/${b.maxHp}</span>${b.type === 'farm' ? ` · 🍖 <b data-amt>${Math.floor(b.amount)}</b>` : ''}${b.type === 'gate' ? (b.locked ? ' · 🔒 Bloqueado' : ' · 🔓 Abierto para tu equipo') : ''}</div>`;
       if (b.progress < 1) html += `<div class="sub">En construcción</div><div class="bar"><div data-progress></div></div>`;
       else if (b.ageT >= 0 && pl.age < 4) html += `<div class="sub">Avanzando a la ${AGE_NAME[(pl.age + 1) as Age]}…</div><div class="bar"><div data-progress></div></div>`;
-      else if (b.queue.length) html += `<div class="sub">Entrenando ${UNITS[b.queue[0]].name} ${b.queue.length > 1 ? `(+${b.queue.length - 1} en cola)` : ''}</div><div class="bar"><div data-progress></div></div>`;
+      else if (b.queue.length) html += `<div class="sub">Entrenando ${UNITS[b.queue[0]].name} ${b.queue.length > 1 ? `(+${b.queue.length - 1} en cola · máx. 10)` : ''}</div><div class="bar"><div data-progress></div></div>${mine && b.trainT === 0 && w.popOf(g.me) >= w.popCap(g.me) ? '<div class="sub warn">⚠️ Sin población: construí casas</div>' : ''}`;
       if (b.tech) html += `<div class="sub">📜 ${TECHS[b.tech].name}${b.techQueue.length ? ` (+${b.techQueue.length} en cola)` : ''}</div><div class="bar tech"><div data-tprogress></div></div>`;
       if (!b.tech && b.progress >= 1 && b.ageT < 0 && !b.queue.length) html += `<div class="sub dim">${d.desc}</div>`;
       html += `</div><div class="acts">`;
@@ -493,6 +524,7 @@ export class Hud {
         if (b.tech) html += `<button class="act" data-a="cancel:tech"><i>↩️</i><span>Cancelar invest.</span></button>`;
         if (d.trains) html += `<button class="act" data-a="rally"><i>🚩</i><span>Reunión</span></button>`;
       }
+      if (mine) html += this.delBtn('Destruir');
       html += `<button class="act" data-a="deselect"><i>✖️</i><span>Cerrar</span></button></div>`;
       return html;
     }
@@ -524,9 +556,15 @@ export class Hud {
           acts += `<button class="act stance ${cur.size === 1 && cur.has(s) ? 'on' : ''}" data-a="stance:${s}"><i>${STANCE_ICON[s]}</i><span>${STANCE_NAME[s]}</span></button>`;
       }
       acts += `<button class="act" data-a="stop"><i>✋</i><span>Detener</span></button>`;
+      acts += this.delBtn('Eliminar');
       acts += `<button class="act" data-a="deselect"><i>✖️</i><span>Cerrar</span></button>`;
     } else acts = `<button class="act" data-a="deselect"><i>✖️</i><span>Cerrar</span></button>`;
     return `<div class="info">${info}</div><div class="acts">${acts}</div>`;
+  }
+
+  private delBtn(label: string): string {
+    const armed = this.delAt > 0 && performance.now() - this.delAt < 2500;
+    return `<button class="act ${armed ? 'no' : ''}" data-a="delete"><i>🗑️</i><span>${armed ? '¿Seguro?' : label}</span></button>`;
   }
 
   /** Menú de construcción en una ventana propia */

@@ -7,13 +7,13 @@ import { Rng } from './rng.js';
 import { CIV_LIST, CIVS, CivId } from './civs.js';
 
 export type Mode = 'skirmish' | 'coop' | 'tutorial' | 'aivsai';
-export type MapType = 'continental' | 'rio' | 'lagos' | 'bosque' | 'oasis' | 'mediterraneo' | 'arena';
+export type MapType = 'continental' | 'rio' | 'lagos' | 'bosque' | 'oasis' | 'mediterraneo' | 'islas' | 'costa' | 'canales' | 'arena';
 export type MapSize = 'tiny' | 'small' | 'medium' | 'large';
 export const MAP_SIZES: Record<MapSize, { name: string; tiles: number; players: number }> = {
-  tiny: { name: 'Diminuto', tiles: 48, players: 2 },
-  small: { name: 'Chico', tiles: 62, players: 4 },
-  medium: { name: 'Mediano', tiles: 74, players: 6 },
-  large: { name: 'Grande', tiles: 84, players: 8 },
+  tiny: { name: 'Diminuto', tiles: 64, players: 2 },
+  small: { name: 'Chico', tiles: 80, players: 4 },
+  medium: { name: 'Mediano', tiles: 94, players: 6 },
+  large: { name: 'Grande', tiles: 104, players: 8 },
 };
 /** El tamaño más chico que alcanza para n jugadores */
 export function sizeForPlayers(n: number): MapSize { return n <= 2 ? 'tiny' : n <= 4 ? 'small' : n <= 6 ? 'medium' : 'large'; }
@@ -43,6 +43,9 @@ export const MAPS: Record<MapType, { name: string; desc: string }> = {
   bosque: { name: 'Bosque cerrado', desc: 'Bosque denso con senderos angostos' },
   oasis: { name: 'Oasis', desc: 'Un lago central rodeado de riquezas' },
   mediterraneo: { name: 'Mediterráneo', desc: 'Un mar en el centro: muelles y batallas navales' },
+  islas: { name: 'Archipiélago', desc: 'Cada reino en su isla, unidas por vados de poca agua' },
+  costa: { name: 'Costas', desc: 'Un océano rodea el continente: todos tienen mar' },
+  canales: { name: 'Canales', desc: 'Ríos separan a cada reino; se cruzan por vados' },
   arena: { name: 'Arena', desc: 'Cada reino arranca amurallado, con 2 torres y una puerta' },
 };
 export const BIOMES: Record<Biome, string> = { templado: 'Templado', desierto: 'Desierto', nieve: 'Nieve', tropical: 'Tropical', otono: 'Otoño' };
@@ -104,7 +107,7 @@ export function createMatch(cfg: MatchConfig): Match {
   // ubicación en círculo: los del mismo equipo quedan juntos
   const order = slots.map((s, i) => ({ i, team: s.team > 0 ? s.team : 100 + i })).sort((a, b) => a.team - b.team || a.i - b.i).map((o) => o.i);
   const bases: Base[] = new Array(n);
-  const R = size / 2 - 7.5, c = size / 2;
+  const R = size / 2 - (map === 'costa' ? 14 : map === 'islas' || map === 'arena' ? 12 : 8), c = size / 2;
   order.forEach((pid, k) => {
     const a = Math.PI / 4 + ((k + 0.5) * Math.PI * 2) / n;
     bases[pid] = { tx: Math.round(c + Math.cos(a) * R - 1.5), ty: Math.round(c + Math.sin(a) * R - 1.5) };
@@ -117,6 +120,9 @@ export function createMatch(cfg: MatchConfig): Match {
   if (map === 'continental') makeLakes(w, rng, reserved, Math.max(2, Math.ceil(n / 2)), 2.6);
   if (map === 'oasis') makeOasis(w, rng);
   if (map === 'mediterraneo') makeSea(w, rng, reserved);
+  if (map === 'islas') makeIslands(w, rng, bases);
+  if (map === 'costa') makeCoast(w, rng, reserved);
+  if (map === 'canales') makeCanals(w, rng, bases, reserved);
 
   // 2) bases
   bases.forEach((b, i) => makeBase(w, i, b, rng));
@@ -131,8 +137,8 @@ export function createMatch(cfg: MatchConfig): Match {
       }
   }
   const area = (size * size) / (48 * 48);
-  if (map === 'continental' || map === 'lagos' || map === 'oasis' || map === 'mediterraneo') smoothWater(w, reserved);
-  const forests = { continental: 11, rio: 8, lagos: 8, bosque: 0, oasis: 9, mediterraneo: 8, arena: 10 }[map] * area;
+  if (map === 'continental' || map === 'lagos' || map === 'oasis' || map === 'mediterraneo' || map === 'islas' || map === 'costa') smoothWater(w, reserved);
+  const forests = { continental: 11, rio: 8, lagos: 8, bosque: 0, oasis: 9, mediterraneo: 8, islas: 6, costa: 8, canales: 8, arena: 10 }[map] * area;
   scatterForests(w, rng, reserved, Math.round(forests));
   const ci = Math.floor(c);
   if (map === 'oasis' || map === 'mediterraneo') {
@@ -150,6 +156,7 @@ export function createMatch(cfg: MatchConfig): Match {
     cluster(w, rng, k % 2 ? 'stonemine' : 'goldmine', Math.round(c + Math.cos(a) * R * 0.75), Math.round(c + Math.sin(a) * R * 0.75), 4);
   }
   // 4) asegurar que todos puedan llegar a todos
+  if (map === 'islas') for (let k = 0; k < n; k++) { if (n === 2 && k === 1) break; carve(w, bases[order[k]], bases[order[(k + 1) % n]]); }
   for (let i = 1; i < n; i++) ensurePath(w, bases[0], bases[i]);
   if (map === 'bosque') for (const b of bases) carve(w, b, { tx: ci - 1, ty: ci - 1 });
   // 5) peces en el agua
@@ -182,7 +189,7 @@ function makeRiver(w: World, rng: Rng, reserved: (x: number, y: number, r?: numb
 }
 
 /** Lago de borde orgánico: el radio varía suave con el ángulo */
-function lake(w: World, rng: Rng, cx: number, cy: number, r: number, reserved?: (x: number, y: number, r?: number) => boolean) {
+function lake(w: World, rng: Rng, cx: number, cy: number, r: number, reserved?: (x: number, y: number, r?: number) => boolean, land = false) {
   const p1 = rng.next() * 6.28, p2 = rng.next() * 6.28, p3 = rng.next() * 6.28;
   const a1 = 0.12 + rng.next() * 0.12, a2 = 0.06 + rng.next() * 0.08;
   const stretch = 0.8 + rng.next() * 0.45, rot = rng.next() * 3.14;
@@ -195,7 +202,7 @@ function lake(w: World, rng: Rng, cx: number, cy: number, r: number, reserved?: 
       const ex = dx * Math.cos(rot) + dy * Math.sin(rot), ey = (-dx * Math.sin(rot) + dy * Math.cos(rot)) * stretch;
       const a = Math.atan2(ey, ex);
       const rr = r * (1 + a1 * Math.sin(2 * a + p1) + a2 * Math.sin(3 * a + p2) + 0.05 * Math.sin(5 * a + p3));
-      if (Math.hypot(ex, ey) < rr) w.setWater(x, y, 1);
+      if (Math.hypot(ex, ey) < rr) { if (land) w.setLand(x, y); else w.setWater(x, y, 1); }
     }
 }
 
@@ -297,6 +304,58 @@ function makeOasis(w: World, rng: Rng) {
 function makeSea(w: World, rng: Rng, reserved: (x: number, y: number, r?: number) => boolean) {
   const c = w.w / 2;
   lake(w, rng, c, c, w.w * 0.21, reserved);
+}
+
+/** Archipiélago: todo es mar salvo una isla grande por reino, una central y algunos islotes */
+function makeIslands(w: World, rng: Rng, bases: Base[]) {
+  for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) w.setWater(x, y, 1);
+  const r = Math.max(13, Math.min(15, w.w * 0.16));
+  for (const b of bases) lake(w, rng, b.tx + 1.5, b.ty + 1.5, r, undefined, true);
+  const c = w.w / 2;
+  lake(w, rng, c, c, 6, undefined, true);
+  for (let i = 0; i < Math.round(w.w / 14); i++) {
+    const x = rng.int(6, w.w - 7), y = rng.int(6, w.h - 7);
+    if (bases.some((b) => Math.hypot(x - b.tx, y - b.ty) < r + 7)) continue;
+    lake(w, rng, x, y, 2.5 + rng.next() * 2.5, undefined, true);
+  }
+}
+
+/** Costas: el continente queda rodeado de océano */
+function makeCoast(w: World, rng: Rng, reserved: (x: number, y: number, r?: number) => boolean) {
+  const c = w.w / 2, p1 = rng.next() * 6.28, p2 = rng.next() * 6.28;
+  for (let y = 0; y < w.h; y++)
+    for (let x = 0; x < w.w; x++) {
+      const dx = x + 0.5 - c, dy = y + 0.5 - c;
+      const a = Math.atan2(dy, dx);
+      // borde cuadrado redondeado con ondulación
+      const d = Math.pow(Math.pow(Math.abs(dx), 4) + Math.pow(Math.abs(dy), 4), 0.25);
+      const edge = c - 6.5 + 1.6 * Math.sin(3 * a + p1) + 1.1 * Math.sin(7 * a + p2);
+      if (d > edge && !reserved(x, y, 8)) w.setWater(x, y, 1);
+    }
+  makeLakes(w, rng, reserved, Math.round(w.w / 40), 2.4);
+}
+
+/** Canales: ríos radiales entre reinos vecinos, cada uno con dos vados */
+function makeCanals(w: World, rng: Rng, bases: Base[], reserved: (x: number, y: number, r?: number) => boolean) {
+  const c = w.w / 2, n = bases.length;
+  const angs = bases.map((b) => Math.atan2(b.ty + 1.5 - c, b.tx + 1.5 - c)).sort((a, b) => a - b);
+  for (let k = 0; k < n; k++) {
+    let a0 = angs[k], a1 = angs[(k + 1) % n];
+    if (a1 <= a0) a1 += Math.PI * 2;
+    const a = (a0 + a1) / 2;
+    let wob = 0;
+    const len = c * 1.5;
+    for (let t = 4; t < len; t += 0.5) {
+      wob += (rng.next() - 0.5) * 0.25; wob = Math.max(-1.5, Math.min(1.5, wob));
+      const x = c + Math.cos(a) * t - Math.sin(a) * wob, y = c + Math.sin(a) * t + Math.cos(a) * wob;
+      const ford = Math.abs(t - c * 0.32) < 1.6 || Math.abs(t - c * 0.72) < 1.6;
+      for (const [ox, oy] of [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0]]) {
+        const tx = Math.round(x + ox), ty = Math.round(y + oy);
+        if (tx < 0 || ty < 0 || tx >= w.w || ty >= w.h || reserved(tx, ty, 7)) continue;
+        w.setWater(tx, ty, ford ? 2 : 1);
+      }
+    }
+  }
 }
 
 function addFish(w: World, rng: Rng) {

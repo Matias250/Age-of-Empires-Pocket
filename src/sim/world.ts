@@ -88,7 +88,8 @@ export type Command =
   | { t: 'rally'; p: number; bid: number; x: number; y: number }
   | { t: 'research'; p: number; bid: number; tech: TechType }
   | { t: 'trade'; p: number; res: Res; buy: boolean }
-  | { t: 'stop'; p: number; ids: number[] };
+  | { t: 'stop'; p: number; ids: number[] }
+  | { t: 'delete'; p: number; ids: number[] };
 
 export type GEvent =
   | { t: 'shot'; x1: number; y1: number; x2: number; y2: number; kind: Projectile }
@@ -557,6 +558,9 @@ export class World implements Grid {
         });
         break;
       }
+      case 'delete':
+        for (const id of c.ids) { const e = this.entities.get(id); if (e && e.owner === c.p && e.cat !== 'node') e.hp = 0; }
+        break;
       case 'stop':
         for (const u of own(c.ids)) { u.cmdQueue = []; this.setOrder(u, undefined); }
         break;
@@ -600,7 +604,7 @@ export class World implements Grid {
         if (!this.trainsOf(c.p, b.type as BuildingType).includes(c.u)) return;
         if (pl.age < ud.age) { msg(`Requiere la ${AGE_NAME[ud.age]}`); return; }
         if (ud.requires && !pl.techs.has(ud.requires)) { msg(`Requiere ${TECHS[ud.requires].name}`); return; }
-        if (b.queue.length >= 6) return;
+        if (b.queue.length >= 10) return;
         const cost = this.unitCost(c.p, c.u);
         if (!this.canAfford(c.p, cost)) { msg('Recursos insuficientes'); return; }
         this.pay(c.p, cost);

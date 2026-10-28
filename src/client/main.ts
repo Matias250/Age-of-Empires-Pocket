@@ -1,6 +1,7 @@
 // Punto de entrada: menú principal y arranque de partidas.
-import { DIFF_NAME, Difficulty } from '../sim/ai.js';
-import { BIOMES, Biome, MAP_SIZES, MapSize, MAPS, MapType, MatchConfig, Mode, PLAYER_COLORS, sizeForPlayers, SlotCfg } from '../sim/match.js';
+import { DIFF_LIST, DIFF_NAME, Difficulty } from '../sim/ai.js';
+import { BIOMES, Biome, createMatch, MAP_SIZES, MapSize, MAPS, MapType, MatchConfig, Mode, PLAYER_COLORS, sizeForPlayers, SlotCfg } from '../sim/match.js';
+import { TILE } from '../sim/data.js';
 import { CIV_LIST, CIVS, CivId } from '../sim/civs.js';
 import { UNITS } from '../sim/data.js';
 import { saveSettings, settings, Settings } from './settings.js';
@@ -22,6 +23,9 @@ let slots: SlotCfg[] = loadSlots();
 let sizeSel = (store.get('size', '') || sizeForPlayers(slots.length)) as MapSize;
 if (!MAP_SIZES[sizeSel] || MAP_SIZES[sizeSel].players < slots.length) sizeSel = sizeForPlayers(slots.length);
 const maxPlayers = () => MAP_SIZES[sizeSel].players;
+let nextSeed = Math.floor(Math.random() * 99999); // la vista previa usa la misma semilla que la partida
+let mapOpen = false;
+const previewCache = new Map<string, string>();
 
 function loadSlots(): SlotCfg[] {
   try {
@@ -93,7 +97,7 @@ const swatch = (i: number) => `<button class="swatch ${i === color ? 'on' : ''}"
 const civOptions = (sel: CivId | 'random') => `<option value="random" ${sel === 'random' ? 'selected' : ''}>🎲 Al azar</option>` +
   CIV_LIST.map((c) => `<option value="${c}" ${sel === c ? 'selected' : ''}>${CIVS[c].emblem} ${CIVS[c].name}</option>`).join('');
 const teamOptions = (sel: number) => [0, 1, 2, 3, 4].map((t) => `<option value="${t}" ${sel === t ? 'selected' : ''}>${t ? 'Equipo ' + t : 'Sin equipo'}</option>`).join('');
-const difOptions = (sel: Difficulty) => (['easy', 'normal', 'hard'] as Difficulty[]).map((d) => `<option value="${d}" ${sel === d ? 'selected' : ''}>${DIFF_NAME[d]}</option>`).join('');
+const difOptions = (sel: Difficulty) => DIFF_LIST.map((d) => `<option value="${d}" ${sel === d ? 'selected' : ''}>${DIFF_NAME[d]}</option>`).join('');
 
 function civCard(c: CivId | 'random'): string {
   if (c === 'random') return `<div class="civcard"><b>🎲 Civilización al azar</b><small>Te toca una de las 10 al empezar.</small></div>`;
@@ -103,9 +107,61 @@ function civCard(c: CivId | 'random'): string {
     <p>Unidad única: <b>${UNITS[d.unique].name}</b> — ${UNITS[d.unique].desc.replace(/^Única? de los? [^.]+\. ?/, '')}</p></div>`;
 }
 
+const LAND: Record<Biome, string> = { templado: '#5f8f3e', desierto: '#c9a86a', nieve: '#dfe7ee', tropical: '#4c9a42', otono: '#8f8a3e' };
+/** Miniatura del mapa: genera la partida con la misma semilla y la dibuja en chiquito */
+function mapPreview(map: MapType): string {
+  const key = [map, sizeSel, nextSeed, biomeSel, JSON.stringify(slots)].join('|');
+  const hit = previewCache.get(key);
+  if (hit) return hit;
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: nextSeed, map, biome: biomeSel, size: sizeSel, players: slots.map((s) => ({ ...s })) });
+  const w = m.world, k = 2;
+  const c = document.createElement('canvas'); c.width = w.w * k; c.height = w.h * k;
+  const g = c.getContext('2d')!;
+  g.fillStyle = LAND[w.biome as Biome] ?? LAND.templado; g.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < w.terrain.length; i++) {
+    if (!w.terrain[i]) continue;
+    g.fillStyle = w.terrain[i] === 1 ? '#2d6ea8' : '#69a9d0';
+    g.fillRect((i % w.w) * k, ((i / w.w) | 0) * k, k, k);
+  }
+  for (const e of w.entities.values()) {
+    if (e.cat === 'unit') continue;
+    const col = e.cat === 'node'
+      ? ({ tree: w.biome === 'nieve' ? '#3f6b48' : '#2a4f22', goldmine: '#f4c430', stonemine: '#c8c8c8', berries: '#d6336c', fish: '' } as Record<string, string>)[e.type]
+      : e.type === 'stonewall' || e.type === 'wall' || e.type === 'gate' ? '#8a857c' : w.players[e.owner]?.color;
+    if (!col) continue;
+    g.fillStyle = col;
+    if (e.type === 'towncenter') { g.beginPath(); g.arc(e.x / TILE * k, e.y / TILE * k, 5, 0, 7); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke(); }
+    else g.fillRect(e.tx * k, e.ty * k, e.fw * k, e.fh * k);
+  }
+  const url = c.toDataURL();
+  previewCache.set(key, url);
+  return url;
+}
+/** Llena las miniaturas de a una para no trabar el menú */
+function fillPreviews() {
+  const imgs = [...menu.querySelectorAll<HTMLImageElement>('img[data-prev]')].filter((i) => !i.src);
+  let i = 0;
+  const step = () => {
+    const img = imgs[i++];
+    if (!img || !img.isConnected) return;
+    img.src = mapPreview(img.getAttribute('data-prev') as MapType);
+    setTimeout(step, 0);
+  };
+  setTimeout(step, 30);
+}
+const RANDOM_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#3d2e20"/><text x="32" y="44" font-size="34" text-anchor="middle">🎲</text></svg>');
+
 function showSetup() {
-  const mapsHtml = (['random', ...Object.keys(MAPS)] as (MapType | 'random')[]).map((k) =>
-    `<button class="opt ${k === mapSel ? 'on' : ''}" data-map="${k}"><b>${k === 'random' ? '🎲 Al azar' : MAPS[k as MapType].name}</b><small>${k === 'random' ? 'Sorpresa en cada partida' : MAPS[k as MapType].desc}</small></button>`).join('');
+  const mapCard = (k: MapType | 'random', big = false) => {
+    const name = k === 'random' ? '🎲 Al azar' : MAPS[k as MapType].name;
+    const desc = k === 'random' ? 'Sorpresa en cada partida' : MAPS[k as MapType].desc;
+    const img = k === 'random' ? `<img src="${RANDOM_IMG}" alt="">` : `<img data-prev="${k}" alt="">`;
+    return big
+      ? `<button class="mapdd" data-mapdd>${img}<div><b>${name}</b><small>${desc}</small></div><span class="caret">${mapOpen ? '▴' : '▾'}</span></button>`
+      : `<button class="mapcard ${k === mapSel ? 'on' : ''}" data-map="${k}">${img}<b>${name}</b><small>${desc}</small></button>`;
+  };
+  const mapsHtml = mapCard(mapSel, true) + (mapOpen ? `<div class="maplist">${(['random', ...Object.keys(MAPS)] as (MapType | 'random')[]).map((k) => mapCard(k)).join('')}</div>` : '')
+    + `<button class="chip reroll" data-reroll>🔄 Otra variante</button>`;
   const biomesHtml = (['random', ...Object.keys(BIOMES)] as (Biome | 'random')[]).map((k) =>
     `<button class="chip ${k === biomeSel ? 'on' : ''}" data-biome="${k}">${k === 'random' ? '🎲 Al azar' : BIOME_ICON[k as Biome] + ' ' + BIOMES[k as Biome]}</button>`).join('');
   const rows = slots.map((s, i) => `
@@ -126,13 +182,14 @@ function showSetup() {
         <button class="chip" data-preset="4v4">4 vs 4</button><button class="chip" data-preset="ffa">Todos contra todos</button>
       </div>
       <div class="slots">${rows}</div>
+      <div class="diff allai"><span>Todas las IA</span><div class="seg">${DIFF_LIST.map((d) => `<button data-alldif="${d}" class="${slots.slice(1).every((s) => (s.difficulty ?? difficulty) === d) ? 'on' : ''}">${DIFF_NAME[d]}</button>`).join('')}</div></div>
       ${slots.length < maxPlayers() ? '<button class="addai" data-add>➕ Agregar IA</button>' : `<p class="dim">Este tamaño de mapa admite hasta ${maxPlayers()} jugadores. Elegí uno más grande para sumar IAs.</p>`}
       ${sides.size < 2 ? '<p class="warn">Tiene que haber al menos dos bandos distintos.</p>' : ''}
     </section>
     <section><h3>Tu civilización</h3>${civCard(slots[0].civ)}</section>
     <section><h3>Tamaño del mapa</h3><div class="seg sizes">${(Object.keys(MAP_SIZES) as MapSize[]).map((k) =>
       `<button data-size="${k}" class="${k === sizeSel ? 'on' : ''}">${MAP_SIZES[k].name}<small>${MAP_SIZES[k].players} jug.</small></button>`).join('')}</div></section>
-    <section><h3>Mapa</h3><div class="opts">${mapsHtml}</div></section>
+    <section><h3>Mapa</h3><div class="mapsel">${mapsHtml}</div></section>
     <section><h3>Bioma</h3><div class="chips">${biomesHtml}</div></section>
     <div class="setup-actions"><button class="big ghost" data-back>Volver</button><button class="big" data-go ${sides.size < 2 ? 'disabled' : ''}>¡A jugar!</button></div>
   </div>`;
@@ -175,12 +232,17 @@ function showSetup() {
     const rm = t.closest('[data-rm]')?.getAttribute('data-rm');
     if (rm && slots.length > 2) { slots.splice(Number(rm), 1); saveSlots(); return showSetup(); }
     const mp = t.closest('[data-map]')?.getAttribute('data-map');
-    if (mp) { mapSel = mp as MapType; store.set('map', mp); return showSetup(); }
+    if (mp) { mapSel = mp as MapType; store.set('map', mp); mapOpen = false; return showSetup(); }
+    if (t.closest('[data-mapdd]')) { mapOpen = !mapOpen; return showSetup(); }
+    if (t.closest('[data-reroll]')) { nextSeed = Math.floor(Math.random() * 99999); return showSetup(); }
+    const ad = t.closest('[data-alldif]')?.getAttribute('data-alldif') as Difficulty | null;
+    if (ad) { difficulty = ad; store.set('dif', ad); for (const s of slots) if (s.ai) s.difficulty = ad; saveSlots(); return showSetup(); }
     const bi = t.closest('[data-biome]')?.getAttribute('data-biome');
     if (bi) { biomeSel = bi as Biome; store.set('biome', bi); return showSetup(); }
     if (t.closest('[data-back]')) return renderMenu();
-    if (t.closest('[data-go]') && sides.size >= 2) start({ mode: 'skirmish', difficulty, color, map: mapSel, biome: biomeSel, size: sizeSel, players: slots.map((s) => ({ ...s })), seed: Math.floor(Math.random() * 99999) });
+    if (t.closest('[data-go]') && sides.size >= 2) { const seed = nextSeed; nextSeed = Math.floor(Math.random() * 99999); start({ mode: 'skirmish', difficulty, color, map: mapSel, biome: biomeSel, size: sizeSel, players: slots.map((s) => ({ ...s })), seed }); }
   };
+  fillPreviews();
 }
 
 function showSettings() {

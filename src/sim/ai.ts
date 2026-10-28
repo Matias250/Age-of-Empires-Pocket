@@ -3,16 +3,24 @@ import { Age, BUILDINGS, BuildingType, isLandArmy, NODES, NodeType, Res, TECHS, 
 import { CIVS } from './civs.js';
 import { Entity, World } from './world.js';
 
-export type Difficulty = 'easy' | 'normal' | 'hard';
-export const DIFF_NAME: Record<Difficulty, string> = { easy: 'Fácil', normal: 'Normal', hard: 'Difícil' };
+export type Difficulty = 'novice' | 'easy' | 'normal' | 'hard';
+export const DIFF_NAME: Record<Difficulty, string> = { novice: 'Principiante', easy: 'Fácil', normal: 'Normal', hard: 'Difícil' };
+export const DIFF_LIST: Difficulty[] = ['novice', 'easy', 'normal', 'hard'];
 
 interface Profile {
   think: number; gather: number; maxVill: number; firstAttack: number; armyAttack: number;
   maxAge: Age; ageVills: [number, number, number]; ageTime: [number, number, number];
   towers: number; barracksAt: number; techs: TechType[];
   castle: boolean; university: boolean; monks: number; fish: number; warships: number; extraProd: boolean; siege: number;
+  /** tope de ejército (Principiante juega tranquilo) */
+  maxArmy?: number;
 }
 const PROFILES: Record<Difficulty, Profile> = {
+  // Para aprender: economía lenta, casi no ataca y nunca pasa de la Edad Media
+  novice: {
+    think: 4, gather: 0.6, maxVill: 10, firstAttack: 1080, armyAttack: 5, maxAge: 2, ageVills: [10, 99, 99], ageTime: [480, 99999, 99999],
+    towers: 0, barracksAt: 10, techs: [], castle: false, university: false, monks: 0, fish: 1, warships: 0, extraProd: false, siege: 0, maxArmy: 6,
+  },
   easy: {
     think: 3, gather: 0.8, maxVill: 16, firstAttack: 480, armyAttack: 7, maxAge: 3, ageVills: [12, 18, 99], ageTime: [150, 450, 99999],
     towers: 0, barracksAt: 9, techs: ['axe', 'forge'], castle: false, university: false, monks: 0, fish: 2, warships: 1, extraProd: false, siege: 1,
@@ -173,7 +181,7 @@ export class AI {
     if (vills >= P.barracksAt && !have('barracks')) this.construct('barracks', tc, 4, 12);
     else if (a >= 2 && !have('range')) this.construct('range', tc, 4, 12);
     else if (a >= 2 && P.techs.length > 2 && !have('blacksmith')) this.construct('blacksmith', tc, 4, 12);
-    else if (a >= 2 && this.diff !== 'easy' && !have('stable')) this.construct('stable', tc, 4, 13);
+    else if (a >= 2 && this.diff !== 'easy' && this.diff !== 'novice' && !have('stable')) this.construct('stable', tc, 4, 13);
     else if (a >= 2 && have('tower') < P.towers) this.construct('tower', tc, 3, 6);
     else if (a >= 3 && P.castle && !have('castle') && w.canAfford(this.p, w.buildingCost(this.p, 'castle'))) this.construct('castle', tc, 5, 13);
     else if (a >= 3 && !have('workshop') && this.time > P.firstAttack) this.construct('workshop', tc, 4, 13);
@@ -315,6 +323,7 @@ export class AI {
     const army0 = w.unitsOf(this.p).filter((u) => isLandArmy(u.type as UnitType)).length;
     const tr = army0 >= 6 && !this.findThreat() ? this.techReserve : {};
     const reserve = { food: ((ageCost.food ?? 0) || 50) + (tr.food ?? 0), gold: (ageCost.gold ?? 0) + (tr.gold ?? 0) };
+    if (army0 >= (this.prof.maxArmy ?? 999)) return this.armyOrders(tc);
     for (const b of w.buildingsOf(this.p, undefined, true)) {
       if (b.type === 'towncenter' || b.type === 'dock' || b.queue.length >= 2 || !BUILDINGS[b.type as BuildingType].trains) continue;
       const u = this.pickUnit(b);
@@ -323,7 +332,11 @@ export class AI {
       if (pl.res.food - (c.food ?? 0) < reserve.food || pl.res.gold - (c.gold ?? 0) < reserve.gold) continue;
       if (w.canAfford(this.p, c)) w.issue({ t: 'train', p: this.p, bid: b.id, u });
     }
+    this.armyOrders(tc);
+  }
 
+  private armyOrders(tc: Entity) {
+    const w = this.w;
     const army = w.unitsOf(this.p).filter((u) => isLandArmy(u.type as UnitType) || u.type === 'monk');
     const fighters = army.filter((u) => u.type !== 'monk');
     const threat = this.findThreat();

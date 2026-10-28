@@ -380,7 +380,7 @@ export class Renderer {
 
   // --------------------------------------------------------------- edificios
   /** Caja en 3/4: pared frontal + techo a dos aguas */
-  private box(x0: number, y0: number, s: number, wallH: number, wall: string, roof: string, opts: { stone?: boolean; flatRoof?: boolean } = {}) {
+  private box(x0: number, y0: number, s: number, wallH: number, wall: string, roof: string, opts: { stone?: boolean; flatRoof?: boolean; trim?: string; braces?: boolean } = {}) {
     const g = this.ctx;
     const top = y0 + s - wallH; // donde empieza la pared frontal
     const wx0 = x0 + 3, wx1 = x0 + s - 3, wb = y0 + s - 3;
@@ -401,14 +401,24 @@ export class Renderer {
     }
     g.stroke();
     if (!opts.stone) {
-      g.strokeStyle = 'rgba(70,45,25,0.55)'; g.lineWidth = 2;
+      // entramado: vigas de madera oscura y cruces de San Andrés
+      g.strokeStyle = '#5a3d22'; g.lineWidth = 2;
       g.beginPath();
       g.moveTo(wx0, top + 1); g.lineTo(wx1, top + 1);
       g.moveTo(wx0 + 1, top); g.lineTo(wx0 + 1, wb); g.moveTo(wx1 - 1, top); g.lineTo(wx1 - 1, wb);
+      const mid = (top + wb) / 2;
+      g.moveTo(wx0, mid); g.lineTo(wx1, mid);
+      if (opts.braces !== false && wx1 - wx0 > 40) { g.moveTo(wx0 + 2, wb - 4); g.lineTo(wx0 + 12, mid); g.moveTo(wx1 - 2, wb - 4); g.lineTo(wx1 - 12, mid); }
+      g.stroke();
+      // zócalo de piedra
+      g.fillStyle = '#9a958c'; g.fillRect(wx0 - 1, wb - 5, wx1 - wx0 + 2, 5);
+      g.strokeStyle = 'rgba(40,30,20,0.3)'; g.lineWidth = 0.8; g.beginPath();
+      for (let xx = wx0 + 5; xx < wx1; xx += 7) { g.moveTo(xx, wb - 5); g.lineTo(xx, wb); }
       g.stroke();
     }
     g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(wx1 - 7, top, 7, wb - top); // lado en sombra
-    g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(wx0, wb - 2, wx1 - wx0, 2); // zócalo
+    g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(wx0, wb - 2, wx1 - wx0, 2);
+    g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(wx0, top, wx1 - wx0, 4); // sombra del alero
     // techo
     if (opts.flatRoof) {
       g.fillStyle = roof; g.fillRect(x0 + 1, y0 + 4, s - 2, top - y0 - 2);
@@ -436,8 +446,11 @@ export class Renderer {
       g.fillStyle = 'rgba(255,255,255,0.07)';
       for (let yy = eave - 4; yy > ridgeY; yy -= 8) g.fillRect(x0, yy - 4, s, 2);
       g.restore();
-      g.strokeStyle = shade(roof, -0.35); g.lineWidth = 1.5;
+      // cumbrera (con el color del jugador como remate)
+      g.strokeStyle = opts.trim ?? shade(roof, -0.35); g.lineWidth = opts.trim ? 3 : 1.5;
       g.beginPath(); g.moveTo(L, ridgeY); g.lineTo(R, ridgeY); g.stroke();
+      g.strokeStyle = shade(roof, -0.4); g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(x0, eave); g.lineTo(L, ridgeY); g.moveTo(x0 + s, eave); g.lineTo(R, ridgeY); g.stroke();
       g.strokeStyle = shade(roof, -0.3); g.lineWidth = 1;
       g.beginPath(); g.moveTo(x0, eave); g.lineTo(x0 + s, eave); g.stroke();
     }
@@ -475,23 +488,52 @@ export class Renderer {
     const s = e.size * TILE, x0 = e.tx * TILE, y0 = e.ty * TILE;
     const done = e.progress >= 1;
     const cx = x0 + s / 2, bottom = y0 + s - 3;
-    const timber = '#d8c8a2', stone = '#a3a09a', stoneD = '#8c8984';
+    const timber = '#e2d3ae', stone = '#a3a09a', stoneD = '#8c8984';
+    const SHINGLE = '#8b5a3c', TERRA = '#a14e2e', SLATE = '#5c6670', WOODR = '#7d5a3a';
 
     if (t === 'farm') {
-      g.fillStyle = done ? '#7a5634' : '#8a7356';
-      g.fillRect(x0 + 2, y0 + 2, s - 4, s - 4);
-      g.fillStyle = 'rgba(0,0,0,0.12)';
-      const rows = Math.floor((s - 8) / 12.5), cols = Math.floor((s - 10) / 9.5);
-      for (let i = 0; i < rows; i++) g.fillRect(x0 + 4, y0 + 7 + i * 12.5, s - 8, 3);
-      if (done) {
-        const f = e.amount / (BUILDINGS.farm.food ?? 600);
-        g.fillStyle = f > 0.35 ? this.pal.crop : this.pal.cropRipe;
-        for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
-          const h = 2 + f * 3;
-          g.fillRect(x0 + 6 + j * 9.5, y0 + 8 + i * 12.5 - h, 2.5, h);
-        }
+      // parcela arada con surcos, trigo que se va cosechando hilera por hilera y cerco de madera
+      const fx0 = x0 + 3, fy0 = y0 + 3, fw = s - 6, fh = s - 6;
+      g.fillStyle = done ? '#6e4b2a' : '#86684a';
+      g.fillRect(fx0, fy0, fw, fh);
+      const rows = 6, rh = fh / rows;
+      for (let i = 0; i < rows; i++) {
+        g.fillStyle = 'rgba(255,230,190,0.10)'; g.fillRect(fx0, fy0 + i * rh, fw, rh * 0.45);
+        g.fillStyle = 'rgba(40,20,5,0.22)'; g.fillRect(fx0, fy0 + i * rh + rh * 0.7, fw, rh * 0.3);
       }
-      g.strokeStyle = shade(col, -0.1); g.lineWidth = 2; g.strokeRect(x0 + 2, y0 + 2, s - 4, s - 4);
+      if (done) {
+        const f = Math.max(0, e.amount / (BUILDINGS.farm.food ?? 600));
+        const full = Math.ceil(f * rows);
+        const ripe = this.pal.cropRipe, green = this.pal.crop;
+        const stalks = new Path2D(), heads = new Path2D();
+        g.fillStyle = 'rgba(214,180,110,0.55)';
+        for (let i = 0; i < rows; i++) {
+          const yy = fy0 + (i + 0.75) * rh;
+          if (i >= rows - full) {
+            // trigo en pie
+            const h = 5 + (i % 2);
+            for (let xx = fx0 + 2.5; xx < fx0 + fw - 1; xx += 3.2) {
+              const sway = Math.sin(time * 2 + xx * 0.3 + i) * 0.6;
+              stalks.moveTo(xx, yy); stalks.lineTo(xx + sway, yy - h);
+              heads.moveTo(xx + sway + 1.1, yy - h); heads.ellipse(xx + sway, yy - h, 1.1, 1.9, 0, 0, 7);
+            }
+          } else for (let xx = fx0 + 3; xx < fx0 + fw - 1; xx += 4) g.fillRect(xx, yy - 1.5, 1, 1.5); // rastrojo
+        }
+        g.strokeStyle = shade(green, -0.15); g.lineWidth = 1.1; g.stroke(stalks);
+        g.fillStyle = ripe; g.fill(heads);
+      }
+      // cerco
+      g.strokeStyle = '#7a5634'; g.lineWidth = 1.3;
+      g.strokeRect(fx0 - 1, fy0 - 1, fw + 2, fh + 2);
+      g.fillStyle = '#5d3f22';
+      for (let k = 0; k <= 4; k++) {
+        const px = fx0 - 1 + ((fw + 2) * k) / 4, py = fy0 - 1 + ((fh + 2) * k) / 4;
+        g.fillRect(px - 1, fy0 - 3, 2, 4); g.fillRect(px - 1, fy0 + fh - 1, 2, 4);
+        g.fillRect(fx0 - 3, py - 1, 4, 2); g.fillRect(fx0 + fw - 1, py - 1, 4, 2);
+      }
+      // banderín del dueño
+      g.strokeStyle = '#3a2f22'; g.lineWidth = 1; g.beginPath(); g.moveTo(fx0, fy0); g.lineTo(fx0, fy0 - 9); g.stroke();
+      g.fillStyle = col; g.beginPath(); g.moveTo(fx0, fy0 - 9); g.lineTo(fx0 + 6, fy0 - 7); g.lineTo(fx0, fy0 - 5); g.fill();
       return;
     }
     if (t === 'wall' || t === 'stonewall') {
@@ -508,9 +550,8 @@ export class Renderer {
 
     switch (t) {
       case 'house': {
-        const top = this.box(x0, y0, s, s * 0.48, timber, col);
-        g.strokeStyle = '#6b4a2a'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(x0 + 3, top + 1); g.lineTo(x0 + s - 3, top + 1); g.moveTo(cx - 9, top); g.lineTo(cx - 9, bottom); g.moveTo(cx + 9, top); g.lineTo(cx + 9, bottom); g.stroke();
+        const top = this.box(x0, y0, s, s * 0.48, timber, SHINGLE, { trim: col, braces: false });
+        g.fillStyle = '#7d6b5a'; g.fillRect(x0 + s - 14, y0 + 2, 6, 10); g.fillStyle = '#5a4a3c'; g.fillRect(x0 + s - 15, y0 + 1, 8, 2);
         this.door(cx, bottom, 8, 14);
         this.windowAt(x0 + 7, top + 6); this.windowAt(x0 + s - 13, top + 6);
         break;
@@ -520,7 +561,7 @@ export class Renderer {
         g.fillStyle = stone; g.fillRect(x0 + 2, y0 + s * 0.5, s - 4, s * 0.5 - 2);
         g.fillStyle = stoneD; g.fillRect(x0 + s - 12, y0 + s * 0.5, 10, s * 0.5 - 2);
         this.crenels(x0 + 3, y0 + s * 0.5, s - 6, stone);
-        const top = this.box(x0 + 10, y0 + 2, s - 20, s * 0.32, timber, col);
+        const top = this.box(x0 + 10, y0 + 2, s - 20, s * 0.32, timber, TERRA, { trim: col });
         g.strokeStyle = '#6b4a2a'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 + 13, top + 1); g.lineTo(x0 + s - 13, top + 1); g.stroke();
         this.windowAt(x0 + 18, top + 7); this.windowAt(x0 + s - 24, top + 7); this.windowAt(cx - 3, top + 7);
         this.door(cx, bottom, 14, 20);
@@ -529,7 +570,8 @@ export class Renderer {
         break;
       }
       case 'barracks': case 'range': case 'stable': case 'workshop': {
-        const top = this.box(x0, y0, s, s * 0.46, t === 'workshop' ? '#b9a17a' : timber, col, { stone: t === 'barracks' });
+        const top = this.box(x0, y0, s, s * 0.46, t === 'workshop' ? '#c9b18a' : timber, t === 'barracks' ? SLATE : WOODR, { stone: t === 'barracks', trim: col });
+        this.banner(x0 + s - 6, top - 2, col, time, 14);
         this.door(cx, bottom, t === 'stable' || t === 'workshop' ? 22 : 14, t === 'stable' || t === 'workshop' ? 22 : 18);
         // emblema en un escudo
         const ex = x0 + 16, ey = top + 14;
@@ -546,7 +588,9 @@ export class Renderer {
       case 'mill': {
         g.fillStyle = stone; g.fillRect(cx - 10, y0 + 18, 20, s - 21);
         g.fillStyle = stoneD; g.fillRect(cx + 4, y0 + 18, 6, s - 21);
-        g.fillStyle = col; g.beginPath(); g.moveTo(cx - 13, y0 + 20); g.lineTo(cx, y0 + 6); g.lineTo(cx + 13, y0 + 20); g.closePath(); g.fill();
+        g.fillStyle = WOODR; g.beginPath(); g.moveTo(cx - 13, y0 + 20); g.lineTo(cx, y0 + 6); g.lineTo(cx + 13, y0 + 20); g.closePath(); g.fill();
+        g.fillStyle = shade(WOODR, -0.25); g.beginPath(); g.moveTo(cx, y0 + 6); g.lineTo(cx + 13, y0 + 20); g.lineTo(cx + 3, y0 + 20); g.closePath(); g.fill();
+        g.fillStyle = col; g.fillRect(cx - 10, y0 + 30, 20, 3);
         this.door(cx, bottom, 8, 12);
         const a = time * (done ? 1.6 : 0);
         g.strokeStyle = '#efe7d5'; g.lineWidth = 3;
@@ -557,8 +601,9 @@ export class Renderer {
       case 'lumbercamp': case 'miningcamp': {
         // cobertizo abierto
         g.fillStyle = '#6b4a2a'; g.fillRect(x0 + 6, y0 + 22, 3, s - 25); g.fillRect(x0 + s - 9, y0 + 22, 3, s - 25);
-        g.fillStyle = col; g.beginPath(); g.moveTo(x0 + 2, y0 + 26); g.lineTo(x0 + 10, y0 + 8); g.lineTo(x0 + s - 2, y0 + 8); g.lineTo(x0 + s - 2, y0 + 26); g.closePath(); g.fill();
-        g.fillStyle = shade(col, -0.25); g.fillRect(x0 + 2, y0 + 24, s - 4, 3);
+        g.fillStyle = WOODR; g.beginPath(); g.moveTo(x0 + 2, y0 + 26); g.lineTo(x0 + 10, y0 + 8); g.lineTo(x0 + s - 2, y0 + 8); g.lineTo(x0 + s - 2, y0 + 26); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 0.9; g.beginPath(); for (let yy = y0 + 12; yy < y0 + 26; yy += 4) { g.moveTo(x0 + 4, yy); g.lineTo(x0 + s - 2, yy); } g.stroke();
+        g.fillStyle = col; g.fillRect(x0 + 2, y0 + 24, s - 4, 3);
         if (t === 'lumbercamp') {
           g.fillStyle = '#8d6e4a';
           for (let r = 0; r < 2; r++) for (let i = 0; i < 4 - r; i++) { g.beginPath(); g.arc(x0 + 18 + i * 9 + r * 4.5, bottom - 5 - r * 7, 4.5, 0, 7); g.fill(); }
@@ -571,7 +616,7 @@ export class Renderer {
         break;
       }
       case 'blacksmith': {
-        const top = this.box(x0, y0, s, s * 0.5, stone, col, { stone: true });
+        const top = this.box(x0, y0, s, s * 0.5, stone, SLATE, { stone: true, trim: col });
         g.fillStyle = stoneD; g.fillRect(x0 + s - 16, y0 - 2, 9, 18);
         if (done && Math.random() < 0.06) this.fx.push({ kind: 'smoke', x: x0 + s - 11, y: y0 - 4, t: time, life: 2 });
         g.fillStyle = '#ff9a3c'; g.fillRect(x0 + 8, top + 10, 10, 8);
@@ -590,9 +635,10 @@ export class Renderer {
         break;
       }
       case 'monastery': {
-        const top = this.box(x0, y0 + 6, s, s * 0.42, '#efe8dc', col);
+        const top = this.box(x0, y0 + 6, s, s * 0.42, '#efe8dc', TERRA, { trim: col, stone: true });
         g.fillStyle = '#e6dccb'; g.fillRect(x0 + s - 26, y0 - 8, 18, s * 0.6);
-        g.fillStyle = col; g.beginPath(); g.moveTo(x0 + s - 29, y0 - 6); g.lineTo(x0 + s - 17, y0 - 20); g.lineTo(x0 + s - 5, y0 - 6); g.closePath(); g.fill();
+        g.fillStyle = TERRA; g.beginPath(); g.moveTo(x0 + s - 29, y0 - 6); g.lineTo(x0 + s - 17, y0 - 20); g.lineTo(x0 + s - 5, y0 - 6); g.closePath(); g.fill();
+        g.fillStyle = col; g.fillRect(x0 + s - 26, y0 - 6, 18, 2.5);
         g.fillStyle = '#c9a227'; g.beginPath(); g.arc(x0 + s - 17, y0 + 4, 4, 0, 7); g.fill();
         this.door(cx - 8, bottom, 12, 18);
         this.windowAt(x0 + 10, top + 10);
@@ -623,16 +669,18 @@ export class Renderer {
         g.strokeStyle = 'rgba(60,40,20,0.45)'; g.lineWidth = 1;
         for (let xx = x0 + 8; xx < x0 + s - 2; xx += 6) { g.beginPath(); g.moveTo(xx, y0 + 12); g.lineTo(xx, y0 + s - 8); g.stroke(); }
         g.fillStyle = timber; g.fillRect(x0 + 6, y0 + 4, 24, 15);
-        g.fillStyle = col; g.beginPath(); g.moveTo(x0 + 3, y0 + 6); g.lineTo(x0 + 18, y0 - 5); g.lineTo(x0 + 33, y0 + 6); g.closePath(); g.fill();
+        g.fillStyle = SHINGLE; g.beginPath(); g.moveTo(x0 + 3, y0 + 6); g.lineTo(x0 + 18, y0 - 5); g.lineTo(x0 + 33, y0 + 6); g.closePath(); g.fill();
+        g.fillStyle = col; g.fillRect(x0 + 6, y0 + 5, 24, 2);
         this.door(x0 + 18, y0 + 19, 7, 10);
         g.strokeStyle = '#c9b48a'; g.lineWidth = 1.2; g.beginPath(); g.arc(x0 + s - 14, y0 + s - 16, 4, 0, 7); g.stroke();
         this.banner(x0 + s - 6, y0 + 14, col, time, 16);
         break;
       }
       case 'university': {
-        const top = this.box(x0, y0 + 6, s, s * 0.45, '#e6dcc6', col, { stone: true });
+        const top = this.box(x0, y0 + 6, s, s * 0.45, '#e6dcc6', SLATE, { stone: true, trim: col });
         g.fillStyle = '#d8ccb0'; g.beginPath(); g.arc(cx, y0 + 12, 13, Math.PI, 0); g.fill();
-        g.fillStyle = shade(col, -0.1); g.beginPath(); g.arc(cx, y0 + 12, 13, Math.PI, Math.PI * 1.5); g.lineTo(cx, y0 + 12); g.fill();
+        g.fillStyle = '#b9ad92'; g.beginPath(); g.arc(cx, y0 + 12, 13, Math.PI, Math.PI * 1.5); g.lineTo(cx, y0 + 12); g.fill();
+        g.fillStyle = col; g.fillRect(cx - 13, y0 + 11, 26, 2.5);
         g.fillStyle = '#efe7d5'; for (let i = 0; i < 4; i++) g.fillRect(x0 + 12 + i * 20, top + 4, 5, s * 0.45 - 8);
         this.door(cx, bottom, 12, 18);
         g.fillStyle = '#c9a227'; g.beginPath(); g.arc(cx, y0 - 2, 2.5, 0, 7); g.fill();
@@ -1124,25 +1172,77 @@ export class Renderer {
       g.fillStyle = '#9e9e9e'; g.beginPath(); g.arc(x - flip * 14, y - 12, 3, 0, 7); g.fill();
       return;
     }
+    const since = (this.w.tick - e.lastAtk) / 20;
+    const spoked = (wx: number, wy: number, r: number, rot: number) => {
+      g.fillStyle = '#3e2a1a'; g.beginPath(); g.arc(wx, wy, r, 0, 7); g.fill();
+      g.fillStyle = '#7a5634'; g.beginPath(); g.arc(wx, wy, r - 1.6, 0, 7); g.fill();
+      g.strokeStyle = '#3e2a1a'; g.lineWidth = 1.1; g.beginPath();
+      for (let k = 0; k < 4; k++) { const a = rot + (k * Math.PI) / 4; g.moveTo(wx + Math.cos(a) * (r - 1.5), wy + Math.sin(a) * (r - 1.5)); g.lineTo(wx - Math.cos(a) * (r - 1.5), wy - Math.sin(a) * (r - 1.5)); }
+      g.stroke();
+      g.fillStyle = '#9e9e9e'; g.beginPath(); g.arc(wx, wy, 1.6, 0, 7); g.fill();
+    };
+    const roll = e.path.length ? time * 5 : 0;
     if (t === 'bombard') {
-      wheel(x - 6, y + 4, 6);
-      g.fillStyle = '#4a4a4a'; g.save(); g.translate(x, y - 2); g.scale(flip, 1);
-      g.fillRect(-10, -4, 26, 8); g.fillStyle = '#2b2b2b'; g.fillRect(14, -5, 4, 10);
-      g.fillStyle = col; g.fillRect(-10, -4, 4, 8);
+      // cañón de bronce sobre cureña de dos ruedas, con retroceso y humo al disparar
+      const recoil = since >= 0 && since < 0.35 ? Math.sin((since / 0.35) * Math.PI) * 3.5 : 0;
+      g.save(); g.translate(x, y); g.scale(flip, 1);
+      // cureña y contera apoyada en el suelo
+      g.fillStyle = '#5d4030';
+      g.beginPath(); g.moveTo(-18 - recoil, 6); g.lineTo(-15 - recoil, 3); g.lineTo(4 - recoil, -3); g.lineTo(6 - recoil, 1); g.closePath(); g.fill();
+      g.strokeStyle = '#3e2a1a'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(-14 - recoil, 3.5); g.lineTo(3 - recoil, -1.5); g.stroke();
+      g.fillStyle = col; g.fillRect(-12 - recoil, 1, 6, 2.5);
+      // caño
+      g.save(); g.translate(-recoil, -5); g.rotate(-0.12);
+      const grad = g.createLinearGradient(0, -5, 0, 5); grad.addColorStop(0, '#d9a75a'); grad.addColorStop(0.45, '#b07a35'); grad.addColorStop(1, '#6e4a1f');
+      g.fillStyle = grad;
+      g.beginPath(); g.moveTo(-10, -4.5); g.lineTo(16, -3.6); g.lineTo(16, 3.6); g.lineTo(-10, 4.5); g.arc(-10, 0, 4.5, Math.PI / 2, Math.PI * 1.5); g.closePath(); g.fill();
+      g.fillStyle = '#8a5d25'; for (const bx of [-6, 2, 10]) g.fillRect(bx, -4.3, 1.8, 8.6);
+      g.fillStyle = '#c99752'; g.fillRect(15, -4.6, 3, 9.2);
+      g.fillStyle = '#1a1208'; g.beginPath(); g.ellipse(18, 0, 1.2, 3, 0, 0, 7); g.fill();
+      if (since >= 0 && since < 0.15) { g.fillStyle = '#ffd36b'; g.beginPath(); g.moveTo(18, -3); g.lineTo(27, 0); g.lineTo(18, 3); g.fill(); }
       g.restore();
+      spoked(-2 - recoil, 4, 7, roll);
+      g.restore();
+      if (since >= 0 && since < 0.05 && Math.random() < 0.9) this.fx.push({ kind: 'smoke', x: x + flip * 20, y: y - 8, t: time, life: 1.2 });
       return;
     }
     if (t === 'trebuchet') {
-      g.fillStyle = '#6d4c2e'; g.fillRect(x - 14, y + 2, 28, 5);
-      g.strokeStyle = '#7a5634'; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(x - 10, y + 3); g.lineTo(x, y - 20); g.lineTo(x + 10, y + 3); g.stroke();
-      const swing = e.cooldown > 6 ? -0.9 : 0.6;
-      g.strokeStyle = '#8d6e4a'; g.lineWidth = 2.5;
-      g.beginPath(); g.moveTo(x - Math.cos(swing) * 18 * flip, y - 20 + Math.sin(swing) * 14); g.lineTo(x + Math.cos(swing) * 10 * flip, y - 20 - Math.sin(swing) * 10); g.stroke();
-      g.fillStyle = '#5d5d5d'; g.fillRect(x + Math.cos(swing) * 10 * flip - 4, y - 20 - Math.sin(swing) * 10, 8, 7);
-      g.fillStyle = col; g.fillRect(x - 14, y + 2, 28, 2);
-      wheel(x - 11, y + 8, 3); wheel(x + 11, y + 8, 3);
-      void time;
+      // fundíbulo de contrapeso: torre en A, brazo largo con honda y caja de piedras
+      const cocked = Math.PI - 0.45, fired = -1.0;
+      let th = cocked;
+      if (since >= 0 && since < 0.45) { const k = since / 0.45; th = cocked + (fired - cocked) * (1 - Math.pow(1 - k, 3)); }
+      else if (since >= 0.45 && since < 2.2) { const k = (since - 0.45) / 1.75; th = fired + (cocked - fired) * k * k; }
+      g.save(); g.translate(x, y); g.scale(flip, 1);
+      // base
+      g.fillStyle = '#5d4030'; g.fillRect(-18, 2, 36, 5);
+      g.fillStyle = '#4e351c'; g.fillRect(-18, 2, 36, 1.5);
+      g.fillStyle = col; g.fillRect(-12, 4, 24, 2);
+      // torres en A (la de atrás más oscura)
+      const px = 0, py = -24;
+      g.strokeStyle = '#5a3d22'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(-11, 3); g.lineTo(px - 1, py); g.lineTo(9, 3); g.stroke();
+      g.strokeStyle = '#7a5634'; g.lineWidth = 3.2;
+      g.beginPath(); g.moveTo(-12, 4); g.lineTo(px, py + 1); g.lineTo(10, 4); g.moveTo(-6, -8); g.lineTo(5, -8); g.stroke();
+      // brazo
+      const L = 30, S = 9;
+      const ex = px + Math.cos(th) * L, ey = py + Math.sin(th) * L;
+      const sx = px - Math.cos(th) * S, sy = py - Math.sin(th) * S;
+      g.strokeStyle = '#8d6e4a'; g.lineWidth = 3; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(sx, sy); g.lineTo(ex, ey); g.stroke();
+      // contrapeso colgando
+      g.strokeStyle = '#3e2a1a'; g.lineWidth = 1; g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx, sy + 4); g.stroke();
+      g.fillStyle = '#5d4037'; g.fillRect(sx - 5, sy + 4, 10, 9);
+      g.fillStyle = '#8e8a85'; g.fillRect(sx - 4, sy + 5, 8, 3);
+      g.strokeStyle = '#3e2a1a'; g.lineWidth = 0.8; g.strokeRect(sx - 5, sy + 4, 10, 9);
+      // honda con la piedra (solo cargado)
+      if (since < 0 || since > 1.6) {
+        g.strokeStyle = '#c9b48a'; g.lineWidth = 0.9;
+        g.beginPath(); g.moveTo(ex, ey); g.lineTo(ex + 6, Math.min(5, ey + 7)); g.stroke();
+        g.fillStyle = '#8e8a85'; g.beginPath(); g.arc(ex + 6, Math.min(5, ey + 7), 2.6, 0, 7); g.fill();
+      }
+      g.fillStyle = '#3e2a1a'; g.beginPath(); g.arc(px, py, 2, 0, 7); g.fill();
+      spoked(-13, 8, 3.5, roll); spoked(13, 8, 3.5, roll);
+      g.restore();
     }
   }
 

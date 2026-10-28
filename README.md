@@ -3,7 +3,7 @@
 Juego de estrategia en tiempo real inspirado en los clásicos del género (aldeanos, recursos, eras, ejércitos),
 pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 
-> Prototipo jugable v0.5 — arte y código originales.
+> Prototipo jugable v0.6 — arte y código originales.
 
 ## Qué incluye
 
@@ -27,7 +27,9 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 - **15 investigaciones:** Herrería (Forja, Cota de malla, Emplumado, Barda), Universidad (Albañilería, Arquitectura, Química,
   Balística, Matacanes, Ingeniería de asedio) y economía (Telar, Carretilla, Hacha doble, Arado, Minería). Química desbloquea la pólvora.
 - **Agua y barcos:** pesca con barcos, batallas navales, barcos que bombardean la costa.
-- 7 mapas (Continental, Río, Lagos, Bosque cerrado, Oasis, Mediterráneo y Arena, donde cada reino arranca amurallado con 2 torres y una puerta), 4 tamaños (Diminuto, Chico, Mediano, Grande) y 5 biomas (Templado, Desierto, Nieve, Tropical, Otoño).
+- 10 mapas (Continental, Río, Lagos, Bosque cerrado, Oasis, Mediterráneo, Archipiélago, Costas, Canales y Arena, donde cada reino arranca amurallado con 2 torres y una puerta), elegidos desde un desplegable con miniatura; 4 tamaños (Diminuto 64, Chico 80, Mediano 94, Grande 104 casillas) y 5 biomas.
+- **4 dificultades de IA:** Principiante (para aprender: casi no ataca), Fácil, Normal y Difícil.
+- Botón 🗑️ para eliminar unidades o destruir edificios propios; colas de hasta 10 unidades; ➕ En cola también al construir.
 - Niebla de guerra, minimapa, puntos de reunión, colas de entrenamiento.
 - **Órdenes en cola** (como Shift): botón "➕ En cola" para encadenar construcciones, movimientos y recolección.
 - **Posturas** por tropa: Agresiva (persigue), Neutral (defiende su zona y vuelve) y Pasiva (no ataca).

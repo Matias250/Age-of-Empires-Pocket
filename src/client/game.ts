@@ -15,6 +15,7 @@ export class Game {
   world: World;
   me: number;
   cam: Camera = { x: 0, y: 0, zoom: 1 };
+  placedInQueue = 0;
   sel: number[] = [];
   mode: InputMode = 'normal';
   placing: BuildingType | null = null;
@@ -369,7 +370,13 @@ export class Game {
     this.world.issue({ t: 'build', p: this.me, ids: vills, b: this.placing, tx: this.ghost.tx, ty: this.ghost.ty, vertical: this.ghostVertical, queue: this.queuing });
     const [fw, fh] = this.world.footprint(this.placing, this.ghostVertical);
     this.mark((this.ghost.tx + fw / 2) * TILE, (this.ghost.ty + fh / 2) * TILE, '#7CFC8A');
-    if (this.queuing) this.hud.toast('Agregado a la cola');
+    if (this.queuing) {
+      // como Shift en el original: seguís ubicando el mismo edificio hasta tocar "Listo"
+      this.hud.toast('Agregado a la cola · ubicá otro o tocá Listo');
+      this.placedInQueue++;
+      this.ghost = { tx: this.ghost.tx + fw, ty: this.ghost.ty };
+      return;
+    }
     this.placing = null; this.ghost = null;
   }
 

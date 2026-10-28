@@ -56,27 +56,29 @@ function preset(kind: '1v1' | '2v2' | '4v4' | 'ffa', myCiv: CivId | 'random' = '
 
 function renderMenu() {
   menu.hidden = false;
+  const storyN = CAMPAIGNS.reduce((a, c) => a + campaignCount(c), 0);
   menu.innerHTML = `
-  <div class="menu-inner">
-    <div class="logo">
-      <div class="crest">⚜️</div>
-      <h1>Imperios <span>Rápidos</span></h1>
-      <p>Estrategia en tiempo real · 15 civilizaciones · 25 historias</p>
+  <div class="home">
+    <button class="corner left" data-m="howto" aria-label="¿Cómo se juega?">❓</button>
+    <button class="corner right" data-m="settings" aria-label="Configuración">⚙️</button>
+    <div class="home-top">
+      <div class="logo">
+        <div class="crest">⚜️</div>
+        <h1>Imperios <span>Rápidos</span></h1>
+        <p>15 civilizaciones · 25 historias</p>
+      </div>
+      <div class="home-color"><span>Tu color</span><div class="swatches">${PLAYER_COLORS.map((_, i) => swatch(i)).join('')}</div></div>
     </div>
-    <div class="modes">
-      <button class="mode" data-m="stories"><i>🗺️</i><div><b>Historias</b><small>7 campañas · 25 escenarios · ${CAMPAIGNS.reduce((a, c) => a + campaignCount(c), 0)}/25 completados</small></div></button>
-      <button class="mode" data-m="tutorial"><i>📜</i><div><b>Tutorial</b><small>Aprendé lo básico · 10 minutos</small></div></button>
-      <button class="mode" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza</b><small>1 contra 1, cooperativo con aliados IA o hasta 8 jugadores</small></div></button>
-      <button class="mode" data-m="logros"><i>🏅</i><div><b>Logros · ${achCount()}/${ACHIEVEMENTS.length}</b><small>Desbloquean 5 civilizaciones nuevas</small></div></button>
-      <button class="mode" data-m="civs"><i>🏛️</i><div><b>Civilizaciones</b><small>Bonificaciones y unidad única de cada una</small></div></button>
-      <button class="mode soon" data-m="ranked" disabled><i>🏆</i><div><b>Competitivo online</b><small>Próximamente · partidas clasificatorias</small></div></button>
+    <div class="home-main">
+      <button class="hbig" data-m="stories"><i>🗺️</i><div><b>Historias</b><small>${storyN}/25 escenarios</small></div></button>
+      <button class="hbig" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza</b><small>Contra la IA, hasta 8 jugadores</small></div></button>
+      <div class="htiles">
+        <button class="htile" data-m="tutorial"><i>📜</i><b>Tutorial</b></button>
+        <button class="htile" data-m="logros"><i>🏅</i><b>Logros ${achCount()}/${ACHIEVEMENTS.length}</b></button>
+        <button class="htile" data-m="civs"><i>🏛️</i><b>Civilizaciones</b></button>
+        <button class="htile soon" disabled><i>🏆</i><b>Online</b><small>Pronto</small></button>
+      </div>
     </div>
-    <div class="diff">
-      <span>Tu color</span>
-      <div class="swatches">${PLAYER_COLORS.map((_, i) => swatch(i)).join('')}</div>
-    </div>
-    <div class="links"><button class="howto" data-m="howto">¿Cómo se juega?</button><button class="howto" data-m="settings">⚙️ Configuración</button></div>
-    <div class="rotate">📱↻ Girá el teléfono para jugar mejor</div>
   </div>`;
   menu.onchange = null;
   menu.onclick = (e) => {

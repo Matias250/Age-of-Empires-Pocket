@@ -1,6 +1,6 @@
 // Punto de entrada: menú principal y arranque de partidas.
 import { DIFF_LIST, DIFF_NAME, Difficulty } from '../sim/ai.js';
-import { BIOMES, Biome, createMatch, MAP_SIZES, MapSize, MAPS, MapType, MatchConfig, Mode, PLAYER_COLORS, sizeForPlayers, SlotCfg } from '../sim/match.js';
+import { BIOMES, Biome, createMatch, START_MODES, StartMode, MAP_SIZES, MapSize, MAPS, MapType, MatchConfig, Mode, PLAYER_COLORS, sizeForPlayers, SlotCfg } from '../sim/match.js';
 import { TILE } from '../sim/data.js';
 import { CIV_LIST, CIVS, CivId } from '../sim/civs.js';
 import { UNITS } from '../sim/data.js';
@@ -25,6 +25,8 @@ if (!MAP_SIZES[sizeSel] || MAP_SIZES[sizeSel].players < slots.length) sizeSel = 
 const maxPlayers = () => MAP_SIZES[sizeSel].players;
 let nextSeed = Math.floor(Math.random() * 99999); // la vista previa usa la misma semilla que la partida
 let mapOpen = false;
+let startSel = store.get('start', 'normal') as StartMode;
+if (!START_MODES[startSel]) startSel = 'normal';
 const previewCache = new Map<string, string>();
 
 function loadSlots(): SlotCfg[] {
@@ -176,6 +178,8 @@ function showSetup() {
   const sides = new Set(slots.map((s, i) => (s.team > 0 ? s.team : 100 + i)));
   menu.innerHTML = `<div class="menu-inner setup">
     <h2>⚔️ Escaramuza</h2>
+    <section><h3>Modo de juego</h3><div class="startmodes">${(Object.keys(START_MODES) as StartMode[]).map((k) =>
+      `<button class="opt ${k === startSel ? 'on' : ''}" data-start="${k}"><b>${k === 'imperial' ? '👑 ' : '🌾 '}${START_MODES[k].name}</b><small>${START_MODES[k].desc}</small></button>`).join('')}</div></section>
     <section><h3>Jugadores (${slots.length}/${maxPlayers()})</h3>
       <div class="presets">
         <button class="chip" data-preset="1v1">1 vs 1</button><button class="chip" data-preset="2v2">2 vs 2</button>
@@ -233,6 +237,8 @@ function showSetup() {
     if (rm && slots.length > 2) { slots.splice(Number(rm), 1); saveSlots(); return showSetup(); }
     const mp = t.closest('[data-map]')?.getAttribute('data-map');
     if (mp) { mapSel = mp as MapType; store.set('map', mp); mapOpen = false; return showSetup(); }
+    const sm = t.closest('[data-start]')?.getAttribute('data-start') as StartMode | null;
+    if (sm) { startSel = sm; store.set('start', sm); return showSetup(); }
     if (t.closest('[data-mapdd]')) { mapOpen = !mapOpen; return showSetup(); }
     if (t.closest('[data-reroll]')) { nextSeed = Math.floor(Math.random() * 99999); return showSetup(); }
     const ad = t.closest('[data-alldif]')?.getAttribute('data-alldif') as Difficulty | null;
@@ -240,7 +246,7 @@ function showSetup() {
     const bi = t.closest('[data-biome]')?.getAttribute('data-biome');
     if (bi) { biomeSel = bi as Biome; store.set('biome', bi); return showSetup(); }
     if (t.closest('[data-back]')) return renderMenu();
-    if (t.closest('[data-go]') && sides.size >= 2) { const seed = nextSeed; nextSeed = Math.floor(Math.random() * 99999); start({ mode: 'skirmish', difficulty, color, map: mapSel, biome: biomeSel, size: sizeSel, players: slots.map((s) => ({ ...s })), seed }); }
+    if (t.closest('[data-go]') && sides.size >= 2) { const seed = nextSeed; nextSeed = Math.floor(Math.random() * 99999); start({ mode: 'skirmish', difficulty, color, map: mapSel, biome: biomeSel, size: sizeSel, start: startSel, players: slots.map((s) => ({ ...s })), seed }); }
   };
   fillPreviews();
 }
@@ -288,7 +294,7 @@ function showHowTo() {
       <li>Hacé 🏠 casas para crecer y avanzá por las 4 edades desde el 🏰 Centro Urbano: <b>Oscura → Media → Castillos → Imperial</b>.</li>
       <li>Cada civilización tiene bonificaciones propias y una <b>unidad única</b> que se entrena en el 🏯 Castillo.</li>
       <li><b>Piedra, papel o tijera:</b> lanceros 🔱 &gt; caballería 🐎 &gt; arqueros 🏹 &gt; infantería 🗡️; los escaramuzadores cazan arqueros. Arietes y fundíbulos rompen edificios.</li>
-      <li>El ⚓ Muelle va en el agua tocando la costa: entrena barcos pesqueros, galeones, barcos de fuego y galeones cañoneros.</li>
+      <li>El ⚓ Muelle va en el agua tocando la costa: entrena barcos pesqueros, galeones, barcos incendiarios y galeones cañoneros.</li>
       <li>La 🎓 Universidad investiga Albañilería, Química (desbloquea la pólvora), Balística y más.</li>
       <li>En computadora: clic izquierdo selecciona, clic derecho ordena, arrastrar selecciona por área, flechas mueven la cámara.</li>
     </ul>
@@ -316,7 +322,7 @@ window.addEventListener('start-match', (e) => start((e as CustomEvent<MatchConfi
 
 // Modo de prueba: ?demo=coop&dif=hard arranca directo
 const q = new URLSearchParams(location.search);
-if (q.get('demo')) start({ mode: q.get('demo') as Mode, difficulty: (q.get('dif') as Difficulty) || 'normal', seed: Number(q.get('seed') || 1),
+if (q.get('demo')) start({ start: (q.get('start') as StartMode) || 'normal', mode: q.get('demo') as Mode, difficulty: (q.get('dif') as Difficulty) || 'normal', seed: Number(q.get('seed') || 1),
   map: (q.get('map') as MapType) || 'continental', biome: (q.get('biome') as Biome) || 'templado', color: Number(q.get('color') || 0) });
 else renderMenu();
 

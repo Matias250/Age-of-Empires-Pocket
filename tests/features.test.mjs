@@ -175,3 +175,17 @@ test('borrar unidades y edificios propios; cola de 10', () => {
   w.step();
   assert.equal(tc.queue.length, 10);
 });
+
+test('Combate imperial: edad 4, 2000 de recursos, mejoras listas y la partida termina', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 6, map: 'continental', biome: 'templado', start: 'imperial', players: [
+    { ai: true, civ: 'random', team: 1, color: 0, difficulty: 'easy' }, { ai: true, civ: 'random', team: 2, color: 1, difficulty: 'hard' }] });
+  const w = m.world;
+  for (const p of w.players) {
+    assert.equal(p.age, 4); assert.equal(p.res.gold, 2000);
+    assert.equal(p.techs.size >= Object.keys(TECHS).length, true);
+  }
+  assert.equal(w.unitsOf(0, 'villager')[0].maxHp >= 40, true);
+  for (let i = 0; i < 1500 * TICK_RATE && w.winnerTeam < 0; i++) { for (const ai of m.ais) ai.update(); w.step(); w.events.length = 0; }
+  console.log('imperial: ganador', w.winnerTeam, 'min', (w.tick / TICK_RATE / 60).toFixed(1));
+  assert.equal(w.winnerTeam, 2);
+});

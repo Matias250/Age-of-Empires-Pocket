@@ -775,6 +775,15 @@ export class World implements Grid {
     }
   }
 
+  /** Otorga una investigación sin costo ni puntos (modo Combate imperial) */
+  grantTech(p: number, t: TechType) {
+    const pl = this.players[p];
+    if (pl.techs.has(t)) return;
+    pl.techs.add(t);
+    if (t === 'masonry' || t === 'architecture') for (const b of this.buildingsOf(p)) { b.maxHp = Math.round(b.maxHp * 1.1); b.hp = b.maxHp; }
+    if (t === 'loom') for (const v of this.unitsOf(p, 'villager')) { v.maxHp += 15; v.hp += 15; }
+  }
+
   private finishTech(p: number, t: TechType) {
     const pl = this.players[p];
     pl.techs.add(t);

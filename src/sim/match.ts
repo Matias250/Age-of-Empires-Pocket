@@ -1,5 +1,5 @@
 // Creación de partidas: mapa, jugadores, equipos, civilizaciones e IAs.
-import { NodeType } from './data.js';
+import { NodeType, TECHS, TechType } from './data.js';
 import { AI, Difficulty } from './ai.js';
 import { World } from './world.js';
 import { findPath } from './path.js';
@@ -8,6 +8,11 @@ import { CIV_LIST, CIVS, CivId } from './civs.js';
 
 export type Mode = 'skirmish' | 'coop' | 'tutorial' | 'aivsai';
 export type MapType = 'continental' | 'rio' | 'lagos' | 'bosque' | 'oasis' | 'mediterraneo' | 'islas' | 'costa' | 'canales' | 'arena';
+export type StartMode = 'normal' | 'imperial';
+export const START_MODES: Record<StartMode, { name: string; desc: string }> = {
+  normal: { name: 'Normal', desc: 'Edad Oscura con pocos recursos: economía, avances y ejército' },
+  imperial: { name: 'Combate imperial', desc: 'Edad Imperial, 2000 de cada recurso y todas las mejoras investigadas' },
+};
 export type MapSize = 'tiny' | 'small' | 'medium' | 'large';
 export const MAP_SIZES: Record<MapSize, { name: string; tiles: number; players: number }> = {
   tiny: { name: 'Diminuto', tiles: 64, players: 2 },
@@ -31,7 +36,7 @@ export interface SlotCfg {
 
 export interface MatchConfig {
   mode: Mode; difficulty: Difficulty; seed: number;
-  color?: number; map?: MapType | 'random'; biome?: Biome | 'random'; size?: MapSize;
+  color?: number; map?: MapType | 'random'; biome?: Biome | 'random'; size?: MapSize; start?: StartMode;
   players?: SlotCfg[];
 }
 export interface Match { world: World; ais: AI[]; human: number; cfg: MatchConfig }
@@ -163,6 +168,15 @@ export function createMatch(cfg: MatchConfig): Match {
   addFish(w, rng);
   // 6) Arena: murallas de piedra, puertas y torres alrededor de cada base
   if (map === 'arena') makeArena(w, bases);
+
+  // Combate imperial: última edad, 2000 de todo y todas las mejoras
+  if (cfg.start === 'imperial') {
+    for (const p of w.players) {
+      p.age = 4;
+      p.res = { food: 2000, wood: 2000, gold: 2000, stone: 2000 };
+      for (const t of Object.keys(TECHS) as TechType[]) w.grantTech(p.id, t);
+    }
+  }
 
   const ais: AI[] = [];
   for (const p of w.players) {

@@ -22,12 +22,13 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
   Mongoles (Mangudai), Japoneses (Samurái), Chinos (Chu Ko Nu), Persas (Elefante de guerra), Vikingos (Berserker) y Turcos (Jenízaro).
 - **19 unidades comunes:** Aldeano, Espadachín, Lancero, Campeón, Arquero, Escaramuzador, Arquero a caballo, Arcabucero,
   Explorador, Caballero, Ariete, Mangana (daño en área), Cañón de bombardeo, Fundíbulo, Monje (cura), Barco pesquero,
-  Galeón, Barco de fuego y Galeón cañonero.
+  Galeón, Barco incendiario y Galeón cañonero.
 - **19 edificios**, entre ellos Muelle (va en el agua), Universidad, Castillo, Monasterio, Mercado, Herrería, Empalizada, Muralla de piedra y Puertas (dejan pasar solo a tu equipo).
 - **15 investigaciones:** Herrería (Forja, Cota de malla, Emplumado, Barda), Universidad (Albañilería, Arquitectura, Química,
   Balística, Matacanes, Ingeniería de asedio) y economía (Telar, Carretilla, Hacha doble, Arado, Minería). Química desbloquea la pólvora.
 - **Agua y barcos:** pesca con barcos, batallas navales, barcos que bombardean la costa.
 - 10 mapas (Continental, Río, Lagos, Bosque cerrado, Oasis, Mediterráneo, Archipiélago, Costas, Canales y Arena, donde cada reino arranca amurallado con 2 torres y una puerta), elegidos desde un desplegable con miniatura; 4 tamaños (Diminuto 64, Chico 80, Mediano 94, Grande 104 casillas) y 5 biomas.
+- **2 modos de juego:** Normal (desde la Edad Oscura) y **Combate imperial** (Edad Imperial, 2000 de cada recurso y todas las mejoras investigadas).
 - **4 dificultades de IA:** Principiante (para aprender: casi no ataca), Fácil, Normal y Difícil.
 - Botón 🗑️ para eliminar unidades o destruir edificios propios; colas de hasta 10 unidades; ➕ En cola también al construir.
 - Niebla de guerra, minimapa, puntos de reunión, colas de entrenamiento.

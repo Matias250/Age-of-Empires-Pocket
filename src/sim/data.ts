@@ -170,7 +170,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
     bonus: { ship: 4, building: 2 }, projectile: 'arrow', desc: 'Barco de guerra que dispara a distancia.',
   },
   fireship: {
-    name: 'Barco de fuego', hp: 120, atk: 1, atkType: 'melee', cooldown: 0.3, range: 2 * T, armorMelee: 0, armorPierce: 5,
+    name: 'Barco incendiario', hp: 120, atk: 1, atkType: 'melee', cooldown: 0.3, range: 2 * T, armorMelee: 0, armorPierce: 5,
     speed: 74, radius: 14, sight: 6, cost: { wood: 75, gold: 45 }, trainTime: 20, age: 3, cls: 'ship', naval: true,
     bonus: { ship: 4 }, projectile: 'fire', desc: 'Lanzallamas de corto alcance. Quema barcos enemigos.',
   },

@@ -11,7 +11,7 @@
 
 ## v0.3 — Contenido estilo clásico (hecho)
 - [x] 4 edades, 10 civilizaciones con unidad única y bonificaciones
-- [x] Universidad, Muelle, Muralla de piedra; barcos pesqueros, galeones, barcos de fuego y galeones cañoneros
+- [x] Universidad, Muelle, Muralla de piedra; barcos pesqueros, galeones, barcos incendiarios y galeones cañoneros
 - [x] Escaramuza de hasta 8 jugadores con equipos, civilización, color y dificultad por jugador
 - [x] Mapa Mediterráneo y peces en todos los mapas con agua
 

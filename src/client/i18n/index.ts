@@ -93,7 +93,7 @@ function walk(n: Node) {
   if (n.nodeType !== 1) return;
   const el = n as Element;
   if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return;
-  for (const a of ['aria-label', 'title']) { const v = el.getAttribute(a); if (v) { const t = tr(v); if (t !== v) el.setAttribute(a, t); } }
+  for (const a of ['aria-label', 'title', 'placeholder']) { const v = el.getAttribute(a); if (v) { const t = tr(v); if (t !== v) el.setAttribute(a, t); } }
   for (const c of [...el.childNodes]) walk(c);
 }
 

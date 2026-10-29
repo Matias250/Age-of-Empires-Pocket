@@ -1,5 +1,5 @@
 // IA de computadora. Solo "juega" emitiendo los mismos comandos que un humano.
-import { Age, BUILDINGS, BuildingType, isLandArmy, NODES, NodeType, Res, TECHS, TechType, TICK_RATE, TILE, UNITS, UnitType } from './data.js';
+import { Age, BUILDINGS, BuildingType, isLandArmy, NODES, NodeType, Res, RES_NAME, TECHS, TechType, TICK_RATE, TILE, UNITS, UnitType } from './data.js';
 import { CIVS } from './civs.js';
 import { Entity, World } from './world.js';
 
@@ -51,6 +51,10 @@ export class AI {
   private busy = new Set<number>(); // aldeanos ya usados en este ciclo de decisión
   private enemyMix = { cav: 0, arch: 0, inf: 0, total: 0 };
   private techReserve: Partial<Record<Res, number>> = {};
+  /** órdenes recibidas por el chat */
+  chatOrder: 'auto' | 'attack' | 'defend' | 'hold' = 'auto';
+  private orderFrom = -1;
+  private chatIdx = 0;
 
   constructor(private w: World, p: number, readonly diff: Difficulty) {
     this.p = p;
@@ -63,6 +67,7 @@ export class AI {
     const w = this.w;
     if (w.players[this.p].defeated || w.tick < this.next) return;
     this.next = w.tick + Math.round(this.prof.think * TICK_RATE);
+    this.readChat();
     const tc = w.buildingsOf(this.p, 'towncenter', true)[0];
     if (!tc) return;
     this.busy.clear();
@@ -73,6 +78,8 @@ export class AI {
     this.research();
     this.navy(tc);
     this.army(tc);
+    this.relics();
+    this.trade();
   }
 
   private get time() { return this.w.tick / TICK_RATE; }
@@ -183,6 +190,7 @@ export class AI {
     else if (a >= 2 && P.techs.length > 2 && !have('blacksmith')) this.construct('blacksmith', tc, 4, 12);
     else if (a >= 2 && this.diff !== 'easy' && this.diff !== 'novice' && !have('stable')) this.construct('stable', tc, 4, 13);
     else if (a >= 2 && have('tower') < P.towers) this.construct('tower', tc, 3, 6);
+    else if (a >= 2 && vills >= 15 && this.diff !== 'novice' && !have('market') && pl.res.wood > 220) this.construct('market', tc, 5, 14);
     else if (a >= 3 && P.castle && !have('castle') && w.canAfford(this.p, w.buildingCost(this.p, 'castle'))) this.construct('castle', tc, 5, 13);
     else if (a >= 3 && !have('workshop') && this.time > P.firstAttack) this.construct('workshop', tc, 4, 13);
     else if (a >= 3 && P.university && !have('university')) this.construct('university', tc, 4, 13);
@@ -232,14 +240,14 @@ export class AI {
     const dock = docks.find((d) => d.progress >= 1);
     if (!dock) return;
     const fishers = w.unitsOf(this.p, 'fishship');
-    const ships = w.unitsOf(this.p).filter((u) => UNITS[u.type as UnitType].naval && !UNITS[u.type as UnitType].gathers);
+    const ships = w.unitsOf(this.p).filter((u) => UNITS[u.type as UnitType].naval && !UNITS[u.type as UnitType].gathers && !UNITS[u.type as UnitType].trade);
     const queued = dock.queue.length;
     // producción
     if (queued < 2) {
       const fishLeft = w.findNode(fishers[0] ?? ({ ...dock, cat: 'unit', type: 'fishship' } as Entity), 'food', 26 * TILE);
       if (fishers.length < P.fish && fishLeft && w.canAfford(this.p, w.unitCost(this.p, 'fishship'))) w.issue({ t: 'train', p: this.p, bid: dock.id, u: 'fishship' });
       else if (pl.age >= 2 && ships.length < P.warships && !this.savingForAge(vills)) {
-        const opts = w.trainsOf(this.p, 'dock').filter((u) => u !== 'fishship' && UNITS[u].age <= pl.age && (!UNITS[u].requires || pl.techs.has(UNITS[u].requires!)));
+        const opts = w.trainsOf(this.p, 'dock').filter((u) => u !== 'fishship' && !UNITS[u].trade && UNITS[u].age <= pl.age && (!UNITS[u].requires || pl.techs.has(UNITS[u].requires!)));
         const u = opts.length ? opts[Math.floor(w.rng.next() * opts.length)] : undefined;
         if (u && w.canAfford(this.p, w.unitCost(this.p, u))) w.issue({ t: 'train', p: this.p, bid: dock.id, u });
       }
@@ -283,7 +291,7 @@ export class AI {
     const civ = pl.civ ? CIVS[pl.civ] : undefined;
     const opts = w.trainsOf(this.p, b.type as BuildingType).filter((u) => {
       const d = UNITS[u];
-      if (u === 'villager' || d.naval) return false;
+      if (u === 'villager' || d.naval || d.trade) return false;
       if (d.age > pl.age || (d.requires && !pl.techs.has(d.requires))) return false;
       return true;
     });
@@ -337,7 +345,7 @@ export class AI {
 
   private armyOrders(tc: Entity) {
     const w = this.w;
-    const army = w.unitsOf(this.p).filter((u) => isLandArmy(u.type as UnitType) || u.type === 'monk');
+    const army = w.unitsOf(this.p).filter((u) => isLandArmy(u.type as UnitType) || (u.type === 'monk' && !u.carryRelic && u.order?.t !== 'relic'));
     const fighters = army.filter((u) => u.type !== 'monk');
     const threat = this.findThreat();
     if (threat) {
@@ -345,8 +353,21 @@ export class AI {
       if (ids.length) w.issue({ t: 'attackMove', p: this.p, ids, x: threat.x, y: threat.y });
       return;
     }
-    const needed = this.prof.armyAttack + this.wave * 3;
-    if (!this.attacking && this.time >= this.prof.firstAttack && fighters.length >= Math.min(needed, 30)) {
+    // órdenes del chat
+    if (this.chatOrder === 'hold') {
+      if (this.attacking) { this.attacking = false; const home = army.map((u) => u.id); if (home.length) w.issue({ t: 'move', p: this.p, ids: home, x: tc.x, y: tc.y + 3 * TILE }); }
+      return;
+    }
+    if (this.chatOrder === 'defend') {
+      const ally = w.buildingsOf(this.orderFrom, 'towncenter')[0];
+      if (ally) {
+        const ids = army.filter((u) => !u.order || (u.order.t === 'move' && Math.hypot(u.x - ally.x, u.y - ally.y) > 6 * TILE)).filter((u) => Math.hypot(u.x - ally.x, u.y - ally.y) > 5 * TILE).map((u) => u.id);
+        if (ids.length) w.issue({ t: 'attackMove', p: this.p, ids, x: ally.x, y: ally.y + 3 * TILE });
+        return;
+      }
+    }
+    const needed = this.chatOrder === 'attack' ? 3 : this.prof.armyAttack + this.wave * 3;
+    if (!this.attacking && (this.chatOrder === 'attack' || this.time >= this.prof.firstAttack) && fighters.length >= Math.min(needed, 30)) {
       this.attacking = true;
       this.waveSize = fighters.length;
       this.wave++;
@@ -372,6 +393,67 @@ export class AI {
       const gy = enemyDir ? tc.y + Math.sign(enemyDir.y - tc.y) * 4 * TILE : tc.y + 4 * TILE;
       const idle = army.filter((u) => !u.order && Math.hypot(u.x - gx, u.y - gy) > 3 * TILE).map((u) => u.id);
       if (idle.length) w.issue({ t: 'move', p: this.p, ids: idle, x: gx, y: gy });
+    }
+  }
+
+  /** Con aliados que tengan mercado, algunas carretas mercantes */
+  private trade() {
+    const w = this.w;
+    const mk = w.buildingsOf(this.p, 'market', true)[0];
+    if (!mk || mk.queue.length || this.diff === 'novice' || !w.tradePartners(this.p, 'market').length) return;
+    const carts = w.unitsOf(this.p, 'tradecart').length;
+    if (carts < (this.diff === 'hard' ? 4 : 2) && w.unitsOf(this.p, 'villager').length >= 18 && w.canAfford(this.p, w.unitCost(this.p, 'tradecart')) && this.pl.res.wood > 250)
+      w.issue({ t: 'train', p: this.p, bid: mk.id, u: 'tradecart' });
+  }
+
+  /** Los monjes buscan reliquias libres y las llevan al monasterio */
+  private relics() {
+    const w = this.w;
+    if (!w.relics.length || !w.buildingsOf(this.p, 'monastery', true).length) return;
+    const free = w.relics.filter((r) => !r.carrier && !r.holder);
+    if (!free.length) return;
+    const taken = new Set(w.unitsOf(this.p, 'monk').map((m) => (m.order?.t === 'relic' ? m.order.relic : -1)));
+    for (const m of w.unitsOf(this.p, 'monk')) {
+      if (m.order || m.carryRelic) continue;
+      const r = free.filter((x) => !taken.has(x.id)).sort((a, b) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(b.x - m.x, b.y - m.y))[0];
+      if (!r) return;
+      taken.add(r.id);
+      w.issue({ t: 'relic', p: this.p, ids: [m.id], relic: r.id });
+    }
+  }
+
+  /** Lee el chat y responde: los aliados obedecen, los enemigos provocan */
+  private readChat() {
+    const w = this.w;
+    for (; this.chatIdx < w.chat.length; this.chatIdx++) {
+      const m = w.chat[this.chatIdx];
+      if (m.from === this.p || w.players[m.from]?.neutral) continue;
+      const ally = !w.isEnemy(m.from, this.p);
+      const toMe = m.to === 'all' || m.to === this.p || (m.to === 'allies' && ally);
+      if (!toMe) continue;
+      const say = (text: string) => w.issue({ t: 'chat', p: this.p, to: m.from, text });
+      const s = m.text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (!ally) {
+        const taunts = ['😏 ¡Vení si te animás!', '🔥 Tus murallas no van a aguantar.', '⚔️ Nos vemos en el campo de batalla.', '🙄 No recibo órdenes de vos.'];
+        say(taunts[(w.tick + this.p) % taunts.length]);
+        continue;
+      }
+      const res = /\b(oro|gold|ouro)\b/.test(s) ? 'gold' : /(comida|food)/.test(s) ? 'food' : /(madera|wood|madeira)/.test(s) ? 'wood' : /(piedra|stone|pedra)/.test(s) ? 'stone' : null;
+      if (res && /(mand|dam|dame|send|give|envi|tribut|necesit|need|precis|pas)/.test(s)) {
+        const have = this.pl.res[res];
+        const n = have >= 350 ? 200 : have >= 150 ? 100 : 0;
+        if (n) { w.issue({ t: 'tribute', p: this.p, to: m.from, res, n }); say(`🎁 Te mando ${n} de ${RES_NAME[res].toLowerCase()}.`); }
+        else say('😕 Ahora no me alcanza, necesito lo que tengo.');
+      } else if (/(no atac|no ataq|nao atac|dont attack|don't attack|do not attack|espera|hold|wait|alto|\bpara\b|\bpare\b|stop|calma)/.test(s)) {
+        this.chatOrder = 'hold'; this.orderFrom = m.from; say('✋ De acuerdo, no atacamos hasta que nos digas.');
+      } else if (/(defen|ayud|help|ajud|socorr|proteg)/.test(s)) {
+        this.chatOrder = 'defend'; this.orderFrom = m.from; say('🛡️ ¡Vamos para tu base!');
+      } else if (/(atac|ataq|attack|ofensiv|charge|carga|avanc)/.test(s)) {
+        this.chatOrder = 'attack'; this.orderFrom = m.from; say('⚔️ ¡Entendido! Vamos al ataque.');
+      } else if (/(libre|auto|como quieras|lo que quieras|free|whatever|tanto faz|vos decidi)/.test(s)) {
+        this.chatOrder = 'auto'; say('👍 Hago lo que crea mejor.');
+      } else if (/(hola|hello|\bhi\b|\bola\b|buenas|hey)/.test(s)) say('👋 ¡Hola, aliado!');
+      else say('🤔 Puedo atacar, defenderte, esperar o mandarte recursos.');
     }
   }
 

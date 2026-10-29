@@ -34,6 +34,10 @@ export interface Scenario {
   waves?: { every: number; from: number; units: UnitType[]; size: number; grow: number };
   /** multiplicador de vida del héroe (según dificultad) */
   heroHp?: number;
+  /** solo ejército: sin aldeanos ni Centro Urbano, no se puede juntar recursos ni entrenar */
+  armyOnly?: boolean;
+  /** grupos de soldados sin dueño (en gris) que se unen al héroe cuando pasa cerca */
+  recruits?: [UnitType, number][][];
 }
 
 export interface Campaign { id: string; name: string; civ: CivId; emblem: string; hero: string; desc: string; scenarios: Scenario[] }
@@ -81,7 +85,8 @@ export const CAMPAIGNS: Campaign[] = [
         map: 'rio', biome: 'templado',
         me: { age: 3, res: { food: 800, wood: 800, gold: 600, stone: 200 }, army: [['knight', 4], ['champion', 4], ['ram', 2], ['archer', 4]] },
         hero: { type: 'knight', name: 'Juana' },
-        enemies: [{ civ: 'britanos', name: 'Ingleses', diff: 'normal', age: 3, build: [['castle', 1], ['tower', 3]] }],
+        enemies: [{ civ: 'britanos', name: 'Ingleses', diff: 'easy', age: 3, build: [['castle', 1], ['tower', 3]], army: [['archer', 2], ['spearman', 2], ['militia', 2]] }],
+        armyOnly: true, recruits: [[['militia', 3], ['archer', 2]], [['knight', 2], ['spearman', 2]]],
         goal: { t: 'destroy', types: ['castle', 'tower'], label: 'bastillas' },
       },
       {
@@ -164,7 +169,8 @@ export const CAMPAIGNS: Campaign[] = [
         map: 'arena', biome: 'otono',
         me: { age: 3, res: { food: 900, wood: 900, gold: 700, stone: 200 }, army: [['mangudai', 6], ['mangonel', 2], ['ram', 3]] },
         hero: { type: 'mangudai', name: 'Gengis Kan' },
-        enemies: [{ civ: 'chinos', name: 'Dinastía Jin', diff: 'normal', age: 3, build: [['castle', 1], ['tower', 2]] }],
+        enemies: [{ civ: 'chinos', name: 'Dinastía Jin', diff: 'easy', age: 3, build: [['castle', 1], ['tower', 2]], army: [['chukonu', 2], ['spearman', 2], ['militia', 2]] }],
+        armyOnly: true, recruits: [[['cavarcher', 4]], [['mangonel', 1], ['spearman', 3]]],
         goal: { t: 'destroy', types: ['castle', 'tower'], label: 'defensas de Zhongdu' },
       },
       {
@@ -231,7 +237,8 @@ export const CAMPAIGNS: Campaign[] = [
         map: 'costa', biome: 'desierto',
         me: { age: 3, res: { food: 900, wood: 1000, gold: 700, stone: 300 }, army: [['conquistador', 4], ['champion', 4], ['ram', 2]] },
         hero: { type: 'knight', name: 'El Cid' },
-        enemies: [{ civ: 'turcos', name: 'Almorávides', diff: 'normal', age: 3, build: [['castle', 1], ['dock', 1]] }],
+        enemies: [{ civ: 'turcos', name: 'Almorávides', diff: 'easy', age: 3, build: [['castle', 1], ['dock', 1]], army: [['janissary', 2], ['spearman', 2], ['archer', 2]] }],
+        armyOnly: true, recruits: [[['conquistador', 2], ['spearman', 3]], [['ram', 1], ['archer', 3]]],
         goal: { t: 'destroy', types: ['castle', 'dock'], label: 'castillo y muelle' },
       },
     ],
@@ -267,7 +274,8 @@ export const CAMPAIGNS: Campaign[] = [
         map: 'continental', biome: 'templado', size: 'tiny',
         me: { age: 3, res: { food: 600, wood: 600, gold: 500, stone: 200 }, army: [['cataphract', 5], ['champion', 5], ['archer', 4]] },
         hero: { type: 'cataphract', name: 'Belisario' },
-        enemies: [{ civ: 'bizantinos', name: 'Rebeldes del hipódromo', diff: 'normal', age: 3, build: [['barracks', 3]] }],
+        enemies: [{ civ: 'bizantinos', name: 'Rebeldes del hipódromo', diff: 'normal', age: 3, build: [['barracks', 3]], army: [['champion', 2], ['archer', 3], ['spearman', 2]] }],
+        armyOnly: true, recruits: [[['spearman', 4], ['archer', 2]], [['champion', 3]]],
         goal: { t: 'destroy', types: ['barracks'], label: 'cuarteles rebeldes' },
       },
       {
@@ -302,7 +310,8 @@ export const CAMPAIGNS: Campaign[] = [
         map: 'bosque', biome: 'tropical', size: 'tiny',
         me: { age: 3, res: { food: 600, wood: 600, gold: 500, stone: 200 }, army: [['samurai', 5], ['cavarcher', 5], ['ram', 2]] },
         hero: { type: 'samurai', name: 'Yoshitsune' },
-        enemies: [{ civ: 'japoneses', name: 'Clan Taira', diff: 'normal', age: 3, build: [['castle', 1]] }],
+        enemies: [{ civ: 'japoneses', name: 'Clan Taira', diff: 'easy', age: 3, build: [['castle', 1]], army: [['samurai', 2], ['archer', 2], ['spearman', 2]] }],
+        armyOnly: true, recruits: [[['samurai', 3]], [['archer', 3], ['spearman', 2]]],
         goal: { t: 'destroy', types: ['castle'], label: 'fortaleza' },
       },
       {
@@ -352,7 +361,8 @@ export const CAMPAIGNS: Campaign[] = [
         map: 'costa', biome: 'templado', size: 'tiny',
         me: { age: 2, res: { food: 300, wood: 400, gold: 100 }, army: [['berserker', 6], ['archer', 3]] },
         hero: { type: 'berserker', name: 'Erik' },
-        enemies: [{ civ: 'britanos', name: 'Northumbria', diff: 'easy', age: 2, build: [['monastery', 1]] }],
+        enemies: [{ civ: 'britanos', name: 'Northumbria', diff: 'easy', age: 2, build: [['monastery', 1]], army: [['militia', 4], ['archer', 4], ['spearman', 2]] }],
+        armyOnly: true, recruits: [[['berserker', 3]], [['archer', 2], ['axeman', 2]]],
         goal: { t: 'destroy', types: ['monastery'], label: 'monasterio' },
       },
       {
@@ -433,7 +443,8 @@ export const CAMPAIGNS: Campaign[] = [
         map: 'arena', biome: 'templado',
         me: { age: 3, res: { food: 800, wood: 800, gold: 600, stone: 200 }, army: [['tarkan', 6], ['ram', 3], ['cavarcher', 4]] },
         hero: { type: 'tarkan', name: 'Atila' },
-        enemies: [{ civ: 'bizantinos', name: 'Roma de Oriente', diff: 'normal', age: 3, build: [['castle', 1], ['tower', 2]] }],
+        enemies: [{ civ: 'bizantinos', name: 'Roma de Oriente', diff: 'easy', age: 3, build: [['castle', 1], ['tower', 2]], army: [['cataphract', 2], ['archer', 2], ['spearman', 2]] }],
+        armyOnly: true, recruits: [[['tarkan', 3]], [['cavarcher', 3], ['ram', 1]]],
         goal: { t: 'destroy', types: ['castle', 'tower'], label: 'defensas' },
       },
       {
@@ -575,10 +586,39 @@ export function createScenario(scn: Scenario, color = 0): Match {
     if (i > 0) w.players[i].name = (s as Side).name;
     applySide(w, i, s);
   });
+  // solo ejército: se quita la economía del jugador
+  const tc0 = w.buildingsOf(0, 'towncenter')[0];
+  const base = { x: tc0.x, y: tc0.y };
+  if (scn.armyOnly) {
+    w.players[0].armyOnly = true;
+    for (const e of [...w.entities.values()]) {
+      if (e.owner !== 0) continue;
+      if (e.cat === 'building' || e.type === 'villager') w.remove(e.id);
+    }
+    for (const r of Object.keys(w.players[0].res) as Res[]) w.players[0].res[r] = 0;
+  }
+  // soldados sin dueño
+  if (scn.recruits?.length) {
+    const np = w.addPlayer('Sin dueño', 99, '#9ca3af', false);
+    np.neutral = true;
+    const enemyTc = w.buildingsOf(1 + (scn.allies?.length ?? 0), 'towncenter')[0] ?? { x: w.w * TILE / 2, y: w.h * TILE / 2 };
+    scn.recruits.forEach((grp, gi) => {
+      const f = (gi + 1) / (scn.recruits!.length + 1) * 0.75;
+      const side = gi % 2 ? 1 : -1;
+      const dx = enemyTc.x - base.x, dy = enemyTc.y - base.y, len = Math.hypot(dx, dy) || 1;
+      const px = base.x + dx * f + (-dy / len) * side * 5 * TILE, py = base.y + dy * f + (dx / len) * side * 5 * TILE;
+      const spot = w.nearestFree(Math.floor(px / TILE), Math.floor(py / TILE), 12);
+      if (!spot) return;
+      let k = 0;
+      for (const [type, n] of grp) for (let i = 0; i < n; i++, k++) {
+        const u = w.spawnUnit(np.id, type, (spot.x + 0.5) * TILE + ((k % 3) - 1) * 22, (spot.y + 0.5) * TILE + Math.floor(k / 3) * 22);
+        u.stance = 'pas';
+      }
+    });
+  }
   // héroe
   if (scn.hero) {
-    const tc = w.buildingsOf(0, 'towncenter')[0];
-    const h = w.spawnUnit(0, scn.hero.type, tc.x, tc.y + 80);
+    const h = w.spawnUnit(0, scn.hero.type, base.x, base.y + 80);
     h.hero = scn.hero.name;
     h.maxHp = h.hp = Math.round(h.maxHp * (scn.heroHp ?? 5));
   }
@@ -664,6 +704,16 @@ export class ScenarioState {
       default: break;
     }
     if (won) { w.winnerTeam = pl.team; return 'win'; }
+    // los soldados sin dueño se unen al héroe cuando pasa cerca
+    if (this.heroId && w.tick % 5 === 0) {
+      const h = w.get(this.heroId);
+      const np = w.players.find((p) => p.neutral);
+      if (h && np) {
+        let n = 0, name = '';
+        for (const u of w.unitsOf(np.id)) if (Math.hypot(u.x - h.x, u.y - h.y) < 3.5 * TILE) { w.convert(u, 0); n++; name = UNITS[u.type as UnitType].name; }
+        if (n) this.events.push(`🤝 ${n === 1 ? name : n + ' soldados'} se unieron a ${scn.hero!.name}`);
+      }
+    }
     void this.startTechs;
     return null;
   }

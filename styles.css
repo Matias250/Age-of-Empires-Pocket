@@ -514,3 +514,23 @@ table.players td:nth-child(n+4) { text-align: right; font-variant-numeric: tabul
 .setting.langs { flex-wrap: wrap; gap: 8px; }
 .setting.langs .seg button { padding: 7px 10px; font-size: 13px; }
 .campdiff .seg button { padding: 6px 9px; font-size: 12px; }
+
+/* chat */
+#btnChat { position: relative; background: var(--wood2); border: 1px solid var(--edge); border-radius: 8px; width: 34px; height: 30px; margin-right: 6px; }
+#btnChat b { position: absolute; top: -6px; right: -6px; background: #ef4444; color: #fff; border-radius: 9px; font-size: 10px; min-width: 16px; height: 16px; line-height: 16px; }
+@media (orientation: landscape) and (max-height: 500px) { #btnChat { width: 30px; height: 24px; font-size: 12px; } }
+#chat { position: fixed; left: calc(8px + var(--sal)); top: calc(44px + var(--sat)); z-index: 28; width: min(380px, calc(100vw - 16px)); }
+.chat-card { background: linear-gradient(#2e2318f4, #1d160ff4); border: 2px solid var(--edge); border-radius: 14px; padding: 8px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 10px 30px #000b; }
+.chat-head { display: flex; gap: 8px; align-items: center; }
+.chat-head b { font-family: Cinzel, serif; color: var(--gold); }
+.chat-head select { flex: 1; min-width: 0; }
+.chat-head button { width: 32px; height: 30px; border-radius: 8px; background: #0005; border: 1px solid var(--edge); }
+.chat-log { max-height: min(32vh, 200px); overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; padding: 4px; background: #0004; border-radius: 8px; }
+.chat-log .cl small { color: var(--dim); font-size: 10.5px; }
+.chat-log .cl span { display: block; }
+.chat-log .cl.me span { color: #f6e7c1; }
+.chat-quick { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.chat-quick button { flex: 0 0 auto; padding: 6px 9px; border-radius: 14px; background: #0006; border: 1px solid var(--edge); font-size: 12px; white-space: nowrap; }
+.chat-in { display: flex; gap: 6px; }
+.chat-in input { flex: 1; min-width: 0; padding: 8px; border-radius: 8px; border: 1px solid var(--edge); background: #0007; color: var(--ink); font-size: 14px; }
+.chat-in button { padding: 0 12px; border-radius: 8px; background: var(--gold); color: #1a1410; font-weight: 700; border: 0; }

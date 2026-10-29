@@ -29,7 +29,10 @@ export class ScenarioRunner {
   }
 
   start() {
-    this.queue = [...this.scn.intro, { who: 'Objetivo', icon: '🎯', text: this.scn.goalText + (this.scn.hero ? `. Si ${this.scn.hero.name} muere, perdés.` : '.') }];
+    const extra: ScnLine[] = [];
+    if (this.scn.armyOnly) extra.push({ who: 'Crónica', icon: '📜', text: 'En esta historia solo tenés tu ejército: no hay aldeanos ni podés entrenar más tropas.' });
+    if (this.scn.recruits?.length) extra.push({ who: 'Crónica', icon: '📜', text: `Hay soldados en gris sin señor. Si ${this.scn.hero?.name ?? 'tu héroe'} pasa cerca, se unen a tu ejército.` });
+    this.queue = [...this.scn.intro, ...extra, { who: 'Objetivo', icon: '🎯', text: this.scn.goalText + (this.scn.hero ? `. Si ${this.scn.hero.name} muere, perdés.` : '.') }];
     this.showLine();
     this.renderGoal();
   }

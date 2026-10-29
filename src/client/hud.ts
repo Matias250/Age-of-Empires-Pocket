@@ -13,7 +13,7 @@ export const UNIT_ICON: Record<UnitType, string> = {
   villager: '🧑‍🌾', militia: '🗡️', spearman: '🔱', champion: '⚔️',
   archer: '🏹', skirmisher: '🎯', cavarcher: '🏇', handcannon: '🔫',
   scout: '🐎', knight: '🛡️', camel: '🐪', ram: '🐏', mangonel: '🪨', bombard: '💣', trebuchet: '🏗️', monk: '🧙',
-  fishship: '🎣', galleon: '⛵', fireship: '🔥', cannongalleon: '🚢',
+  fishship: '🎣', tradecart: '🛒', tradecog: '🛶', galleon: '⛵', fireship: '🔥', cannongalleon: '🚢',
   huskarl: '🛡️', jaguar: '🐆', tarkan: '🔥', teutonic: '⚜️', plumed: '🪶',
   longbow: '🏹', axeman: '🪓', conquistador: '🤠', cataphract: '🐴', mangudai: '🏇',
   samurai: '🗡️', chukonu: '🎯', elephant: '🐘', berserker: '🪓', janissary: '🔫',
@@ -219,7 +219,7 @@ export class Hud {
     const w = this.g.world;
     if (this.g.match.cfg.mode === 'tutorial') return '';
     const teams = new Map<number, number[]>();
-    for (const p of w.players) { const l = teams.get(p.team) ?? []; l.push(p.id); teams.set(p.team, l); }
+    for (const p of w.players) { if (p.neutral) continue; const l = teams.get(p.team) ?? []; l.push(p.id); teams.set(p.team, l); }
     let html = `<table class="players"><tr class="hd"><td>Jugador</td><td>Civ.</td><td>Edad</td><td title="Militar">⚔️</td><td title="Economía">🌾</td><td title="Tecnología">📜</td><td>Total</td></tr>`;
     for (const [team, ids] of [...teams].sort((a, b) => a[0] - b[0])) {
       let tt = 0;
@@ -352,6 +352,7 @@ export class Hud {
       case 'army': g.selectArmy(); break;
       case 'navy': g.selectNavy(); break;
       case 'box': g.mode = g.mode === 'box' ? 'normal' : 'box'; if (g.mode === 'box') this.toast('Arrastrá para seleccionar varias unidades'); break;
+      case 'hero': { const h = w.unitsOf(g.me).find((u) => u.hero); if (h) { g.centerOn(h.x, h.y); g.select([h.id]); } break; }
       case 'home': { const tc = w.buildingsOf(g.me, 'towncenter')[0]; if (tc) { g.centerOn(tc.x, tc.y); g.select([tc.id]); } break; }
     }
     this.sig = '';
@@ -371,13 +372,16 @@ export class Hud {
         else if (v.order?.t === 'build') builders++;
         else if (v.type === 'villager' && !v.order) idle++;
       }
-      $('res').innerHTML = RES_LIST.map((r) => `<span class="rs">${RES_ICON[r]}<b>${Math.floor(pl.res[r])}</b><sub title="Aldeanos en ${r}">${workers[r]}</sub></span>`).join('') +
-        `<span class="rs">👥<b class="${w.popOf(g.me) >= w.popCap(g.me) ? 'short' : ''}">${w.popOf(g.me)}/${w.popCap(g.me)}</b>${builders ? `<sub title="Construyendo">🔨${builders}</sub>` : ''}</span>`;
+      const relics = w.relicsOf(g.me);
+      $('res').innerHTML = (relics ? `<span class="rs" title="Reliquias">✨<b>${relics}</b></span>` : '') + RES_LIST.map((r) => `<span class="rs">${RES_ICON[r]}<b>${Math.floor(pl.res[r])}</b><sub title="Aldeanos en ${r}">${workers[r]}</sub></span>`).join('') +
+        (pl.armyOnly ? `<span class="rs">⚔️<b>${w.unitsOf(g.me).length}</b>` : `<span class="rs">👥<b class="${w.popOf(g.me) >= w.popCap(g.me) ? 'short' : ''}">${w.popOf(g.me)}/${w.popCap(g.me)}</b>`) + `${builders ? `<sub title="Construyendo">🔨${builders}</sub>` : ''}</span>`;
       const t = Math.floor(w.tick / TICK_RATE);
       const civ = pl.civ ? CIVS[pl.civ].emblem + ' ' : '';
       $('clock').textContent = `${civ}${AGE_NAME[pl.age]} · ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
       $('idleCount').textContent = idle ? String(idle) : '';
       $('idleCount').hidden = !idle;
+      $('btnBuild').hidden = !!pl.armyOnly;
+      ($('sidebtns').querySelector('[data-a="idle"]') as HTMLElement).hidden = !!pl.armyOnly;
       $('btnNavy').hidden = !w.unitsOf(g.me).some((u) => UNITS[u.type as UnitType].naval && u.type !== 'fishship');
       // barra de avance de edad, siempre visible arriba
       const tcAge = w.buildingsOf(g.me, 'towncenter').find((b) => b.ageT >= 0);
@@ -476,6 +480,11 @@ export class Hud {
         ${d.onWall ? '<button class="act" data-a="rotate"><i>🔄</i><span>Girar</span></button>' : ''}
         ${g.placedInQueue ? '<button class="act gold" data-a="cancelplace"><i>👍</i><span>Listo</span></button>' : '<button class="act no" data-a="cancelplace"><i>✖️</i><span>Cancelar</span></button>'}</div>`;
     }
+    if (!ents.length && pl.armyOnly) {
+      return `<div class="info"><div class="hint">Solo tenés tu ejército: tocá al héroe para moverlo y buscá soldados en gris para sumarlos.</div></div>
+        <div class="acts one"><button class="act" data-a="hero"><i>👑</i><span>Héroe</span></button>
+        <button class="act" data-a="army"><i>🛡️</i><span>Ejército</span></button></div>`;
+    }
     if (!ents.length) {
       return `<div class="info"><div class="hint">Tocá una unidad o edificio · Arrastrá para mover la cámara · Pellizcá para hacer zoom · Mantené apretado un botón para ver qué hace</div></div>
         <div class="acts one"><button class="act" data-a="home"><i>🏰</i><span>Centro Urbano</span></button>
@@ -553,11 +562,12 @@ export class Hud {
     let info: string;
     if (units.length === 1) {
       const u = units[0], d = UNITS[u.type as UnitType];
-      const doing = !u.order ? 'Ocioso' : u.order.t === 'gather' ? `${d.naval ? 'Pescando' : 'Recolectando'} ${RES_ICON[u.order.res]}` : u.order.t === 'build' ? 'Construyendo' : u.order.t === 'move' ? 'Moviéndose' : u.order.t === 'heal' ? 'Curando' : 'Atacando';
+      const doing = !u.order ? 'Ocioso' : u.order.t === 'gather' ? `${d.naval ? 'Pescando' : 'Recolectando'} ${RES_ICON[u.order.res]}` : u.order.t === 'build' ? 'Construyendo' : u.order.t === 'move' ? 'Moviéndose' : u.order.t === 'heal' ? 'Curando' : u.order.t === 'trade' ? (u.order.leg === 'go' ? 'Viajando a comerciar' : `Volviendo con ${u.carry} 🪙`) : u.order.t === 'relic' ? (u.carryRelic ? 'Llevando la reliquia' : 'Buscando una reliquia') : 'Atacando';
+      const relicTxt = u.carryRelic && u.order?.t !== 'relic' ? ' · ✨ lleva una reliquia (construí un monasterio)' : '';
       const range = d.range > TILE ? ` · 🎯 ${Math.round(w.rangeOf(u) / TILE)}` : '';
       info = `<div class="title">${UNIT_ICON[u.type as UnitType]} ${u.hero ? `👑 ${u.hero} <small>(${d.name})</small>` : d.name}${ownerTag}</div>
         <div class="sub">❤️ <span data-hp>${Math.ceil(u.hp)}/${u.maxHp}</span>${d.atk ? ` · ⚔️ ${w.attackOf(u)}` : ''} · 🛡️ ${d.armorMelee}/${d.armorPierce}${range}</div>
-        <div class="sub dim">${mine ? doing + (u.carry ? ` · lleva ${u.carry} ${RES_ICON[u.carryRes!]}` : '') + (u.cmdQueue.length ? ` · ${u.cmdQueue.length} en cola` : '') : d.desc}</div>`;
+        <div class="sub dim">${mine ? doing + (u.carry ? ` · lleva ${u.carry} ${RES_ICON[u.carryRes!]}` : '') + (u.cmdQueue.length ? ` · ${u.cmdQueue.length} en cola` : '') + relicTxt : d.desc}</div>`;
     } else {
       const counts = new Map<string, number>();
       for (const u of units) counts.set(u.type, (counts.get(u.type) ?? 0) + 1);

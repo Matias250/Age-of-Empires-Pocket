@@ -4,7 +4,7 @@
 
 import {
   Age, AGE_NAME, AGE_UPS, ArmorClass, BUILDINGS, BUILDING_ARMOR, BuildingType, CARRY, DT, FARM_RATE, MAX_POP,
-  NODES, NodeType, Projectile, Res, ResBag, RES_LIST, SHIP_CARRY, START_RES, TECHS, TechType, TICK_RATE, TILE,
+  NODES, NodeType, Projectile, Res, ResBag, RES_LIST, RES_NAME, SHIP_CARRY, START_RES, TECHS, TechType, TICK_RATE, TILE,
   TRADE, UNITS, UnitDef, UnitType,
 } from './data.js';
 import { CivId, CIVS, CivMods } from './civs.js';
@@ -17,7 +17,9 @@ export type Order =
   | { t: 'attack'; target: number; auto?: boolean }
   | { t: 'gather'; target: number; res: Res; phase: 'go' | 'return' }
   | { t: 'build'; target: number }
-  | { t: 'heal'; target: number };
+  | { t: 'heal'; target: number }
+  | { t: 'relic'; relic: number }
+  | { t: 'trade'; home: number; dest: number; leg: 'go' | 'back' };
 
 export type Stance = 'agg' | 'def' | 'pas';
 export const STANCE_NAME: Record<Stance, string> = { agg: 'Agresiva', def: 'Neutral', pas: 'Pasiva' };
@@ -29,6 +31,8 @@ export interface Entity {
   owner: number;
   /** héroe de una historia: nombre propio y se cura solo */
   hero?: string;
+  /** reliquia que lleva un monje */
+  carryRelic?: number;
   x: number; y: number;
   tx: number; ty: number; size: number;
   /** huella en casillas (ancho y alto); el portón puede ser 3×1 o 1×3 */
@@ -77,7 +81,14 @@ export interface Player {
   explored: Uint8Array; visible: Uint8Array;
   stats: { gathered: ResBag; kills: number; lost: number; trained: number; built: number; killValue: number; techValue: number };
   lastPopMsg: number; lastAttackMsg: number;
+  /** soldados sin dueño de las historias: nadie los ataca y se unen al héroe */
+  neutral?: boolean;
+  /** solo ejército: pierde cuando no le quedan unidades */
+  armyOnly?: boolean;
 }
+
+export interface Relic { id: number; x: number; y: number; carrier?: number; holder?: number }
+export interface ChatMsg { tick: number; from: number; to: 'all' | 'allies' | number; text: string }
 
 export type Command =
   | { t: 'move'; p: number; ids: number[]; x: number; y: number; queue?: boolean }
@@ -93,7 +104,10 @@ export type Command =
   | { t: 'research'; p: number; bid: number; tech: TechType }
   | { t: 'trade'; p: number; res: Res; buy: boolean }
   | { t: 'stop'; p: number; ids: number[] }
-  | { t: 'delete'; p: number; ids: number[] };
+  | { t: 'delete'; p: number; ids: number[] }
+  | { t: 'relic'; p: number; ids: number[]; relic: number }
+  | { t: 'chat'; p: number; to: 'all' | 'allies' | number; text: string }
+  | { t: 'tribute'; p: number; to: number; res: Res; n: number };
 
 export type GEvent =
   | { t: 'shot'; x1: number; y1: number; x2: number; y2: number; kind: Projectile }
@@ -106,7 +120,9 @@ export type GEvent =
   | { t: 'trained'; p: number; id: number }
   | { t: 'age'; p: number; age: Age }
   | { t: 'tech'; p: number; tech: TechType }
-  | { t: 'heal'; x: number; y: number };
+  | { t: 'heal'; x: number; y: number }
+  | { t: 'chat'; from: number; to: 'all' | 'allies' | number; text: string }
+  | { t: 'relic'; p: number; x: number; y: number };
 
 const INTERACT = 14; // px de distancia para recolectar/construir/depositar
 const CELL = TILE * 4; // celda del índice espacial
@@ -128,6 +144,8 @@ export class World implements Grid {
   winnerTeam = -1;
   rng: Rng;
   checkDefeat = true;
+  relics: Relic[] = [];
+  chat: ChatMsg[] = [];
   private nextId = 1;
   private pending: Command[] = [];
 
@@ -455,6 +473,7 @@ export class World implements Grid {
   get(id: number | undefined): Entity | undefined { return id ? this.entities.get(id) : undefined; }
   isEnemy(a: number, b: number): boolean {
     if (a < 0 || b < 0) return false;
+    if (this.players[a].neutral || this.players[b].neutral) return false;
     return this.players[a].team !== this.players[b].team;
   }
   canAfford(p: number, cost: Partial<ResBag>): boolean {
@@ -562,6 +581,28 @@ export class World implements Grid {
         });
         break;
       }
+      case 'relic': {
+        const r = this.relics.find((x) => x.id === c.relic);
+        if (!r || r.holder) return;
+        for (const u of own(c.ids)) if (UNITS[u.type as UnitType].heals) this.give(u, { t: 'relic', relic: r.id }, false);
+        break;
+      }
+      case 'chat': {
+        const text = String(c.text).slice(0, 140);
+        this.chat.push({ tick: this.tick, from: c.p, to: c.to, text });
+        if (this.chat.length > 200) this.chat.splice(0, this.chat.length - 200);
+        this.events.push({ t: 'chat', from: c.p, to: c.to, text });
+        break;
+      }
+      case 'tribute': {
+        const to = this.players[c.to];
+        if (!to || to.id === c.p || to.team !== pl.team) return;
+        const n = Math.max(0, Math.min(Math.floor(c.n), Math.floor(pl.res[c.res])));
+        if (!n) return;
+        pl.res[c.res] -= n; to.res[c.res] += n;
+        this.events.push({ t: 'msg', p: to.id, text: `${pl.name} te mandó ${n} de ${RES_NAME[c.res].toLowerCase()}` });
+        break;
+      }
       case 'delete':
         for (const id of c.ids) { const e = this.entities.get(id); if (e && e.owner === c.p && e.cat !== 'node') e.hp = 0; }
         break;
@@ -609,6 +650,7 @@ export class World implements Grid {
         if (pl.age < ud.age) { msg(`Requiere la ${AGE_NAME[ud.age]}`); return; }
         if (ud.requires && !pl.techs.has(ud.requires)) { msg(`Requiere ${TECHS[ud.requires].name}`); return; }
         if (b.queue.length >= 10) return;
+        if (ud.trade && !this.tradePartners(c.p, ud.naval ? 'dock' : 'market').length) { msg(ud.naval ? 'El comercio solo funciona con un aliado que tenga muelle' : 'El comercio solo funciona con un aliado que tenga mercado'); return; }
         const cost = this.unitCost(c.p, c.u);
         if (!this.canAfford(c.p, cost)) { msg('Recursos insuficientes'); return; }
         this.pay(c.p, cost);
@@ -712,6 +754,14 @@ export class World implements Grid {
     const d = UNITS[u.type as UnitType];
     const isVill = u.type === 'villager';
     const near: Order = { t: 'move', x: t.x, y: t.y + (t.cat === 'building' ? t.fh * TILE * 0.5 + 12 : TILE) };
+    if (d.trade) {
+      const kind = d.naval ? 'dock' : 'market';
+      if (t.cat === 'building' && t.type === kind && t.owner !== u.owner && !this.isEnemy(u.owner, t.owner) && !this.players[t.owner].neutral) {
+        const home = this.nearestOwn(u, kind);
+        if (home) return { t: 'trade', home: home.id, dest: t.id, leg: 'go' };
+      }
+      return near;
+    }
     if (d.heals) return t.cat === 'unit' && !this.isEnemy(u.owner, t.owner) && t.id !== u.id ? { t: 'heal', target: t.id } : near;
     if (t.cat === 'node') {
       const isFish = t.type === 'fish';
@@ -759,6 +809,7 @@ export class World implements Grid {
       if (e.cat === 'unit') this.updateUnit(e);
       else if (e.cat === 'building') this.updateBuilding(e);
     }
+    this.updateRelics();
     this.separate();
     let dead = false;
     for (const e of this.entities.values()) if (e.hp <= 0) { dead = true; break; }
@@ -836,7 +887,10 @@ export class World implements Grid {
           const u = this.spawnUnit(b.owner, ut, spot.x, spot.y);
           pl.stats.trained++;
           this.events.push({ t: 'trained', p: b.owner, id: u.id });
-          if (b.rally) {
+          if (UNITS[ut].trade) {
+            const dest = this.tradePartners(b.owner, b.type === 'dock' ? 'dock' : 'market').sort((a2, b2) => Math.hypot(b2.x - b.x, b2.y - b.y) - Math.hypot(a2.x - b.x, a2.y - b.y))[0];
+            if (dest) this.setOrder(u, { t: 'trade', home: b.id, dest: dest.id, leg: 'go' });
+          } else if (b.rally) {
             const t = this.get(b.rally.target);
             if (t) this.orderOnTarget(u, t);
             else this.setOrder(u, { t: 'move', x: b.rally.x, y: b.rally.y });
@@ -962,6 +1016,48 @@ export class World implements Grid {
       }
       case 'gather': this.gatherStep(u, o); break;
       case 'build': this.buildStep(u, o); break;
+      case 'relic': {
+        const r = this.relics.find((x) => x.id === o.relic);
+        if (!r || r.holder || (r.carrier && r.carrier !== u.id)) { this.setOrder(u, undefined); break; }
+        if (u.carryRelic === r.id) {
+          const mon = this.nearestOwn(u, 'monastery');
+          if (!mon) { this.setOrder(u, undefined); break; }
+          if (this.edgeDist(u, mon) <= INTERACT + 4) {
+            r.holder = mon.id; r.carrier = undefined; u.carryRelic = undefined;
+            r.x = mon.x; r.y = mon.y;
+            this.events.push({ t: 'msg', p: u.owner, text: 'Reliquia guardada en el monasterio: +1 de oro por segundo' });
+            this.setOrder(u, undefined);
+          } else if (!this.approach(u, mon, INTERACT)) this.setOrder(u, undefined);
+          break;
+        }
+        if (Math.hypot(u.x - r.x, u.y - r.y) < 22) {
+          if (u.carryRelic) { this.setOrder(u, undefined); break; }
+          r.carrier = u.id; u.carryRelic = r.id;
+          this.events.push({ t: 'relic', p: u.owner, x: r.x, y: r.y });
+          u.path = []; u.pathKey = '';
+        } else if (this.moveTo(u, r.x, r.y) && Math.hypot(u.x - r.x, u.y - r.y) >= 22) this.setOrder(u, undefined);
+        break;
+      }
+      case 'trade': {
+        const home = this.get(o.home), dest = this.get(o.dest);
+        if (!home || !dest || home.owner !== u.owner || this.isEnemy(u.owner, dest.owner) || dest.owner === u.owner) { this.setOrder(u, undefined); break; }
+        const tgt = o.leg === 'go' ? dest : home;
+        if (this.edgeDist(u, tgt) <= INTERACT) {
+          if (o.leg === 'go') {
+            const tiles = Math.hypot(home.x - dest.x, home.y - dest.y) / TILE;
+            u.carry = Math.max(5, Math.round(tiles * 0.8 + (tiles * tiles) / 250));
+            u.carryRes = 'gold';
+            o.leg = 'back';
+          } else {
+            const pl = this.players[u.owner];
+            pl.res.gold += u.carry; pl.stats.gathered.gold += u.carry;
+            u.carry = 0;
+            o.leg = 'go';
+          }
+          u.path = []; u.pathKey = '';
+        } else if (!this.approach(u, tgt, INTERACT - 2)) this.setOrder(u, undefined);
+        break;
+      }
       case 'heal': {
         const t = this.get(o.target);
         if (!t || t.hp <= 0 || t.hp >= t.maxHp) { this.setOrder(u, undefined); break; }
@@ -979,6 +1075,8 @@ export class World implements Grid {
   private idleBehaviour(u: Entity, d: UnitDef) {
     if (this.tick < u.acquireAt) return;
     u.acquireAt = this.tick + 10;
+    if (d.trade) return;
+    if (u.carryRelic) { if (this.nearestOwn(u, 'monastery')) this.setOrder(u, { t: 'relic', relic: u.carryRelic }); return; }
     if (u.type === 'villager' || d.gathers) return;
     if (u.stance === 'pas' && !d.heals) return;
     if (u.stance === 'def' && !u.home) u.home = { x: u.x, y: u.y };
@@ -1301,6 +1399,43 @@ export class World implements Grid {
     return a + d;
   }
 
+  /** Mercados o muelles de aliados (otro jugador del mismo equipo) */
+  tradePartners(p: number, kind: 'market' | 'dock'): Entity[] {
+    const pl = this.players[p];
+    const out: Entity[] = [];
+    for (const o of this.players) if (o.id !== p && !o.neutral && !o.defeated && o.team === pl.team) out.push(...this.buildingsOf(o.id, kind, true));
+    return out;
+  }
+
+  nearestOwn(u: Entity, type: BuildingType): Entity | undefined {
+    let best: Entity | undefined, bd = Infinity;
+    for (const b of this.buildingsOf(u.owner, type, true)) { const d = Math.hypot(b.x - u.x, b.y - u.y); if (d < bd) { bd = d; best = b; } }
+    return best;
+  }
+
+  /** Cambia de dueño una unidad (soldados sin dueño que se unen al héroe) */
+  convert(e: Entity, p: number) {
+    e.owner = p; e.order = undefined; e.cmdQueue = []; e.path = []; e.pathKey = ''; e.stance = 'agg'; e.home = undefined;
+    this.dirty = true;
+  }
+
+  /** Reliquias: siguen al monje que las lleva, caen si muere y dan oro guardadas */
+  private updateRelics() {
+    for (const r of this.relics) {
+      if (r.carrier) {
+        const m = this.entities.get(r.carrier);
+        if (!m || m.hp <= 0 || m.carryRelic !== r.id) { r.carrier = undefined; if (m) m.carryRelic = undefined; }
+        else { r.x = m.x; r.y = m.y; }
+      } else if (r.holder) {
+        const b = this.entities.get(r.holder);
+        if (!b || b.hp <= 0) { r.holder = undefined; r.y += 20; }
+        else { const pl = this.players[b.owner]; pl.res.gold += DT; pl.stats.gathered.gold += DT; }
+      }
+    }
+  }
+
+  relicsOf(p: number): number { return this.relics.filter((r) => r.holder && this.entities.get(r.holder)?.owner === p).length; }
+
   /** Acercarse a una entidad hasta `range` px de su borde. Devuelve false si es inalcanzable. */
   private approach(u: Entity, t: Entity, range: number): boolean {
     const key = t.cat === 'unit' ? `u${t.id}:${Math.floor(t.x / TILE / 2)},${Math.floor(t.y / TILE / 2)}` : `e${t.id}`;
@@ -1469,16 +1604,16 @@ export class World implements Grid {
 
   private updateDefeat() {
     for (const p of this.players) {
-      if (p.defeated) continue;
-      const tcs = this.buildingsOf(p.id, 'towncenter', true);
-      if (tcs.length === 0) {
+      if (p.defeated || p.neutral) continue;
+      const lost = p.armyOnly ? this.unitsOf(p.id).length === 0 : this.buildingsOf(p.id, 'towncenter', true).length === 0;
+      if (lost) {
         p.defeated = true;
         this.events.push({ t: 'msg', p: -1, text: `${p.name} fue derrotado` });
         for (const e of [...this.entities.values()]) if (e.owner === p.id) e.hp = 0;
         for (const e of [...this.entities.values()]) if (e.hp <= 0) this.kill(e);
       }
     }
-    const aliveTeams = new Set(this.players.filter((p) => !p.defeated).map((p) => p.team));
+    const aliveTeams = new Set(this.players.filter((p) => !p.defeated && !p.neutral).map((p) => p.team));
     if (aliveTeams.size === 1 && this.winnerTeam < 0) this.winnerTeam = [...aliveTeams][0];
     if (aliveTeams.size === 0 && this.winnerTeam < 0) this.winnerTeam = 99;
   }

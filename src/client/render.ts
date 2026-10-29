@@ -281,6 +281,7 @@ export class Renderer {
       else if (e.cat === 'building') this.building(e, time);
       else this.unit(e, time);
     }
+    this.drawRelics(pl.explored, time, vx0, vy0, vx1, vy1);
     for (const e of list) {
       if (e.cat === 'node' || e.type === 'wall') continue;
       if (sel.has(e.id) || (e.cat === 'unit' && (e.hp < e.maxHp || (settings.hpBars && e.owner === me))) || (e.cat === 'building' && (e.progress < 1 || e.hp < e.maxHp * 0.98))) this.hpBar(e);
@@ -288,6 +289,33 @@ export class Renderer {
     this.drawFx(time);
     extra(g);
     this.fog(pl.explored, pl.visible);
+  }
+
+  /** Reliquias: cofre dorado en el suelo, en la espalda del monje o en el monasterio */
+  private drawRelics(explored: Uint8Array, time: number, x0: number, y0: number, x1: number, y1: number) {
+    const g = this.ctx, w = this.w;
+    for (const r of w.relics) {
+      if (r.x < x0 - 40 || r.x > x1 + 40 || r.y < y0 - 40 || r.y > y1 + 40) continue;
+      if (!explored[Math.floor(r.y / TILE) * w.w + Math.floor(r.x / TILE)]) continue;
+      let x = r.x, y = r.y, k = 1;
+      if (r.carrier) { y -= 22; x -= 6; k = 0.7; }
+      else if (r.holder) {
+        const b = w.get(r.holder);
+        if (!b) continue;
+        const i = w.relics.filter((o) => o.holder === r.holder).indexOf(r);
+        x = b.tx * TILE + 10 + i * 12; y = (b.ty + b.fh) * TILE - 4; k = 0.6;
+      }
+      if (!r.carrier && !r.holder) {
+        const glow = 0.35 + Math.sin(time * 3 + r.id) * 0.15;
+        const gr = g.createRadialGradient(x, y, 2, x, y, 22);
+        gr.addColorStop(0, `rgba(255,230,120,${glow})`); gr.addColorStop(1, 'rgba(255,230,120,0)');
+        g.fillStyle = gr; g.beginPath(); g.arc(x, y, 22, 0, 7); g.fill();
+      }
+      g.fillStyle = '#6b4a1c'; g.fillRect(x - 7 * k, y - 4 * k, 14 * k, 9 * k);
+      g.fillStyle = '#e8b93a'; g.fillRect(x - 7 * k, y - 7 * k, 14 * k, 4 * k);
+      g.fillStyle = '#fff2b0'; g.fillRect(x - 1.2 * k, y - 7 * k, 2.4 * k, 12 * k);
+      g.strokeStyle = '#3a2408'; g.lineWidth = 1; g.strokeRect(x - 7 * k, y - 7 * k, 14 * k, 12 * k);
+    }
   }
 
   private waterAnim(time: number, x0: number, y0: number, x1: number, y1: number) {
@@ -983,6 +1011,7 @@ export class Renderer {
     g.fillStyle = 'rgba(0,0,0,0.3)';
     g.beginPath(); g.ellipse(x, y + r * 0.75, r * 0.95, r * 0.42, 0, 0, 7); g.fill();
     if (d.cls === 'siege') { this.siege(e, col, time); return; }
+    if (t === 'tradecart') { this.tradeCart(e, col, time); return; }
     if (t === 'elephant') { this.elephant(e, col, time); return; }
     // animación de ataque: estocada hacia el objetivo + golpe del arma
     const sw = this.swing(e);
@@ -1327,12 +1356,42 @@ export class Renderer {
     }
   }
 
+  /** Carreta mercante: un buey tira de un carro con toldo y mercadería */
+  private tradeCart(e: Entity, col: string, time: number) {
+    const g = this.ctx;
+    const flip = Math.cos(e.facing) < 0 ? -1 : 1;
+    const moving = e.path.length > 0;
+    const step = moving ? Math.sin(time * 9 + e.id) * 1.5 : 0;
+    g.save(); g.translate(e.x, e.y); g.scale(flip, 1);
+    // buey
+    g.fillStyle = '#7b5232';
+    g.fillRect(9, 0, 2.2, 6 + step); g.fillRect(16, 0, 2.2, 6 - step);
+    g.beginPath(); g.ellipse(13, -2, 7, 4.5, 0, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(20, -4, 3.2, 3, 0, 0, 7); g.fill();
+    g.strokeStyle = '#efe6d0'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(20, -7); g.lineTo(22, -9); g.moveTo(19, -7); g.lineTo(17.5, -9); g.stroke();
+    // lanza
+    g.strokeStyle = '#4e351c'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(3, -1); g.lineTo(9, -2); g.stroke();
+    // carro
+    g.fillStyle = '#6d4c2e'; g.fillRect(-13, -4, 17, 6);
+    g.fillStyle = '#a07a50'; g.fillRect(-12, -9, 6, 5); g.fillRect(-5, -10, 7, 6);
+    if (e.carry > 0) { g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(-8, -11, 2.5, 0, 7); g.arc(-2, -12, 2.5, 0, 7); g.fill(); }
+    // toldo con el color del jugador
+    g.fillStyle = col; g.beginPath(); g.moveTo(-14, -8); g.quadraticCurveTo(-5, -20, 5, -8); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.25)'; g.beginPath(); g.moveTo(-10, -9); g.quadraticCurveTo(-5, -16, 0, -9); g.closePath(); g.fill();
+    // ruedas
+    for (const wx of [-10, 1]) {
+      g.fillStyle = '#3e2a1a'; g.beginPath(); g.arc(wx, 3, 4, 0, 7); g.fill();
+      g.fillStyle = '#8d6e4a'; g.beginPath(); g.arc(wx, 3, 1.4, 0, 7); g.fill();
+    }
+    g.restore();
+  }
+
   private ship(e: Entity, col: string, time: number) {
     const g = this.ctx;
     const t = e.type as UnitType;
     const x = e.x, y = e.y;
     const cg = t === 'cannongalleon';
-    const big = cg ? 1.35 : t === 'galleon' ? 1.1 : t === 'fireship' ? 1.05 : 0.8;
+    const big = cg ? 1.35 : t === 'galleon' ? 1.1 : t === 'fireship' ? 1.05 : t === 'tradecog' ? 0.95 : 0.8;
     const roll = Math.sin(time * 2 + e.id) * 0.05;
     g.save(); g.translate(x, y); g.rotate(e.facing + roll);
     // estela
@@ -1360,6 +1419,12 @@ export class Renderer {
         g.fillStyle = `rgba(200,200,200,${0.7 * (1 - since / 0.5)})`;
         for (let i = -7; i <= 9; i += 4) for (const sd of [-1, 1]) { g.beginPath(); g.arc(i * big, sd * (11 + since * 14), 2.5 + since * 6, 0, 7); g.fill(); }
       }
+    }
+    if (t === 'tradecog') {
+      // barca mercante: cajones y barriles en cubierta
+      g.fillStyle = '#a07a50'; g.fillRect(-9 * big, -4, 6, 5); g.fillRect(-2 * big, 0, 6, 5);
+      g.fillStyle = '#7a5634'; g.beginPath(); g.arc(6 * big, -2, 3, 0, 7); g.fill();
+      if (e.carry > 0) { g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(-4 * big, -1, 2.5, 0, 7); g.fill(); }
     }
     if (t === 'galleon') {
       // galeón: cubierta clara y arqueros en cubierta

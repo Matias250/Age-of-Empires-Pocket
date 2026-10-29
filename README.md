@@ -3,7 +3,7 @@
 Juego de estrategia en tiempo real inspirado en los clásicos del género (aldeanos, recursos, eras, ejércitos),
 pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 
-> Prototipo jugable v0.9 — arte y código originales. En español (por defecto), inglés y portugués.
+> Prototipo jugable v1.0 — arte y código originales. En español (por defecto), inglés y portugués.
 
 ## Qué incluye
 
@@ -33,6 +33,10 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 - 10 mapas (Continental, Río, Lagos, Bosque cerrado, Oasis, Mediterráneo, Archipiélago, Costas, Canales y Arena, donde cada reino arranca amurallado con 2 torres y una puerta), elegidos desde un desplegable con miniatura; 4 tamaños (Diminuto 64, Chico 80, Mediano 94, Grande 104 casillas) y 5 biomas.
 - **2 modos de juego:** Normal (desde la Edad Oscura) y **Combate imperial** (Edad Imperial, 2000 de cada recurso y todas las mejoras investigadas).
 - **4 dificultades de IA:** Principiante (para aprender: casi no ataca), Fácil, Normal y Difícil.
+- **Reliquias** repartidas por el mapa (3 a 6 según el tamaño): el monje las lleva al monasterio y cada una da 1 de oro por segundo.
+- **Comercio con aliados:** carretas mercantes (mercado) y barcas mercantes (muelle) viajan al mercado o muelle de un aliado y vuelven con oro; cuanto más lejos, más oro.
+- **Chat** (💬) con aliados y enemigos: las IA aliadas atacan, defienden, esperan o mandan recursos cuando se lo pedís. Los mensajes viajan como comandos de la simulación, listos para el online.
+- Historias de **solo ejército** (sin economía) y **soldados en gris** sin dueño que se unen al héroe cuando pasa cerca.
 - Botón 🗑️ para eliminar unidades o destruir edificios propios; colas de hasta 10 unidades; ➕ En cola también al construir.
 - Niebla de guerra, minimapa, puntos de reunión, colas de entrenamiento.
 - **Órdenes en cola** (como Shift): botón "➕ En cola" para encadenar construcciones, movimientos y recolección.

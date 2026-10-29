@@ -24,7 +24,7 @@ export type UnitType =
   | 'scout' | 'knight' | 'camel'
   | 'ram' | 'mangonel' | 'bombard' | 'trebuchet'
   | 'monk'
-  | 'fishship' | 'galleon' | 'fireship' | 'cannongalleon'
+  | 'fishship' | 'galleon' | 'fireship' | 'cannongalleon' | 'tradecart' | 'tradecog'
   // unidades únicas de cada civilización
   | 'longbow' | 'axeman' | 'conquistador' | 'cataphract' | 'mangudai'
   | 'samurai' | 'chukonu' | 'elephant' | 'berserker' | 'janissary'
@@ -76,6 +76,8 @@ export interface UnitDef {
   unique?: boolean;
   /** clases extra que reciben bonificaciones (p. ej. el camello es caballería y además camello) */
   tags?: ArmorClass[];
+  /** comercia con mercados (carreta) o muelles (barca) aliados */
+  trade?: boolean;
   desc: string;
 }
 
@@ -171,6 +173,16 @@ export const UNITS: Record<UnitType, UnitDef> = {
     name: 'Barco pesquero', hp: 60, atk: 0, atkType: 'melee', cooldown: 1, range: 4, armorMelee: 0, armorPierce: 4,
     speed: 62, radius: 11, sight: 5, cost: { wood: 75 }, trainTime: 15, age: 1, cls: 'ship', naval: true, gathers: true,
     desc: 'Pesca y lleva la comida al muelle.',
+  },
+  tradecart: {
+    name: 'Carreta mercante', hp: 70, atk: 0, atkType: 'melee', cooldown: 1, range: 4, armorMelee: 0, armorPierce: 0,
+    speed: 60, radius: 10, sight: 4, cost: { wood: 100, gold: 50 }, trainTime: 20, age: 2, cls: 'villager', trade: true,
+    desc: 'Viaja hasta el mercado de un aliado y vuelve con oro. Cuanto más lejos, más oro.',
+  },
+  tradecog: {
+    name: 'Barca mercante', hp: 80, atk: 0, atkType: 'melee', cooldown: 1, range: 4, armorMelee: 0, armorPierce: 2,
+    speed: 66, radius: 11, sight: 5, cost: { wood: 100, gold: 50 }, trainTime: 20, age: 2, cls: 'ship', naval: true, trade: true,
+    desc: 'Navega hasta el muelle de un aliado y vuelve con oro.',
   },
   galleon: {
     name: 'Galeón', hp: 140, atk: 7, atkType: 'pierce', cooldown: 2.5, range: 6 * T, armorMelee: 0, armorPierce: 6,
@@ -306,7 +318,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
     attack: { atk: 6, range: 7 * TILE, cooldown: 2 }, desc: 'Defensa que dispara flechas.',
   },
   blacksmith: { name: 'Herrería', size: 2, hp: 700, cost: { wood: 150 }, buildTime: 20, age: 2, sight: 4, research: ['forge', 'mail', 'fletching', 'barding'], desc: 'Mejora el ataque y la armadura del ejército.' },
-  market: { name: 'Mercado', size: 3, hp: 800, cost: { wood: 175 }, buildTime: 24, age: 2, sight: 4, trade: true, desc: 'Comprá y vendé recursos por oro.' },
+  market: { name: 'Mercado', size: 3, hp: 800, cost: { wood: 175 }, buildTime: 24, age: 2, sight: 4, trade: true, trains: ['tradecart'], desc: 'Comprá y vendé recursos por oro. Entrena carretas mercantes para comerciar con aliados.' },
   monastery: { name: 'Monasterio', size: 3, hp: 900, cost: { wood: 175 }, buildTime: 25, age: 3, sight: 5, trains: ['monk'], desc: 'Entrena monjes sanadores.' },
   university: {
     name: 'Universidad', size: 3, hp: 1100, cost: { wood: 200 }, buildTime: 30, age: 3, sight: 4,
@@ -318,7 +330,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   },
   dock: {
     name: 'Muelle', size: 2, hp: 1200, cost: { wood: 150 }, buildTime: 25, age: 1, sight: 6, onWater: true,
-    trains: ['fishship', 'galleon', 'fireship', 'cannongalleon'], drop: ['food'], desc: 'Se construye en el agua, pegado a la costa.',
+    trains: ['fishship', 'galleon', 'fireship', 'cannongalleon', 'tradecog'], drop: ['food'], desc: 'Se construye en el agua, pegado a la costa.',
   },
   wall: { name: 'Empalizada', size: 1, hp: 350, cost: { wood: 4 }, buildTime: 4, age: 1, sight: 1, line: true, desc: 'Muro de madera. Tocá dos puntos para trazarla.' },
   gate: { name: 'Portón', size: 3, hp: 2000, cost: { stone: 40 }, buildTime: 20, age: 2, sight: 3, onWall: true, desc: 'Ocupa 3 tramos de tu muralla. Se abre para tu equipo y se puede bloquear.' },
@@ -365,7 +377,7 @@ export const START_RES: ResBag = { food: 200, wood: 250, gold: 100, stone: 150 }
 /** Unidades que no cuentan como ejército de tierra */
 export function isLandArmy(u: UnitType): boolean {
   const d = UNITS[u];
-  return u !== 'villager' && !d.naval && !d.heals;
+  return u !== 'villager' && !d.naval && !d.heals && !d.trade;
 }
 
 export function costText(c: Partial<ResBag>): string {
@@ -391,6 +403,8 @@ export const COUNTERS: Record<UnitType, { strong: (UnitType | 'building' | 'towe
   trebuchet: { strong: ['building'], weak: ['scout', 'knight', 'militia'] },
   monk: { strong: [], weak: ['scout', 'knight'] },
   fishship: { strong: [], weak: ['galleon', 'fireship'] },
+  tradecart: { strong: [], weak: ['scout', 'knight', 'archer'] },
+  tradecog: { strong: [], weak: ['galleon', 'fireship'] },
   galleon: { strong: ['fishship', 'cannongalleon'], weak: ['fireship', 'tower'] },
   fireship: { strong: ['galleon', 'cannongalleon', 'fishship'], weak: ['tower'] },
   cannongalleon: { strong: ['building'], weak: ['fireship', 'galleon'] },

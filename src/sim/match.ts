@@ -168,6 +168,8 @@ export function createMatch(cfg: MatchConfig): Match {
   if (map === 'bosque') for (const b of bases) carve(w, b, { tx: ci - 1, ty: ci - 1 });
   // 5) peces en el agua
   addFish(w, rng);
+  // 5b) reliquias: más cuanto más grande el mapa
+  placeRelics(w, rng, reserved, n <= 2 && size <= 64 ? 3 : size <= 80 ? 4 : size <= 94 ? 5 : 6);
   // 6) Arena: murallas de piedra, puertas y torres alrededor de cada base
   if (map === 'arena') makeArena(w, bases);
 
@@ -371,6 +373,15 @@ function makeCanals(w: World, rng: Rng, bases: Base[], reserved: (x: number, y: 
         w.setWater(tx, ty, ford ? 2 : 1);
       }
     }
+  }
+}
+
+function placeRelics(w: World, rng: Rng, reserved: (x: number, y: number, r?: number) => boolean, count: number) {
+  for (let tries = 0; tries < 400 && w.relics.length < count; tries++) {
+    const x = rng.int(4, w.w - 5), y = rng.int(4, w.h - 5);
+    if (reserved(x, y, 13) || w.solid[y * w.w + x] || w.terrain[y * w.w + x] !== 0) continue;
+    if (w.relics.some((r) => Math.hypot(r.x / 32 - x, r.y / 32 - y) < 10)) continue;
+    w.relics.push({ id: 900000 + w.relics.length, x: (x + 0.5) * 32, y: (y + 0.5) * 32 });
   }
 }
 

@@ -8,6 +8,7 @@ import { Camera, Renderer } from './render.js';
 import { Hud } from './hud.js';
 import { Tutorial } from './tutorial.js';
 import { AchTracker } from './achievements.js';
+import { Chat } from './chat.js';
 
 export type InputMode = 'normal' | 'attack' | 'rally' | 'box';
 
@@ -37,6 +38,7 @@ export class Game {
   tutorial?: Tutorial;
   story?: ScenarioRunner;
   ach: AchTracker;
+  chat: Chat;
   renderer: Renderer;
 
   private ctx: CanvasRenderingContext2D;
@@ -65,6 +67,7 @@ export class Game {
     this.renderer = new Renderer(this.ctx, this.world);
     this.hud = new Hud(this);
     this.ach = new AchTracker(this);
+    this.chat = new Chat(this);
     if (cfg.mode === 'tutorial') this.tutorial = new Tutorial(this);
     if (scn) this.story = new ScenarioRunner(this, scn);
     this.resize();
@@ -84,6 +87,7 @@ export class Game {
     for (const [t, n, f] of this.listeners) t.removeEventListener(n, f);
     this.hud.destroy();
     this.tutorial?.destroy();
+    this.chat.destroy();
     this.story?.destroy();
   }
 
@@ -138,6 +142,7 @@ export class Game {
         case 'hit': if (R.fx.length < 200) R.fx.push({ kind: 'hit', x: e.x, y: e.y, t: this.time, life: 0.18 }); break;
         case 'death': R.fx.push({ kind: e.naval ? 'sink' : 'death', x: e.x, y: e.y, t: this.time, life: e.cat === 'building' ? 1.2 : e.naval ? 1.4 : 0.6 }); break;
         case 'msg': if (e.p === this.me || e.p === -1) this.hud.toast(e.text); break;
+        case 'chat': this.chat.receive(e.from, e.to, e.text); break;
         case 'attacked': if (e.p === this.me) { this.hud.toast('⚔️ ¡Te están atacando!', true); this.hud.ping(e.x, e.y); } break;
         case 'built': if (e.p === this.me) { const b = w.get(e.id); if (b) this.hud.toast(`Construcción terminada: ${BUILDINGS[b.type as BuildingType].name}`); } break;
         case 'age': if (e.p !== this.me) this.hud.toast(`${w.isEnemy(this.me, e.p) ? '⚠️ ' : '🤝 '}${w.players[e.p].name} llegó a la ${AGE_NAME[e.age]}`); break;
@@ -409,6 +414,17 @@ export class Game {
       }
       if (isMouse) this.confirmPlacement();
       return;
+    }
+    // monjes elegidos + tocar una reliquia libre = ir a buscarla
+    const monks = this.selUnits().filter((u) => u.type === 'monk');
+    if (monks.length) {
+      const relic = w.relics.find((r) => !r.carrier && !r.holder && Math.hypot(r.x - p.x, r.y - p.y) < 26);
+      if (relic) {
+        w.issue({ t: 'relic', p: this.me, ids: monks.map((m) => m.id), relic: relic.id });
+        this.mark(relic.x, relic.y, '#ffd23f');
+        this.hud.toast('El monje va a buscar la reliquia');
+        return;
+      }
     }
     const hit = this.pick(p.x, p.y);
     if (this.mode === 'rally') {

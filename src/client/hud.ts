@@ -1,7 +1,7 @@
 // Interfaz en HTML sobre el canvas: recursos, panel de selección, botones grandes para dedos.
 import {
   Age, AGE_NAME, AGE_SHORT, AGE_UPS, ArmorClass, BUILDINGS, BuildingType, NODES, NodeType, Res, RES_LIST, ResBag, TECHS, TechType,
-  TICK_RATE, TILE, TRADE, UNITS, UnitType,
+  TICK_RATE, TILE, TRADE, UNITS, UnitType, COUNTERS,
 } from '../sim/data.js';
 import { CIVS } from '../sim/civs.js';
 import { Entity, Stance, STANCE_NAME } from '../sim/world.js';
@@ -12,7 +12,7 @@ import { saveSettings, settings } from './settings.js';
 export const UNIT_ICON: Record<UnitType, string> = {
   villager: '🧑‍🌾', militia: '🗡️', spearman: '🔱', champion: '⚔️',
   archer: '🏹', skirmisher: '🎯', cavarcher: '🏇', handcannon: '🔫',
-  scout: '🐎', knight: '🛡️', ram: '🐏', mangonel: '🪨', bombard: '💣', trebuchet: '🏗️', monk: '🧙',
+  scout: '🐎', knight: '🛡️', camel: '🐪', ram: '🐏', mangonel: '🪨', bombard: '💣', trebuchet: '🏗️', monk: '🧙',
   fishship: '🎣', galleon: '⛵', fireship: '🔥', cannongalleon: '🚢',
   huskarl: '🛡️', jaguar: '🐆', tarkan: '🔥', teutonic: '⚜️', plumed: '🪶',
   longbow: '🏹', axeman: '🪓', conquistador: '🤠', cataphract: '🐴', mangudai: '🏇',
@@ -26,7 +26,7 @@ export const BUILD_ICON: Record<BuildingType, string> = {
 };
 export const RES_ICON: Record<Res, string> = { food: '🍖', wood: '🪵', gold: '🪙', stone: '🪨' };
 const NODE_ICON: Record<NodeType, string> = { tree: '🌳', berries: '🫐', goldmine: '🪙', stonemine: '🪨', fish: '🐟' };
-const CLS_NAME: Record<ArmorClass, string> = { infantry: 'infantería', archer: 'arqueros', cavalry: 'caballería', siege: 'asedio', villager: 'aldeanos', building: 'edificios', ship: 'barcos' };
+const CLS_NAME: Record<ArmorClass, string> = { infantry: 'infantería', archer: 'arqueros', cavalry: 'caballería', siege: 'asedio', villager: 'aldeanos', building: 'edificios', ship: 'barcos', camel: 'camellos' };
 const STANCE_ICON: Record<Stance, string> = { agg: '⚔️', def: '🛡️', pas: '🕊️' };
 const STANCE_DESC: Record<Stance, string> = {
   agg: 'Ataca a todo enemigo que vea y lo persigue.',
@@ -50,10 +50,10 @@ const lock = (age: Age) => `🔒 ${AGE_SHORT[age]}`;
 /** Ficha de una unidad para el "mantener apretado" */
 export function unitTip(u: UnitType): string {
   const d = UNITS[u];
-  const strong = Object.entries(d.bonus ?? {}).filter(([, v]) => (v ?? 0) >= 2).map(([c]) => CLS_NAME[c as ArmorClass]);
-  const weak = (Object.keys(UNITS) as UnitType[]).filter((o) => !UNITS[o].unique && (UNITS[o].bonus?.[d.cls] ?? 0) >= 3).map((o) => UNITS[o].name);
-  if (d.cls === 'archer' && !weak.includes('Escaramuzador')) weak.push('Escaramuzador');
-  if (d.cls === 'siege' && d.range <= TILE * 2) weak.push('cualquier unidad cuerpo a cuerpo');
+  const name = (k: string) => (k === 'building' ? CLS_NAME.building : k === 'tower' ? BUILDINGS.tower.name : UNITS[k as UnitType].name);
+  const c = COUNTERS[u];
+  const strong = c.strong.map(name);
+  const weak = c.weak.map(name);
   const kind = d.atk === 0 ? '' : d.range > TILE ? `a distancia (alcance ${Math.round(d.range / TILE)})` : 'cuerpo a cuerpo';
   return `<b>${UNIT_ICON[u]} ${d.name}</b><p>${d.desc}</p>
     <div class="stats"><span>❤️ ${d.hp} vida</span>${d.atk ? `<span>⚔️ ${d.atk} ataque ${kind}</span>` : ''}<span>🛡️ ${d.armorMelee} / ${d.armorPierce} armadura</span><span>🏃 ${d.speed > 75 ? 'rápida' : d.speed > 45 ? 'normal' : 'lenta'}</span></div>
@@ -485,7 +485,7 @@ export class Hud {
     const first = ents[0];
     if (first.cat === 'node') {
       return `<div class="info"><div class="title">${NODE_ICON[first.type as NodeType]} ${NODES[first.type as NodeType].name}</div>
-        <div class="sub">Quedan <b data-amt>${Math.floor(first.amount)}</b> de ${RES_ICON[NODES[first.type as NodeType].res]}</div>
+        <div class="sub">${RES_ICON[NODES[first.type as NodeType].res]} <b data-amt>${Math.floor(first.amount)}</b></div>
         ${first.type === 'fish' ? '<div class="sub dim">Lo pescan los barcos pesqueros del muelle.</div>' : ''}</div>
         <div class="acts"></div>`;
     }

@@ -200,3 +200,17 @@ test('15 civilizaciones: cada una con su unidad única en el castillo', async ()
     assert.ok(m.world.trainsOf(0, 'castle').includes(CIVS[civ].unique), civ);
   }
 });
+
+test('camello: le gana al caballero y pierde contra arqueros', () => {
+  const duel = (a, b, na = 1, nb = 1) => {
+    const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 3, map: 'continental', biome: 'templado' });
+    const w = m.world, cx = w.w * 16, cy = w.h * 16;
+    for (const e of [...w.entities.values()]) if (e.cat === 'node' && Math.hypot(e.x - cx, e.y - cy) < 300) w.remove(e.id);
+    const A = Array.from({ length: na }, (_, i) => w.spawnUnit(0, a, cx - 90, cy + i * 20)), B = Array.from({ length: nb }, (_, i) => w.spawnUnit(1, b, cx + 90, cy + i * 20));
+    w.issue({ t: 'target', p: 0, ids: A.map((u) => u.id), target: B[0].id }); w.issue({ t: 'target', p: 1, ids: B.map((u) => u.id), target: A[0].id });
+    for (let i = 0; i < 20 * 120; i++) { w.step(); if (!A.some((u) => w.get(u.id)) || !B.some((u) => w.get(u.id))) break; }
+    return A.some((u) => w.get(u.id)) ? 'A' : 'B';
+  };
+  assert.equal(duel('camel', 'knight'), 'A');
+  assert.equal(duel('archer', 'camel', 3, 1), 'A');
+});

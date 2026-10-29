@@ -511,3 +511,6 @@ table.players td:nth-child(n+4) { text-align: right; font-variant-numeric: tabul
   .hbig { padding: 9px 14px; } .htile { min-height: 62px; padding: 6px 4px; }
   .home-color .swatch { width: 26px; height: 26px; }
 }
+.setting.langs { flex-wrap: wrap; gap: 8px; }
+.setting.langs .seg button { padding: 7px 10px; font-size: 13px; }
+.campdiff .seg button { padding: 6px 9px; font-size: 12px; }

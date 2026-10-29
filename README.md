@@ -3,7 +3,7 @@
 Juego de estrategia en tiempo real inspirado en los clásicos del género (aldeanos, recursos, eras, ejércitos),
 pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 
-> Prototipo jugable v0.8 — arte y código originales.
+> Prototipo jugable v0.9 — arte y código originales. En español (por defecto), inglés y portugués.
 
 ## Qué incluye
 
@@ -23,8 +23,8 @@ pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
   Mongoles (Mangudai), Japoneses (Samurái), Chinos (Chu Ko Nu), Persas (Elefante de guerra), Vikingos (Berserker) y Turcos (Jenízaro);
   desbloqueables: Godos (Huscarle), Aztecas (Guerrero jaguar), Hunos (Tarkán), Teutones (Caballero teutón) y Mayas (Arquero emplumado).
 - **20 logros** (victorias, economía, combate, mapas, civilizaciones…) que se guardan en el teléfono y desbloquean civilizaciones con 2, 5, 8, 12 y 16 logros.
-- **19 unidades comunes:** Aldeano, Espadachín, Lancero, Campeón, Arquero, Escaramuzador, Arquero a caballo, Arcabucero,
-  Explorador, Caballero, Ariete, Mangana (daño en área), Cañón de bombardeo, Fundíbulo, Monje (cura), Barco pesquero,
+- **20 unidades comunes:** Aldeano, Espadachín, Lancero, Campeón, Arquero, Escaramuzador, Arquero a caballo, Arcabucero,
+  Explorador, Caballero, Jinete de camello, Ariete, Mangana (daño en área), Cañón de bombardeo, Fundíbulo, Monje (cura), Barco pesquero,
   Galeón, Barco incendiario y Galeón cañonero.
 - **19 edificios**, entre ellos Muelle (va en el agua), Universidad, Castillo, Monasterio, Mercado, Herrería, Empalizada, Muralla de piedra y Puertas (dejan pasar solo a tu equipo).
 - **15 investigaciones:** Herrería (Forja, Cota de malla, Emplumado, Barda), Universidad (Albañilería, Arquitectura, Química,

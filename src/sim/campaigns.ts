@@ -32,6 +32,8 @@ export interface Scenario {
   goal: Goal;
   /** oleadas enemigas: cada `every` segundos, desde `from` segundos */
   waves?: { every: number; from: number; units: UnitType[]; size: number; grow: number };
+  /** multiplicador de vida del héroe (según dificultad) */
+  heroHp?: number;
 }
 
 export interface Campaign { id: string; name: string; civ: CivId; emblem: string; hero: string; desc: string; scenarios: Scenario[] }
@@ -479,6 +481,21 @@ export function findScenario(id: string): { camp: Campaign; scn: Scenario; index
   return undefined;
 }
 
+const DIFFS: Difficulty[] = ['novice', 'easy', 'normal', 'hard'];
+/** Ajusta un escenario a la dificultad elegida: IA enemiga, oleadas y vida del héroe */
+export function scaleScenario(scn: Scenario, diff: Difficulty = 'normal'): Scenario {
+  const shift = DIFFS.indexOf(diff) - 2; // principiante -2 … difícil +1
+  if (!shift) return scn;
+  const move = (d: Difficulty | undefined) => DIFFS[Math.max(0, Math.min(3, DIFFS.indexOf(d ?? 'normal') + shift))];
+  const k = [0.4, 0.65, 1, 1.35][shift + 2];
+  return {
+    ...scn,
+    enemies: scn.enemies.map((e) => ({ ...e, diff: move(e.diff) })),
+    waves: scn.waves && { ...scn.waves, size: Math.max(1, Math.round(scn.waves.size * k)), grow: shift < 0 ? (shift < -1 ? 0 : 0.5) : scn.waves.grow, every: Math.round(scn.waves.every / Math.min(1.15, k)) },
+    heroHp: [9, 7, 5, 4][shift + 2],
+  };
+}
+
 function hash(s: string): number { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 99991; return h; }
 
 /** Busca lugar libre cerca de (cx, cy) para un edificio */
@@ -563,7 +580,7 @@ export function createScenario(scn: Scenario, color = 0): Match {
     const tc = w.buildingsOf(0, 'towncenter')[0];
     const h = w.spawnUnit(0, scn.hero.type, tc.x, tc.y + 80);
     h.hero = scn.hero.name;
-    h.maxHp = h.hp = Math.round(h.maxHp * 5);
+    h.maxHp = h.hp = Math.round(h.maxHp * (scn.heroHp ?? 5));
   }
   w.refreshVisibility();
   m.cfg = { ...m.cfg, mode: 'scenario', scenario: scn.id, color };
@@ -625,7 +642,7 @@ export class ScenarioState {
       const myTc = w.buildingsOf(0, 'towncenter')[0];
       const from = enemy ? w.buildingsOf(enemy.id, 'towncenter')[0] : undefined;
       if (enemy && myTc && from) {
-        const n = wv.size + this.waveN * wv.grow;
+        const n = Math.round(wv.size + this.waveN * wv.grow);
         const ids: number[] = [];
         for (let k = 0; k < n; k++) {
           const t = wv.units[(k + this.waveN) % wv.units.length];

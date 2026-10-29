@@ -21,7 +21,7 @@ export const AGE_UPS: Record<2 | 3 | 4, { cost: Partial<ResBag>; time: number }>
 export type UnitType =
   | 'villager' | 'militia' | 'spearman' | 'champion'
   | 'archer' | 'skirmisher' | 'cavarcher' | 'handcannon'
-  | 'scout' | 'knight'
+  | 'scout' | 'knight' | 'camel'
   | 'ram' | 'mangonel' | 'bombard' | 'trebuchet'
   | 'monk'
   | 'fishship' | 'galleon' | 'fireship' | 'cannongalleon'
@@ -37,7 +37,7 @@ export type BuildingType =
   | 'dock' | 'university' | 'stonewall' | 'gate';
 export type NodeType = 'tree' | 'berries' | 'goldmine' | 'stonemine' | 'fish';
 
-export type ArmorClass = 'infantry' | 'archer' | 'cavalry' | 'siege' | 'villager' | 'building' | 'ship';
+export type ArmorClass = 'infantry' | 'archer' | 'cavalry' | 'siege' | 'villager' | 'building' | 'ship' | 'camel';
 export type Projectile = 'arrow' | 'stone' | 'ball' | 'fire' | 'axe' | 'bolt';
 
 export type TechType =
@@ -74,6 +74,8 @@ export interface UnitDef {
   regen?: number; // vida por segundo
   projectile?: Projectile;
   unique?: boolean;
+  /** clases extra que reciben bonificaciones (p. ej. el camello es caballería y además camello) */
+  tags?: ArmorClass[];
   desc: string;
 }
 
@@ -99,13 +101,13 @@ export const UNITS: Record<UnitType, UnitDef> = {
   champion: {
     name: 'Campeón', hp: 80, atk: 12, atkType: 'melee', cooldown: 1.8, range: 4, armorMelee: 2, armorPierce: 2,
     speed: 50, radius: 9, sight: 6, cost: { food: 60, gold: 25 }, trainTime: 14, age: 4, cls: 'infantry',
-    bonus: { building: 6 }, desc: 'La mejor infantería con espada.',
+    bonus: { building: 6, infantry: 2 }, desc: 'La mejor infantería con espada.',
   },
   // ---------------------------------------------------------------- arquería
   archer: {
     name: 'Arquero', hp: 30, atk: 4, atkType: 'pierce', cooldown: 2, range: 4.5 * T, armorMelee: 0, armorPierce: 0,
     speed: 50, radius: 7, sight: 6, cost: { wood: 25, gold: 45 }, trainTime: 13, age: 2, cls: 'archer',
-    bonus: { infantry: 3 }, projectile: 'arrow', desc: 'Ataque a distancia. Fuerte contra infantería.',
+    bonus: { infantry: 3, camel: 4 }, projectile: 'arrow', desc: 'Ataque a distancia. Fuerte contra infantería.',
   },
   skirmisher: {
     name: 'Escaramuzador', hp: 30, atk: 2, atkType: 'pierce', cooldown: 2.2, range: 4 * T, armorMelee: 0, armorPierce: 3,
@@ -115,7 +117,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
   cavarcher: {
     name: 'Arquero a caballo', hp: 50, atk: 5, atkType: 'pierce', cooldown: 2, range: 4 * T, armorMelee: 0, armorPierce: 1,
     speed: 78, radius: 10, sight: 6, cost: { wood: 40, gold: 70 }, trainTime: 16, age: 3, cls: 'archer', mounted: true,
-    bonus: { infantry: 2 }, projectile: 'arrow', desc: 'Arquero veloz que golpea y huye.',
+    bonus: { infantry: 2, camel: 4 }, projectile: 'arrow', desc: 'Arquero veloz que golpea y huye.',
   },
   handcannon: {
     name: 'Arcabucero', hp: 35, atk: 15, atkType: 'pierce', cooldown: 3.5, range: 5.5 * T, armorMelee: 1, armorPierce: 0,
@@ -132,6 +134,11 @@ export const UNITS: Record<UnitType, UnitDef> = {
     name: 'Caballero', hp: 110, atk: 10, atkType: 'melee', cooldown: 1.8, range: 4, armorMelee: 2, armorPierce: 2,
     speed: 80, radius: 10, sight: 6, cost: { food: 60, gold: 75 }, trainTime: 16, age: 3, cls: 'cavalry', mounted: true,
     bonus: { archer: 6 }, desc: 'Caballería pesada. Arrasa arqueros.',
+  },
+  camel: {
+    name: 'Jinete de camello', hp: 100, atk: 6, atkType: 'melee', cooldown: 2, range: 4, armorMelee: 0, armorPierce: 0,
+    speed: 76, radius: 10, sight: 5, cost: { food: 55, gold: 60 }, trainTime: 15, age: 3, cls: 'cavalry', mounted: true, tags: ['camel'],
+    bonus: { cavalry: 9 }, desc: 'Espanta a los caballos: destroza caballería, pero las flechas lo castigan.',
   },
   // ---------------------------------------------------------------- asedio
   ram: {
@@ -184,7 +191,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
   longbow: {
     name: 'Arquero de arco largo', hp: 35, atk: 6, atkType: 'pierce', cooldown: 2, range: 7 * T, armorMelee: 0, armorPierce: 1,
     speed: 48, radius: 7, sight: 9, cost: { wood: 35, gold: 40 }, trainTime: 14, age: 3, cls: 'archer', unique: true,
-    bonus: { infantry: 2 }, projectile: 'arrow', desc: 'Única de los Británicos. Alcance enorme.',
+    bonus: { infantry: 2, camel: 4 }, projectile: 'arrow', desc: 'Única de los Británicos. Alcance enorme.',
   },
   axeman: {
     name: 'Lanzador de hachas', hp: 60, atk: 7, atkType: 'melee', cooldown: 2, range: 3 * T, armorMelee: 0, armorPierce: 1,
@@ -204,7 +211,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
   mangudai: {
     name: 'Mangudai', hp: 60, atk: 6, atkType: 'pierce', cooldown: 1.8, range: 4 * T, armorMelee: 0, armorPierce: 1,
     speed: 86, radius: 10, sight: 7, cost: { wood: 55, gold: 65 }, trainTime: 18, age: 3, cls: 'archer', mounted: true,
-    unique: true, bonus: { siege: 4, infantry: 1 }, projectile: 'arrow', desc: 'Única de los Mongoles. Arquero a caballo letal.',
+    unique: true, bonus: { siege: 4, infantry: 1, camel: 4 }, projectile: 'arrow', desc: 'Única de los Mongoles. Arquero a caballo letal.',
   },
   samurai: {
     name: 'Samurái', hp: 62, atk: 9, atkType: 'melee', cooldown: 1.45, range: 4, armorMelee: 1, armorPierce: 1,
@@ -214,7 +221,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
   chukonu: {
     name: 'Chu Ko Nu', hp: 45, atk: 4, atkType: 'pierce', cooldown: 2, range: 4 * T, armorMelee: 0, armorPierce: 0,
     speed: 50, radius: 7, sight: 6, cost: { food: 40, wood: 35 }, trainTime: 13, age: 3, cls: 'archer', unique: true,
-    multishot: 2, bonus: { infantry: 1 }, projectile: 'bolt', desc: 'Única de los Chinos. Ballesta que dispara ráfagas.',
+    multishot: 2, bonus: { infantry: 1, camel: 4 }, projectile: 'bolt', desc: 'Única de los Chinos. Ballesta que dispara ráfagas.',
   },
   elephant: {
     name: 'Elefante de guerra', hp: 320, atk: 16, atkType: 'melee', cooldown: 2, range: 4, armorMelee: 1, armorPierce: 2,
@@ -254,7 +261,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
   plumed: {
     name: 'Arquero emplumado', hp: 50, atk: 5, atkType: 'pierce', cooldown: 1.9, range: 5 * T, armorMelee: 0, armorPierce: 1,
     speed: 64, radius: 7, sight: 7, cost: { wood: 46, gold: 46 }, trainTime: 13, age: 3, cls: 'archer', unique: true,
-    bonus: { infantry: 1 }, projectile: 'arrow', desc: 'Única de los Mayas. Arquero rápido y resistente.',
+    bonus: { infantry: 1, camel: 4 }, projectile: 'arrow', desc: 'Única de los Mayas. Arquero rápido y resistente.',
   },
 };
 
@@ -288,7 +295,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   house: { name: 'Casa', size: 2, hp: 300, cost: { wood: 25 }, buildTime: 10, age: 1, pop: 5, sight: 3, desc: '+5 de población.' },
   barracks: { name: 'Cuartel', size: 3, hp: 900, cost: { wood: 150 }, buildTime: 22, age: 1, trains: ['militia', 'spearman', 'champion'], sight: 4, desc: 'Entrena infantería.' },
   range: { name: 'Galería de tiro', size: 3, hp: 900, cost: { wood: 150 }, buildTime: 22, age: 2, trains: ['archer', 'skirmisher', 'cavarcher', 'handcannon'], sight: 4, desc: 'Entrena arqueros y pólvora.' },
-  stable: { name: 'Establo', size: 3, hp: 900, cost: { wood: 175 }, buildTime: 25, age: 2, trains: ['scout', 'knight'], sight: 4, desc: 'Entrena caballería.' },
+  stable: { name: 'Establo', size: 3, hp: 900, cost: { wood: 175 }, buildTime: 25, age: 2, trains: ['scout', 'knight', 'camel'], sight: 4, desc: 'Entrena caballería.' },
   workshop: { name: 'Taller de asedio', size: 3, hp: 900, cost: { wood: 200 }, buildTime: 28, age: 3, trains: ['ram', 'mangonel', 'bombard'], sight: 4, desc: 'Construye armas de asedio.' },
   mill: { name: 'Molino', size: 2, hp: 500, cost: { wood: 100 }, buildTime: 14, age: 1, drop: ['food'], sight: 4, research: ['plow'], desc: 'Depósito de comida.' },
   lumbercamp: { name: 'Aserradero', size: 2, hp: 500, cost: { wood: 100 }, buildTime: 14, age: 1, drop: ['wood'], sight: 4, research: ['axe'], desc: 'Depósito de madera.' },
@@ -364,3 +371,42 @@ export function isLandArmy(u: UnitType): boolean {
 export function costText(c: Partial<ResBag>): string {
   return (Object.keys(c) as Res[]).map((r) => `${c[r]} ${RES_NAME[r].toLowerCase()}`).join(' · ');
 }
+
+/** Fuerte / débil contra (para las fichas). 'building' = edificios, 'tower' = torres. */
+export const COUNTERS: Record<UnitType, { strong: (UnitType | 'building' | 'tower')[]; weak: (UnitType | 'building' | 'tower')[] }> = {
+  villager: { strong: [], weak: ['scout', 'knight', 'archer'] },
+  militia: { strong: ['building', 'spearman', 'skirmisher'], weak: ['archer', 'handcannon', 'cataphract'] },
+  spearman: { strong: ['knight', 'scout', 'camel', 'elephant'], weak: ['archer', 'militia', 'champion'] },
+  champion: { strong: ['building', 'spearman', 'skirmisher'], weak: ['archer', 'handcannon', 'cataphract'] },
+  archer: { strong: ['militia', 'spearman', 'camel'], weak: ['skirmisher', 'knight', 'mangonel'] },
+  skirmisher: { strong: ['archer', 'cavarcher', 'longbow'], weak: ['militia', 'knight', 'scout'] },
+  cavarcher: { strong: ['spearman', 'militia', 'camel'], weak: ['skirmisher', 'knight'] },
+  handcannon: { strong: ['militia', 'champion', 'spearman'], weak: ['knight', 'skirmisher', 'mangonel'] },
+  scout: { strong: ['mangonel', 'trebuchet', 'monk'], weak: ['spearman', 'camel', 'knight'] },
+  knight: { strong: ['archer', 'skirmisher', 'handcannon'], weak: ['spearman', 'camel'] },
+  camel: { strong: ['knight', 'scout', 'cataphract', 'elephant'], weak: ['archer', 'spearman', 'cavarcher'] },
+  ram: { strong: ['building'], weak: ['militia', 'champion', 'scout'] },
+  mangonel: { strong: ['archer', 'spearman', 'skirmisher'], weak: ['scout', 'knight', 'bombard'] },
+  bombard: { strong: ['building', 'mangonel', 'trebuchet'], weak: ['scout', 'knight'] },
+  trebuchet: { strong: ['building'], weak: ['scout', 'knight', 'militia'] },
+  monk: { strong: [], weak: ['scout', 'knight'] },
+  fishship: { strong: [], weak: ['galleon', 'fireship'] },
+  galleon: { strong: ['fishship', 'cannongalleon'], weak: ['fireship', 'tower'] },
+  fireship: { strong: ['galleon', 'cannongalleon', 'fishship'], weak: ['tower'] },
+  cannongalleon: { strong: ['building'], weak: ['fireship', 'galleon'] },
+  longbow: { strong: ['militia', 'spearman', 'champion'], weak: ['skirmisher', 'knight', 'scout'] },
+  axeman: { strong: ['militia', 'spearman', 'champion'], weak: ['archer', 'knight', 'cataphract'] },
+  conquistador: { strong: ['militia', 'spearman', 'champion'], weak: ['camel', 'skirmisher'] },
+  cataphract: { strong: ['militia', 'spearman', 'champion'], weak: ['camel', 'archer'] },
+  mangudai: { strong: ['mangonel', 'trebuchet', 'spearman'], weak: ['skirmisher', 'knight'] },
+  samurai: { strong: ['militia', 'champion', 'building'], weak: ['archer', 'handcannon'] },
+  chukonu: { strong: ['militia', 'spearman', 'champion'], weak: ['skirmisher', 'knight', 'mangonel'] },
+  elephant: { strong: ['building', 'militia', 'knight'], weak: ['spearman', 'camel'] },
+  berserker: { strong: ['knight', 'scout', 'militia'], weak: ['archer', 'cataphract'] },
+  janissary: { strong: ['militia', 'spearman', 'champion'], weak: ['knight', 'skirmisher', 'mangonel'] },
+  huskarl: { strong: ['archer', 'skirmisher', 'building'], weak: ['champion', 'cataphract', 'knight'] },
+  jaguar: { strong: ['militia', 'champion', 'spearman'], weak: ['archer', 'knight'] },
+  tarkan: { strong: ['building', 'archer'], weak: ['spearman', 'camel'] },
+  teutonic: { strong: ['militia', 'knight', 'spearman'], weak: ['archer', 'handcannon', 'mangonel'] },
+  plumed: { strong: ['militia', 'spearman', 'champion'], weak: ['skirmisher', 'knight', 'huskarl'] },
+};

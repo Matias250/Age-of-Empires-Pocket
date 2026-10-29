@@ -900,6 +900,7 @@ export class World implements Grid {
       if (t.type === 'villager' && this.hasTech(t.owner, 'loom')) armor += type === 'melee' ? 1 : 2;
     }
     let dmg = atk + (bonus?.[cls] ?? 0);
+    if (t.cat === 'unit' && bonus) for (const tag of UNITS[t.type as UnitType].tags ?? []) dmg += bonus[tag] ?? 0;
     if (cls === 'building' && src && src.cat === 'unit' && UNITS[src.type as UnitType].cls === 'siege' && this.hasTech(src.owner, 'siegeeng')) dmg *= 1.2;
     return Math.max(1, dmg - armor);
   }

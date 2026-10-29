@@ -6,11 +6,13 @@ import { CIV_LIST, CIVS, CivId } from '../sim/civs.js';
 import { UNITS } from '../sim/data.js';
 import { saveSettings, settings, Settings } from './settings.js';
 import { Game } from './game.js';
+import { initI18n, lang, LANGS, setLang } from './i18n/index.js';
 import { CAMPAIGNS, findScenario } from '../sim/campaigns.js';
 import { campaignCount, storyDone, storyOpen } from './scenario.js';
 import { drawWorldMap } from './worldmap.js';
 import { ACHIEVEMENTS, achCount, achDone, achProgress, civUnlocked, unlockedCivs } from './achievements.js';
 
+initI18n();
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const menu = document.getElementById('menu')!;
 let game: Game | null = null;
@@ -29,6 +31,7 @@ if (!MAP_SIZES[sizeSel] || MAP_SIZES[sizeSel].players < slots.length) sizeSel = 
 const maxPlayers = () => MAP_SIZES[sizeSel].players;
 let nextSeed = Math.floor(Math.random() * 99999); // la vista previa usa la misma semilla que la partida
 let mapOpen = false;
+let campDiff = store.get('difcamp', 'normal') as Difficulty;
 let startSel = store.get('start', 'normal') as StartMode;
 if (!START_MODES[startSel]) startSel = 'normal';
 const previewCache = new Map<string, string>();
@@ -56,7 +59,6 @@ function preset(kind: '1v1' | '2v2' | '4v4' | 'ffa', myCiv: CivId | 'random' = '
 
 function renderMenu() {
   menu.hidden = false;
-  const storyN = CAMPAIGNS.reduce((a, c) => a + campaignCount(c), 0);
   menu.innerHTML = `
   <div class="home">
     <button class="corner left" data-m="howto" aria-label="¿Cómo se juega?">❓</button>
@@ -70,7 +72,7 @@ function renderMenu() {
       <div class="home-color"><span>Tu color</span><div class="swatches">${PLAYER_COLORS.map((_, i) => swatch(i)).join('')}</div></div>
     </div>
     <div class="home-main">
-      <button class="hbig" data-m="stories"><i>🗺️</i><div><b>Historias</b><small>${storyN}/25 escenarios</small></div></button>
+      <button class="hbig" data-m="stories"><i>🗺️</i><div><b>Historias</b></div></button>
       <button class="hbig" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza</b><small>Contra la IA, hasta 8 jugadores</small></div></button>
       <div class="htiles">
         <button class="htile" data-m="tutorial"><i>📜</i><b>Tutorial</b></button>
@@ -276,6 +278,8 @@ function showSettings() {
   menu.innerHTML = `<div class="menu-inner">
     <h2 class="pagetitle">⚙️ Configuración</h2>
     <div class="settings">
+      <div class="setting langs"><div><b>Idioma</b><small>Language · Idioma</small></div>
+        <div class="seg">${LANGS.map((l) => `<button data-lang="${l.id}" class="${l.id === lang ? 'on' : ''}">${l.flag} ${l.name}</button>`).join('')}</div></div>
       ${row('grid', 'Cuadrícula', 'Muestra las casillas del terreno: ayuda a ubicar edificios y murallas.')}
       ${row('hpBars', 'Barras de vida siempre visibles', 'Muestra la vida de todas tus unidades, no solo de las heridas.')}
     </div>
@@ -286,13 +290,17 @@ function showSettings() {
     const k = t.getAttribute('data-set') as keyof Settings | null;
     if (k) { settings[k] = t.checked; saveSettings(); }
   };
-  menu.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-back]')) renderMenu(); };
+  menu.onclick = (e) => {
+    const t = e.target as HTMLElement;
+    const l = t.closest('[data-lang]')?.getAttribute('data-lang') as typeof lang | null;
+    if (l && l !== lang) { setLang(l); return; }
+    if (t.closest('[data-back]')) renderMenu();
+  };
 }
 
 function showStories() {
   menu.innerHTML = `<div class="menu-inner">
     <h2 class="pagetitle">🗺️ Historias</h2>
-    <p class="dim">Cada campaña cuenta una historia en 3 o 4 escenarios. Completá uno para habilitar el siguiente.</p>
     <div class="camps">${CAMPAIGNS.map((c) => {
       const n = campaignCount(c);
       return `<button class="camp" data-camp="${c.id}"><i>${c.emblem}</i><div><b>${c.name}</b><small>${c.desc}</small>
@@ -320,6 +328,7 @@ function showCampaign(id: string, sel?: number) {
     <canvas id="wmap" class="wmap"></canvas>
     <div class="scnlist">${camp.scenarios.map((x, i) => `<button class="scn ${i === sel ? 'on' : ''} ${storyDone(x.id) ? 'done' : ''} ${storyOpen(camp, i) ? '' : 'locked'}" data-scn="${i}">
       <b>${storyDone(x.id) ? '✓' : storyOpen(camp, i) ? i + 1 : '🔒'}</b><span>${x.title}</span></button>`).join('')}</div>
+    <div class="diff campdiff"><span>Dificultad</span><div class="seg">${DIFF_LIST.map((d) => `<button data-cdif="${d}" class="${d === campDiff ? 'on' : ''}">${DIFF_NAME[d]}</button>`).join('')}</div></div>
     <div class="brief">
       <h3>${s.title}</h3><small>${s.place} · ${s.year}</small>
       ${open ? intro : '<p class="dim">Completá el escenario anterior para conocer esta parte de la historia.</p>'}
@@ -334,8 +343,10 @@ function showCampaign(id: string, sel?: number) {
     const t = e.target as HTMLElement;
     const i = t.closest('[data-scn]')?.getAttribute('data-scn');
     if (i) return showCampaign(id, Number(i));
+    const cd = t.closest('[data-cdif]')?.getAttribute('data-cdif') as Difficulty | null;
+    if (cd) { campDiff = cd; store.set('difcamp', cd); return showCampaign(id, sel); }
     if (t.closest('[data-back]')) return showStories();
-    if (t.closest('[data-play]') && open) start({ mode: 'scenario', scenario: s.id, difficulty, color, seed: 1 });
+    if (t.closest('[data-play]') && open) start({ mode: 'scenario', scenario: s.id, difficulty: campDiff, color, seed: 1 });
   };
 }
 window.addEventListener('open-campaign', (e) => showCampaign((e as CustomEvent<string>).detail));

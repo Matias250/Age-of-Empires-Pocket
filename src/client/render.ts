@@ -991,7 +991,8 @@ export class Renderer {
     const bob = moving ? Math.abs(Math.sin(time * 12 + e.id)) * 1.6 : 0;
     const fx = Math.cos(e.facing), fy = Math.sin(e.facing);
     const flip = fx < 0 ? -1 : 1;
-    if (d.mounted) this.horse(x, y + 1, flip, bob, t === 'cataphract' || t === 'knight' ? col : null, t === 'cataphract' ? '#8a8f96' : t === 'scout' ? '#a87a4a' : '#7b5232');
+    if (t === 'camel') this.camelMount(x, y + 1, flip, bob, col);
+    else if (d.mounted) this.horse(x, y + 1, flip, bob, t === 'cataphract' || t === 'knight' ? col : null, t === 'cataphract' ? '#8a8f96' : t === 'scout' ? '#a87a4a' : '#7b5232');
     const by = y - (d.mounted ? 9 : 2) - bob;
     const body = t === 'monk' ? '#7a5a3a' : t === 'champion' || t === 'cataphract' || t === 'teutonic' ? '#b0b7bf' : t === 'jaguar' ? '#d9a441' : t === 'samurai' ? '#b23a3a' : t === 'janissary' ? '#e8e2d0' : col;
     if (!d.mounted && t !== 'monk') {
@@ -1153,6 +1154,21 @@ export class Renderer {
     if (since >= 0 && since < 0.3) return 1 - since / 0.3;           // impacto y vuelta
     if (e.path.length === 0 && since < 6 && e.cooldown < 0.35) return -(1 - Math.max(0, e.cooldown) / 0.35); // levanta el arma
     return 0;
+  }
+
+  private camelMount(x: number, y: number, flip: number, bob: number, col: string) {
+    const g = this.ctx;
+    const coat = '#c9a063';
+    g.fillStyle = shade(coat, -0.2);
+    g.fillRect(x - 9, y + 1, 2.5, 10 - bob); g.fillRect(x + 7, y + 1, 2.5, 9 + bob); g.fillRect(x - 5, y + 1, 2.2, 9 + bob * 0.5); g.fillRect(x + 3, y + 1, 2.2, 10 - bob * 0.5);
+    g.fillStyle = coat;
+    g.beginPath(); g.ellipse(x, y - 1, 12, 6, 0, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(x - flip * 2, y - 6, 6, 5, 0, 0, 7); g.fill(); // joroba
+    // cuello largo y cabeza
+    g.strokeStyle = coat; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(x + flip * 9, y - 2); g.quadraticCurveTo(x + flip * 16, y - 4, x + flip * 15, y - 13); g.stroke();
+    g.beginPath(); g.ellipse(x + flip * 17, y - 14, 4, 2.6, 0, 0, 7); g.fill();
+    g.fillStyle = col; g.fillRect(x - 7, y - 4, 12, 3); // manta con el color del jugador
   }
 
   private horse(x: number, y: number, flip: number, bob: number, barding: string | null, coat: string) {

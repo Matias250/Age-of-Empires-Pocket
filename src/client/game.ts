@@ -1,7 +1,7 @@
 // Controlador de una partida en curso: bucle, cámara, input táctil/mouse y selección.
 import { AGE_NAME, BUILDINGS, BuildingType, isLandArmy, NODES, NodeType, TICK_RATE, TILE, UNITS, UnitType } from '../sim/data.js';
 import { createMatch, Match, MatchConfig } from '../sim/match.js';
-import { createScenario, findScenario } from '../sim/campaigns.js';
+import { createScenario, findScenario, scaleScenario } from '../sim/campaigns.js';
 import { ScenarioRunner } from './scenario.js';
 import { Entity, World } from '../sim/world.js';
 import { Camera, Renderer } from './render.js';
@@ -56,7 +56,9 @@ export class Game {
 
   constructor(private canvas: HTMLCanvasElement, cfg: MatchConfig, private onExit: () => void) {
     const found = cfg.mode === 'scenario' && cfg.scenario ? findScenario(cfg.scenario) : undefined;
-    this.match = found ? createScenario(found.scn, cfg.color ?? 0) : createMatch(cfg);
+    const scn = found ? scaleScenario(found.scn, cfg.difficulty) : undefined;
+    this.match = scn ? createScenario(scn, cfg.color ?? 0) : createMatch(cfg);
+    if (scn) this.match.cfg.difficulty = cfg.difficulty;
     this.world = this.match.world;
     this.me = this.match.human;
     this.ctx = canvas.getContext('2d')!;
@@ -64,7 +66,7 @@ export class Game {
     this.hud = new Hud(this);
     this.ach = new AchTracker(this);
     if (cfg.mode === 'tutorial') this.tutorial = new Tutorial(this);
-    if (found) this.story = new ScenarioRunner(this, found.scn);
+    if (scn) this.story = new ScenarioRunner(this, scn);
     this.resize();
     const tc = this.world.buildingsOf(this.me, 'towncenter')[0];
     if (tc) this.centerOn(tc.x, tc.y);

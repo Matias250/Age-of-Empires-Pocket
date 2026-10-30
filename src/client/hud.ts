@@ -1,10 +1,10 @@
 // Interfaz en HTML sobre el canvas: recursos, panel de selección, botones grandes para dedos.
 import {
-  Age, AGE_NAME, AGE_SHORT, AGE_UPS, ArmorClass, BUILDINGS, BuildingType, NODES, NodeType, Res, RES_LIST, ResBag, TECHS, TechType,
+  Age, AGE_NAME, AGE_SHORT, AGE_UPS, ArmorClass, BUILDINGS, BuildingType, NODES, NodeType, Res, RES_LIST, RES_NAME, ResBag, TECHS, TechType,
   TICK_RATE, TILE, TRADE, UNITS, UnitType, COUNTERS,
 } from '../sim/data.js';
 import { CIVS } from '../sim/civs.js';
-import { Entity, Stance, STANCE_NAME } from '../sim/world.js';
+import { Entity, RAM_CAPACITY, Stance, STANCE_NAME, World } from '../sim/world.js';
 import { findScenario } from '../sim/campaigns.js';
 import type { Game } from './game.js';
 import { saveSettings, settings } from './settings.js';
@@ -12,7 +12,7 @@ import { saveSettings, settings } from './settings.js';
 export const UNIT_ICON: Record<UnitType, string> = {
   villager: '🧑‍🌾', militia: '🗡️', spearman: '🔱', champion: '⚔️',
   archer: '🏹', skirmisher: '🎯', cavarcher: '🏇', handcannon: '🔫',
-  scout: '🐎', knight: '🛡️', camel: '🐪', ram: '🐏', mangonel: '🪨', bombard: '💣', trebuchet: '🏗️', monk: '🧙',
+  scout: '🐎', knight: '🛡️', camel: '🐪', eagle: '🦅', ram: '🐏', mangonel: '🪨', bombard: '💣', trebuchet: '🏗️', monk: '🧙',
   fishship: '🎣', tradecart: '🛒', tradecog: '🛶', galleon: '⛵', fireship: '🔥', cannongalleon: '🚢',
   huskarl: '🛡️', jaguar: '🐆', tarkan: '🔥', teutonic: '⚜️', plumed: '🪶',
   longbow: '🏹', axeman: '🪓', conquistador: '🤠', cataphract: '🐴', mangudai: '🏇',
@@ -287,7 +287,8 @@ export class Hud {
     const st = w.players[g.me].stats;
     const mins = Math.floor(w.tick / TICK_RATE / 60), secs = Math.floor(w.tick / TICK_RATE) % 60;
     const tut = g.match.cfg.mode === 'tutorial';
-    const fresh = g.ach.end(win);
+    this.endBack?.remove();
+    const fresh = (this.endFresh ??= g.ach.end(win));
     const story = g.story ? findScenario(g.story.scn.id) : undefined;
     const next = story && win ? story.camp.scenarios[story.index + 1] : undefined;
     const lost = g.story && !win ? (g.story.scn.hero && !w.entities.has(g.story.state.heroId) ? `${g.story.scn.hero.name} cayó en combate. La historia quedó sin terminar.` : 'La historia quedó sin terminar. Podés intentarlo de nuevo.') : '';
@@ -303,9 +304,13 @@ export class Hud {
         <div><b>${st.kills}</b><small>Derrotados</small></div>
         <div><b>${st.lost}</b><small>Pérdidas</small></div>
       </div>
-      <div class="end-res">${RES_LIST.map((r) => `${RES_ICON[r]} ${st.gathered[r]}`).join(' · ')}</div>
+      <div class="end-res">${RES_LIST.map((r) => `${RES_ICON[r]} ${Math.floor(st.gathered[r])}`).join(' · ')}</div>
       ${tut || story ? '' : this.playersTable()}
       ${fresh.length ? `<div class="end-ach"><b>🏅 Logros nuevos</b>${fresh.map((a) => `<span>${a.icon} ${a.name}</span>`).join('')}</div>` : ''}
+      <div class="end-btns two">
+        <button class="big ghost" data-o="map">🗺️ Ver mapa completo</button>
+        <button class="big ghost" data-o="stats">📊 Estadísticas</button>
+      </div>
       <div class="end-btns">
         ${story ? (next ? `<button class="big" data-o="next">Siguiente: ${next.title} ▸</button>` : win ? '' : '<button class="big" data-o="retry">Reintentar</button>')
           : tut ? '' : '<button class="big" data-o="again">Revancha</button>'}
@@ -314,13 +319,66 @@ export class Hud {
     </div>`;
     this.fitOverlay();
     o.onclick = (e) => {
-      const a = (e.target as HTMLElement).getAttribute('data-o');
+      const a = (e.target as HTMLElement).closest('[data-o]')?.getAttribute('data-o');
+      if (a === 'map') return this.showRevealedMap(win);
+      if (a === 'stats') return this.showStats(win);
       if (a === 'exit') g.exit();
       if (a === 'stories' && story) { g.exit(); window.dispatchEvent(new CustomEvent('open-campaign', { detail: story.camp.id })); }
       if (a === 'retry' && story) { const cfg = { ...g.match.cfg }; g.exit(); window.dispatchEvent(new CustomEvent('start-match', { detail: cfg })); }
       if (a === 'next' && next) { const cfg = { ...g.match.cfg, scenario: next.id }; g.exit(); window.dispatchEvent(new CustomEvent('start-match', { detail: cfg })); }
       if (a === 'again') { const cfg = { ...g.match.cfg, seed: (g.match.cfg.seed * 31 + 7) % 100000 }; g.exit(); window.dispatchEvent(new CustomEvent('start-match', { detail: cfg })); }
     };
+  }
+
+  /** Mapa sin niebla al terminar: se puede mover y hacer zoom; un botón vuelve al resumen */
+  private showRevealedMap(win: boolean) {
+    const g = this.g;
+    g.revealMap();
+    const o = $('overlay');
+    o.hidden = true; o.innerHTML = '';
+    const b = document.createElement('button');
+    b.className = 'endback'; b.textContent = '◂ Volver al resumen';
+    b.onclick = () => { b.remove(); this.showEnd(win); };
+    document.body.appendChild(b);
+    this.endBack = b;
+  }
+  endBack?: HTMLElement;
+  private endFresh?: ReturnType<Game['ach']['end']>;
+
+  /** Estadísticas de todos: quién juntó más de cada recurso, quién mató más y a quién le mataron más */
+  private showStats(win: boolean) {
+    const g = this.g, w = g.world;
+    const ps = w.players.filter((p) => !p.neutral);
+    const cols: { k: string; icon: string; title: string; v: (p: (typeof ps)[number]) => number }[] = [
+      ...RES_LIST.map((r) => ({ k: r, icon: RES_ICON[r], title: RES_NAME[r], v: (p: (typeof ps)[number]) => Math.floor(p.stats.gathered[r]) })),
+      { k: 'kills', icon: '⚔️', title: 'Enemigos derrotados', v: (p) => p.stats.kills },
+      { k: 'lost', icon: '💀', title: 'Pérdidas', v: (p) => p.stats.lost },
+      { k: 'trained', icon: '👥', title: 'Unidades entrenadas', v: (p) => p.stats.trained },
+      { k: 'built', icon: '🏗️', title: 'Edificios construidos', v: (p) => p.stats.built },
+    ];
+    const max = cols.map((c) => Math.max(...ps.map(c.v)));
+    const best = (f: (p: (typeof ps)[number]) => number) => { const m = Math.max(...ps.map(f)); return m > 0 ? ps.filter((p) => f(p) === m) : []; };
+    const who = (l: typeof ps) => l.length ? l.map((p) => `<b style="color:${p.color}">${p.id === g.me ? 'Vos' : p.name}</b>`).join(', ') : '<span>—</span>';
+    const total = (p: (typeof ps)[number]) => RES_LIST.reduce((n, r) => n + p.stats.gathered[r], 0);
+    const highlights = [
+      ...RES_LIST.map((r) => `<li><i>${RES_ICON[r]}</i> Más ${RES_NAME[r].toLowerCase()}: ${who(best((p) => p.stats.gathered[r]))}</li>`),
+      `<li><i>🧺</i> Mejor recolector: ${who(best(total))}</li>`,
+      `<li><i>⚔️</i> Mató más: ${who(best((p) => p.stats.kills))}</li>`,
+      `<li><i>💀</i> Le mataron más: ${who(best((p) => p.stats.lost))}</li>`,
+    ].join('');
+    const o = $('overlay');
+    o.hidden = false;
+    o.innerHTML = `<div class="card end stats">
+      <h2>📊 Estadísticas</h2>
+      <ul class="hl">${highlights}</ul>
+      <div class="statwrap"><table class="players st"><tr class="hd"><td>Jugador</td>${cols.map((c) => `<td title="${c.title}">${c.icon}</td>`).join('')}</tr>
+      ${ps.map((p) => `<tr class="${p.defeated ? 'dead' : ''}"><td><i class="dot" style="background:${p.color}"></i>${p.id === g.me ? 'Vos' : p.name}</td>${cols.map((c, i) => { const v = c.v(p); return `<td class="${v > 0 && v === max[i] ? 'top' : ''}">${v}</td>`; }).join('')}</tr>`).join('')}
+      </table></div>
+      <p class="dim">👑 en dorado: el mejor de cada columna.</p>
+      <div class="end-btns"><button class="big" data-o="back">◂ Volver al resumen</button></div>
+    </div>`;
+    this.fitOverlay();
+    o.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-o="back"]')) this.showEnd(win); };
   }
 
   // ------------------------------------------------------------------
@@ -344,6 +402,8 @@ export class Hud {
       case 'cancel': { const b = arg === 'tech' ? w.get(g.sel[0]) : g.sel.map((id) => w.get(id)).filter((x): x is Entity => !!x).sort((a2, b2) => b2.queue.length - a2.queue.length)[0]; if (b) w.issue({ t: 'cancel', p: g.me, bid: b.id, what: arg === 'tech' ? 'tech' : 'unit' }); break; }
       case 'rally': g.mode = 'rally'; this.toast('Tocá el mapa para marcar el punto de reunión'); break;
       case 'stop': w.issue({ t: 'stop', p: g.me, ids: selIds() }); break;
+      case 'explore': w.issue({ t: 'explore', p: g.me, ids: selIds() }); this.toast('🧭 Explorando el mapa por su cuenta'); break;
+      case 'unload': w.issue({ t: 'unload', p: g.me, ids: selIds() }); break;
       case 'stance': w.issue({ t: 'stance', p: g.me, ids: selIds(), stance: arg as Stance }); this.toast(`Actitud ${STANCE_NAME[arg as Stance]}`); break;
       case 'queue': g.queueMode = !g.queueMode; this.toast(g.queueMode ? '➕ Las próximas órdenes se agregan a la cola' : 'Cola apagada: las órdenes reemplazan a la actual'); break;
       case 'gatelock': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'gateLock', p: g.me, bid: b.id }); break; }
@@ -580,12 +640,13 @@ export class Hud {
     let info: string;
     if (units.length === 1) {
       const u = units[0], d = UNITS[u.type as UnitType];
-      const doing = !u.order ? 'Ocioso' : u.order.t === 'gather' ? `${d.naval ? 'Pescando' : 'Recolectando'} ${RES_ICON[u.order.res]}` : u.order.t === 'build' ? 'Construyendo' : u.order.t === 'move' ? 'Moviéndose' : u.order.t === 'heal' ? 'Curando' : u.order.t === 'trade' ? (u.order.leg === 'go' ? 'Viajando a comerciar' : `Volviendo con ${u.carry} 🪙`) : u.order.t === 'relic' ? (u.carryRelic ? 'Llevando la reliquia' : 'Buscando una reliquia') : 'Atacando';
+      const doing = !u.order ? 'Ocioso' : u.order.t === 'gather' ? `${d.naval ? 'Pescando' : 'Recolectando'} ${RES_ICON[u.order.res]}` : u.order.t === 'build' ? 'Construyendo' : u.order.t === 'move' ? 'Moviéndose' : u.order.t === 'heal' ? 'Curando' : u.order.t === 'trade' ? (u.order.leg === 'go' ? 'Viajando a comerciar' : `Volviendo con ${u.carry} 🪙`) : u.order.t === 'relic' ? (u.carryRelic ? 'Llevando la reliquia' : 'Buscando una reliquia') : u.order.t === 'explore' ? 'Explorando' : u.order.t === 'board' ? 'Subiendo al ariete' : 'Atacando';
       const relicTxt = u.carryRelic && u.order?.t !== 'relic' ? ' · ✨ lleva una reliquia (construí un monasterio)' : '';
+      const cargoTxt = u.type === 'ram' && mine ? `<span> · 🪖 ${u.cargo?.length ?? 0}/${RAM_CAPACITY} adentro</span>${u.cargo?.length ? `<span> · +${u.cargo.length * 10}% de daño</span>` : '<span> · Tocalo con infantería para meterla</span>'}` : '';
       const range = d.range > TILE ? ` · 🎯 ${Math.round(w.rangeOf(u) / TILE)}` : '';
       info = `<div class="title">${UNIT_ICON[u.type as UnitType]} ${u.hero ? `👑 ${u.hero} <small>(${d.name})</small>` : d.name}${ownerTag}</div>
         <div class="sub">❤️ <span data-hp>${Math.ceil(u.hp)}/${u.maxHp}</span>${d.atk ? ` · ⚔️ ${w.attackOf(u)}` : ''} · 🛡️ ${d.armorMelee}/${d.armorPierce}${range}</div>
-        <div class="sub dim">${mine ? doing + (u.carry ? ` · lleva ${u.carry} ${RES_ICON[u.carryRes!]}` : '') + (u.cmdQueue.length ? ` · ${u.cmdQueue.length} en cola` : '') + relicTxt : d.desc}</div>`;
+        <div class="sub dim">${mine ? doing + (u.carry ? ` · lleva ${u.carry} ${RES_ICON[u.carryRes!]}` : '') + (u.cmdQueue.length ? ` · ${u.cmdQueue.length} en cola` : '') + relicTxt + cargoTxt : d.desc}</div>`;
     } else {
       const counts = new Map<string, number>();
       for (const u of units) counts.set(u.type, (counts.get(u.type) ?? 0) + 1);
@@ -598,6 +659,9 @@ export class Hud {
       // fila de arriba: actitudes (o construir); fila de abajo: cola, detener y eliminar
       const top: string[] = [], bottom: string[] = [];
       if (vills) top.push(`<button class="act gold" data-a="buildmenu"><i>🔨</i><span>Construir</span></button>`);
+      if (units.some((u) => World.canExplore(u))) top.push(`<button class="act" data-a="explore"><i>🧭</i><span>Explorar</span></button>`);
+      const loaded = units.filter((u) => u.cargo?.length);
+      if (loaded.length) top.push(`<button class="act" data-a="unload"><i>🪖</i><span>Bajar (${loaded.reduce((n, u) => n + u.cargo!.length, 0)})</span></button>`);
       if (fighters.length) {
         const cur = new Set(fighters.map((u) => u.stance));
         for (const s2 of ['agg', 'def', 'pas'] as Stance[])

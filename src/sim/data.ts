@@ -21,7 +21,7 @@ export const AGE_UPS: Record<2 | 3 | 4, { cost: Partial<ResBag>; time: number }>
 export type UnitType =
   | 'villager' | 'militia' | 'spearman' | 'champion'
   | 'archer' | 'skirmisher' | 'cavarcher' | 'handcannon'
-  | 'scout' | 'knight' | 'camel'
+  | 'scout' | 'knight' | 'camel' | 'eagle'
   | 'ram' | 'mangonel' | 'bombard' | 'trebuchet'
   | 'monk'
   | 'fishship' | 'galleon' | 'fireship' | 'cannongalleon' | 'tradecart' | 'tradecog'
@@ -138,6 +138,11 @@ export const UNITS: Record<UnitType, UnitDef> = {
     name: 'Caballero', hp: 110, atk: 10, atkType: 'melee', cooldown: 1.8, range: 4, armorMelee: 2, armorPierce: 2,
     speed: 80, radius: 10, sight: 6, cost: { food: 60, gold: 75 }, trainTime: 16, age: 3, cls: 'cavalry', mounted: true,
     bonus: { archer: 6 }, desc: 'Caballería pesada. Arrasa arqueros.',
+  },
+  eagle: {
+    name: 'Guerrero águila', hp: 50, atk: 6, atkType: 'melee', cooldown: 2, range: 4, armorMelee: 0, armorPierce: 3,
+    speed: 72, radius: 8, sight: 8, cost: { food: 20, gold: 50 }, trainTime: 10, age: 1, cls: 'infantry',
+    bonus: { siege: 5, archer: 2 }, desc: 'Infantería barata y veloz de los pueblos mesoamericanos: hace de explorador y caza arqueros, monjes y asedio.',
   },
   camel: {
     name: 'Jinete de camello', hp: 100, atk: 6, atkType: 'melee', cooldown: 2, range: 4, armorMelee: 0, armorPierce: 0,
@@ -303,11 +308,11 @@ export interface BuildingDef {
 export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   towncenter: {
     name: 'Centro Urbano', size: 3, hp: 1400, cost: { wood: 275, stone: 100 }, buildTime: 60, age: 1, pop: 10,
-    trains: ['villager'], drop: ['food', 'wood', 'gold', 'stone'], sight: 8, research: ['loom', 'wheelbarrow'],
+    trains: ['villager'], drop: ['food', 'wood', 'gold', 'stone'], sight: 8,
     attack: { atk: 5, range: 6 * TILE, cooldown: 2 }, desc: 'Corazón de tu aldea. Si cae, perdés.',
   },
   house: { name: 'Casa', size: 2, hp: 300, cost: { wood: 25 }, buildTime: 10, age: 1, pop: 5, sight: 3, desc: '+5 de población.' },
-  barracks: { name: 'Cuartel', size: 3, hp: 900, cost: { wood: 150 }, buildTime: 22, age: 1, trains: ['militia', 'spearman', 'champion'], sight: 4, desc: 'Entrena infantería.' },
+  barracks: { name: 'Cuartel', size: 3, hp: 900, cost: { wood: 150 }, buildTime: 22, age: 1, trains: ['militia', 'spearman', 'eagle', 'champion'], sight: 4, desc: 'Entrena infantería.' },
   range: { name: 'Galería de tiro', size: 3, hp: 900, cost: { wood: 150 }, buildTime: 22, age: 2, trains: ['archer', 'skirmisher', 'cavarcher', 'handcannon'], sight: 4, desc: 'Entrena arqueros y pólvora.' },
   stable: { name: 'Establo', size: 3, hp: 900, cost: { wood: 175 }, buildTime: 25, age: 2, trains: ['scout', 'knight', 'camel'], sight: 4, desc: 'Entrena caballería.' },
   workshop: { name: 'Taller de asedio', size: 3, hp: 900, cost: { wood: 200 }, buildTime: 28, age: 3, trains: ['ram', 'mangonel', 'bombard'], sight: 4, desc: 'Construye armas de asedio.' },
@@ -398,6 +403,7 @@ export const COUNTERS: Record<UnitType, { strong: (UnitType | 'building' | 'towe
   handcannon: { strong: ['militia', 'champion', 'spearman'], weak: ['knight', 'skirmisher', 'mangonel'] },
   scout: { strong: ['mangonel', 'trebuchet', 'monk'], weak: ['spearman', 'camel', 'knight'] },
   knight: { strong: ['archer', 'skirmisher', 'handcannon'], weak: ['spearman', 'camel'] },
+  eagle: { strong: ['archer', 'skirmisher', 'monk', 'mangonel'], weak: ['militia', 'champion', 'jaguar'] },
   camel: { strong: ['knight', 'scout', 'cataphract', 'elephant'], weak: ['archer', 'spearman', 'cavarcher'] },
   ram: { strong: ['building'], weak: ['militia', 'champion', 'scout'] },
   mangonel: { strong: ['archer', 'spearman', 'skirmisher'], weak: ['scout', 'knight', 'bombard'] },

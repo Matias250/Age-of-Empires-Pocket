@@ -93,8 +93,8 @@ export const CIVS: Record<CivId, CivDef> = {
   },
   vikingos: {
     name: 'Vikingos', emblem: '🛡️', region: 'Escandinavia', unique: 'berserker',
-    bonuses: ['Infantería +15% de vida', 'Barcos de guerra 20% más baratos', 'Carretilla gratis'],
-    mods: { infantryHp: 1.15, unitDiscount: { galleon: 0.8, fireship: 0.8, cannongalleon: 0.8 }, freeTechs: ['wheelbarrow'] },
+    bonuses: ['Infantería +15% de vida', 'Barcos de guerra 20% más baratos', 'Aldeanos curtidos gratis'],
+    mods: { infantryHp: 1.15, unitDiscount: { galleon: 0.8, fireship: 0.8, cannongalleon: 0.8 }, freeTechs: ['up_villager'] },
   },
   turcos: {
     name: 'Turcos', emblem: '🌙', region: 'Anatolia', unique: 'janissary',
@@ -150,4 +150,5 @@ const LACKS: Record<CivId, UnitType[]> = {
   teutones: ['camel'],
   mayas: MESO,
 };
-for (const c of Object.keys(LACKS) as CivId[]) CIVS[c].lacks = LACKS[c];
+// el guerrero águila es solo de los pueblos mesoamericanos
+for (const c of Object.keys(LACKS) as CivId[]) CIVS[c].lacks = LACKS[c] === MESO ? MESO : [...LACKS[c], 'eagle'];

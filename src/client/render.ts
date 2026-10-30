@@ -1010,7 +1010,15 @@ export class Renderer {
     if (d.naval) { this.ship(e, col, time); return; }
     g.fillStyle = 'rgba(0,0,0,0.3)';
     g.beginPath(); g.ellipse(x, y + r * 0.75, r * 0.95, r * 0.42, 0, 0, 7); g.fill();
-    if (d.cls === 'siege') { this.siege(e, col, time); return; }
+    if (d.cls === 'siege') {
+      this.siege(e, col, time);
+      if (e.cargo?.length) { // infantería adentro del ariete
+        g.fillStyle = 'rgba(20,14,8,.85)'; g.beginPath(); g.arc(x + r * 0.9, y - r * 1.1, 6, 0, 7); g.fill();
+        g.fillStyle = '#ffe08a'; g.font = 'bold 8px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(String(e.cargo.length), x + r * 0.9, y - r * 1.1 + 0.5);
+      }
+      return;
+    }
     if (t === 'tradecart') { this.tradeCart(e, col, time); return; }
     if (t === 'elephant') { this.elephant(e, col, time); return; }
     // animación de ataque: estocada hacia el objetivo + golpe del arma
@@ -1023,7 +1031,7 @@ export class Renderer {
     if (t === 'camel') this.camelMount(x, y + 1, flip, bob, col);
     else if (d.mounted) this.horse(x, y + 1, flip, bob, t === 'cataphract' || t === 'knight' ? col : null, t === 'cataphract' ? '#8a8f96' : t === 'scout' ? '#a87a4a' : '#7b5232');
     const by = y - (d.mounted ? 9 : 2) - bob;
-    const body = t === 'monk' ? '#7a5a3a' : t === 'champion' || t === 'cataphract' || t === 'teutonic' ? '#b0b7bf' : t === 'jaguar' ? '#d9a441' : t === 'samurai' ? '#b23a3a' : t === 'janissary' ? '#e8e2d0' : col;
+    const body = t === 'monk' ? '#7a5a3a' : t === 'champion' || t === 'cataphract' || t === 'teutonic' ? '#b0b7bf' : t === 'jaguar' ? '#d9a441' : t === 'eagle' ? '#8a5a2e' : t === 'samurai' ? '#b23a3a' : t === 'janissary' ? '#e8e2d0' : col;
     if (!d.mounted && t !== 'monk') {
       g.fillStyle = '#4a3a2a';
       const st = moving ? Math.sin(time * 12 + e.id) * 2 : 0;
@@ -1047,6 +1055,16 @@ export class Renderer {
         g.beginPath(); g.moveTo(hx - 3, hy - 2); g.quadraticCurveTo(hx - 7, hy - 5, hx - 6, hy - 9); g.moveTo(hx + 3, hy - 2); g.quadraticCurveTo(hx + 7, hy - 5, hx + 6, hy - 9); g.stroke();
         break;
       case 'samurai': g.fillStyle = '#2b2b2b'; g.beginPath(); g.arc(hx, hy - 0.5, hr + 0.8, Math.PI, 0); g.fill(); g.fillStyle = '#d4a017'; g.fillRect(hx - 3, hy - hr - 3, 6, 1.6); break;
+      case 'eagle': {
+        // casco de cabeza de águila: plumas pardas, cara blanca y pico amarillo
+        g.fillStyle = '#6b4a2a'; g.beginPath(); g.arc(hx, hy - 0.5, hr + 1.5, Math.PI * 0.85, Math.PI * 2.15); g.fill();
+        g.fillStyle = '#f2ede0'; g.beginPath(); g.arc(hx + flip * 1.2, hy - 1.8, hr * 0.7, 0, 7); g.fill();
+        g.fillStyle = '#e0b52a'; g.beginPath(); g.moveTo(hx + flip * (hr + 1), hy - 2.5); g.lineTo(hx + flip * (hr + 5), hy - 0.5); g.lineTo(hx + flip * (hr + 0.5), hy + 0.5); g.closePath(); g.fill();
+        g.fillStyle = '#1a1a1a'; g.beginPath(); g.arc(hx + flip * 2, hy - 2.5, 0.8, 0, 7); g.fill();
+        g.strokeStyle = '#4a321c'; g.lineWidth = 1.3;
+        for (const k of [-1, 0, 1]) { g.beginPath(); g.moveTo(hx - flip * 2, hy - hr); g.lineTo(hx - flip * (6 + k), hy - hr - 4 + k * 2.5); g.stroke(); }
+        break;
+      }
       case 'jaguar':
         g.fillStyle = '#e0a83a'; g.beginPath(); g.arc(hx, hy - 0.5, hr + 1.4, Math.PI * 0.9, Math.PI * 2.1); g.fill();
         g.fillStyle = '#3a2a10'; for (const [ox, oy] of [[-2.5, -2.5], [1.5, -3.5], [3, -1]]) { g.beginPath(); g.arc(hx + ox, hy + oy, 0.8, 0, 7); g.fill(); }
@@ -1137,11 +1155,12 @@ export class Renderer {
         g.beginPath(); g.moveTo(ax - fx * 3, ay + 2); g.lineTo(ax + fx * 12, ay + fy * 12 - 2); g.stroke();
         g.strokeStyle = '#6d4c41'; g.lineWidth = 3; g.beginPath(); g.moveTo(ax - fx * 5, ay + 3); g.lineTo(ax, ay + 1); g.stroke();
         break;
-      case 'axeman': case 'berserker': case 'jaguar': {
+      case 'axeman': case 'berserker': case 'jaguar': case 'eagle': {
         const a = flip > 0 ? -0.7 + sw * 1.3 : Math.PI + 0.7 - sw * 1.3;
         g.strokeStyle = '#6d4c41'; g.lineWidth = 2;
         g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(a) * 10, ay + Math.sin(a) * 10); g.stroke();
         g.fillStyle = '#cfd8dc'; g.beginPath(); g.ellipse(ax + Math.cos(a) * 10, ay + Math.sin(a) * 10, 3.5, 2.2, a + Math.PI / 2, 0, 7); g.fill();
+        if (t === 'eagle') this.shield(x - flip * r * 0.55, by + 1, '#c9a227', 3.8);
         if (t === 'berserker') this.shield(x - flip * r * 0.55, by + 1, col, 4.5);
         break;
       }

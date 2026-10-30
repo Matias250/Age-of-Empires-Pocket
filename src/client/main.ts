@@ -3,7 +3,7 @@ import { DIFF_LIST, DIFF_NAME, Difficulty } from '../sim/ai.js';
 import { BIOMES, Biome, createMatch, START_MODES, StartMode, MAP_SIZES, MapSize, MAPS, MapType, MatchConfig, Mode, PLAYER_COLORS, sizeForPlayers, SlotCfg } from '../sim/match.js';
 import { TILE } from '../sim/data.js';
 import { CIV_LIST, CIVS, CivId } from '../sim/civs.js';
-import { UNITS } from '../sim/data.js';
+import { UNITS, UnitType } from '../sim/data.js';
 import { saveSettings, settings, Settings } from './settings.js';
 import { Game } from './game.js';
 import { initI18n, lang, LANGS, setLang } from './i18n/index.js';
@@ -113,6 +113,8 @@ const civOptions = (sel: CivId | 'random', mine = false) => `<option value="rand
 const teamOptions = (sel: number) => [0, 1, 2, 3, 4].map((t) => `<option value="${t}" ${sel === t ? 'selected' : ''}>${t ? 'Equipo ' + t : 'Sin equipo'}</option>`).join('');
 const difOptions = (sel: Difficulty) => DIFF_LIST.map((d) => `<option value="${d}" ${sel === d ? 'selected' : ''}>${DIFF_NAME[d]}</option>`).join('');
 
+/** El guerrero águila es exclusivo de los mesoamericanos: no se lista como faltante en las demás */
+const lacksShown = (l?: UnitType[]) => (l ?? []).filter((u) => u !== 'eagle');
 function civCard(c: CivId | 'random'): string {
   if (c === 'random') return `<div class="civcard"><b>🎲 Civilización al azar</b><small>Te toca una de las que tengas desbloqueadas.</small></div>`;
   const d = CIVS[c];
@@ -121,7 +123,8 @@ function civCard(c: CivId | 'random'): string {
   return `<div class="civcard"><b>${d.emblem} ${d.name}</b> <small>${d.region}</small>
     <ul>${d.bonuses.map((x) => `<li>${x}</li>`).join('')}</ul>
     <p>Unidad única: <b>${UNITS[d.unique].name}</b> — ${UNITS[d.unique].desc.replace(/^Única? de los? [^.]+\. ?/, '')}</p>
-    ${d.lacks?.length ? `<p class="lacks">No tiene: ${d.lacks.map((u) => UNITS[u].name).join(', ')}</p>` : '<p class="lacks">Tiene todas las unidades comunes.</p>'}</div>`;
+    ${!d.lacks?.includes('eagle') ? `<p>Exclusiva: <b>${UNITS.eagle.name}</b> (en el cuartel, hace de explorador).</p>` : ''}
+    ${lacksShown(d.lacks).length ? `<p class="lacks">No tiene: ${lacksShown(d.lacks).map((u) => UNITS[u].name).join(', ')}</p>` : '<p class="lacks">Tiene todas las unidades comunes.</p>'}</div>`;
 }
 
 /** Lugares para jugar: si tu civilización es al azar, sale de las desbloqueadas (fija por semilla, igual que la vista previa) */

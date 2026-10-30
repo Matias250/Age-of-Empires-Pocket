@@ -27,13 +27,13 @@ const PROFILES: Record<Difficulty, Profile> = {
   },
   normal: {
     think: 1.5, gather: 1, maxVill: 24, firstAttack: 330, armyAttack: 10, maxAge: 4, ageVills: [13, 19, 24], ageTime: [120, 330, 600],
-    towers: 0, barracksAt: 8, techs: ['axe', 'loom', 'forge', 'fletching', 'wheelbarrow', 'plow', 'mail', 'barding', 'chemistry'],
+    towers: 0, barracksAt: 8, techs: ['axe', 'forge', 'fletching', 'plow', 'mail', 'barding', 'chemistry'],
     castle: true, university: false, monks: 0, fish: 3, warships: 3, extraProd: false, siege: 2,
   },
   hard: {
     think: 0.75, gather: 1.35, maxVill: 32, firstAttack: 260, armyAttack: 12, maxAge: 4, ageVills: [12, 18, 24], ageTime: [90, 250, 480],
     towers: 1, barracksAt: 7,
-    techs: ['loom', 'wheelbarrow', 'axe', 'plow', 'mining', 'forge', 'fletching', 'mail', 'barding', 'ballistics', 'masonry', 'chemistry', 'siegeeng', 'murderholes'],
+    techs: ['axe', 'plow', 'mining', 'forge', 'fletching', 'mail', 'barding', 'ballistics', 'masonry', 'chemistry', 'siegeeng', 'murderholes'],
     castle: true, university: true, monks: 2, fish: 5, warships: 5, extraProd: true, siege: 4,
   },
 };

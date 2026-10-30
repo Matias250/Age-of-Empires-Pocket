@@ -137,15 +137,18 @@ test('actitudes: el jugador arranca en neutral; pasiva nunca ataca, neutral solo
 
 test('investigaciones en cola y en paralelo al entrenamiento', () => {
   const { w, p, tc, run } = setup();
-  w.issue({ t: 'research', p: 0, bid: tc.id, tech: 'loom' });
-  w.issue({ t: 'research', p: 0, bid: tc.id, tech: 'wheelbarrow' });
+  const bs = w.placeBuilding(0, 'blacksmith', tc.tx + 6, tc.ty, true);
+  w.issue({ t: 'research', p: 0, bid: bs.id, tech: 'forge' });
+  w.issue({ t: 'research', p: 0, bid: bs.id, tech: 'mail' });
+  w.issue({ t: 'research', p: 0, bid: tc.id, tech: 'up_villager' });
   w.issue({ t: 'train', p: 0, bid: tc.id, u: 'villager' });
   run(0.1);
-  assert.equal(tc.tech, 'loom');
-  assert.deepEqual(tc.techQueue, ['wheelbarrow']);
+  assert.equal(bs.tech, 'forge');
+  assert.deepEqual(bs.techQueue, ['mail']);
+  assert.equal(tc.tech, 'up_villager');
   const v0 = w.unitsOf(0, 'villager').length;
-  run(42);
-  assert.ok(p.techs.has('loom') && p.techs.has('wheelbarrow'));
+  run(60);
+  assert.ok(p.techs.has('forge') && p.techs.has('mail') && p.techs.has('up_villager'));
   assert.ok(w.unitsOf(0, 'villager').length > v0, 'siguió entrenando aldeanos');
   assert.ok(w.score(0).tech > 0);
 });

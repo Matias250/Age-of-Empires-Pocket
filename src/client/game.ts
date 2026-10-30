@@ -200,6 +200,18 @@ export class Game {
     this.cam.y = y - this.vh / this.cam.zoom / 2;
     this.clampCam();
   }
+  /** Partida terminada: muestra todo el mapa sin niebla y aleja la cámara para verlo entero */
+  revealed = false;
+  private fitZoom() { return Math.min(0.45, Math.min(this.vw / (this.world.w * TILE), this.vh / (this.world.h * TILE)) * 0.95); }
+  revealMap() {
+    const pl = this.world.players[this.me];
+    pl.explored.fill(1); pl.visible.fill(1);
+    this.revealed = true;
+    this.select([]);
+    this.cam.zoom = this.fitZoom();
+    this.clampCam();
+  }
+
   private clampCam() {
     const W = this.world.w * TILE, H = this.world.h * TILE;
     const vw = this.vw / this.cam.zoom, vh = this.vh / this.cam.zoom;
@@ -210,7 +222,7 @@ export class Game {
   screenToWorld(sx: number, sy: number) { return { x: this.cam.x + sx / this.cam.zoom, y: this.cam.y + sy / this.cam.zoom }; }
   private zoomAt(sx: number, sy: number, z: number) {
     const before = this.screenToWorld(sx, sy);
-    this.cam.zoom = Math.max(0.45, Math.min(2.2, z));
+    this.cam.zoom = Math.max(this.revealed ? this.fitZoom() : 0.45, Math.min(2.2, z));
     this.cam.x = before.x - sx / this.cam.zoom;
     this.cam.y = before.y - sy / this.cam.zoom;
     this.clampCam();
@@ -309,7 +321,7 @@ export class Game {
 
   /** Botón "atrás" del celular: cierra lo que esté abierto, y si no hay nada, pausa */
   back() {
-    if (this.over) return;
+    if (this.over) { this.hud.endBack?.click(); return; }
     if (!document.getElementById('dialog')!.hidden) return; // charla de una historia: se avanza tocando
     if (this.paused) return this.hud.togglePause();
     if (this.chat.open) return this.chat.toggle(false);
@@ -453,7 +465,10 @@ export class Game {
         w.issue({ t: attack ? 'attackMove' : 'move', p: this.me, ids: units.map((u) => u.id), x: p.x, y: p.y, queue: this.queuing });
         this.mark(p.x, p.y, attack ? '#ff6b6b' : '#7CFC8A');
       } else {
-        w.issue({ t: 'target', p: this.me, ids: units.map((u) => u.id), target: hit.id, queue: this.queuing });
+        const board = hit.type === 'ram' && hit.owner === this.me;
+        const ids = (board ? units.filter((u) => World.canBoard(u)) : units).map((u) => u.id);
+        w.issue({ t: 'target', p: this.me, ids, target: hit.id, queue: this.queuing });
+        if (board) this.hud.toast(`🪖 Suben al ariete (máx. 5): más rápido y más fuerte`);
         this.mark(hit.x, hit.y, w.isEnemy(this.me, hit.owner) ? '#ff6b6b' : '#ffe08a');
       }
       this.mode = 'normal';
@@ -482,7 +497,7 @@ export class Game {
     if (!hit) return true;
     if (hit.cat === 'node') return true;
     if (w.isEnemy(this.me, hit.owner)) return true;
-    if (hit.cat === 'unit') return false;
+    if (hit.cat === 'unit') return hit.type === 'ram' && hit.owner === this.me && units.some((u) => u.id !== hit.id && World.canBoard(u));
     // edificio propio o aliado
     const vills = units.some((u) => u.type === 'villager');
     if (!vills) return false;

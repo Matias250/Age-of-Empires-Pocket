@@ -19,7 +19,9 @@ export type Order =
   | { t: 'build'; target: number }
   | { t: 'heal'; target: number }
   | { t: 'relic'; relic: number }
-  | { t: 'trade'; home: number; dest: number; leg: 'go' | 'back' };
+  | { t: 'trade'; home: number; dest: number; leg: 'go' | 'back' }
+  | { t: 'board'; target: number }
+  | { t: 'explore'; x: number; y: number; until: number };
 
 export type Stance = 'agg' | 'def' | 'pas';
 export const STANCE_NAME: Record<Stance, string> = { agg: 'Agresiva', def: 'Neutral', pas: 'Pasiva' };
@@ -57,6 +59,8 @@ export interface Entity {
   /** ángulo de llegada al objetivo cuerpo a cuerpo (para rodearlo en vez de amontonarse) */
   appAng?: number; appTarget?: number;
   home?: { x: number; y: number };
+  /** infantería que va adentro (ariete) */
+  cargo?: Entity[];
   // edificios
   locked?: boolean;
   techQueue: TechType[];
@@ -107,7 +111,9 @@ export type Command =
   | { t: 'delete'; p: number; ids: number[] }
   | { t: 'relic'; p: number; ids: number[]; relic: number }
   | { t: 'chat'; p: number; to: 'all' | 'allies' | number; text: string }
-  | { t: 'tribute'; p: number; to: number; res: Res; n: number };
+  | { t: 'tribute'; p: number; to: number; res: Res; n: number }
+  | { t: 'unload'; p: number; ids: number[] }
+  | { t: 'explore'; p: number; ids: number[] };
 
 export type GEvent =
   | { t: 'shot'; x1: number; y1: number; x2: number; y2: number; kind: Projectile }
@@ -126,6 +132,7 @@ export type GEvent =
 
 const INTERACT = 14; // px de distancia para recolectar/construir/depositar
 const CELL = TILE * 4; // celda del índice espacial
+export const RAM_CAPACITY = 5; // infantería que entra en un ariete
 
 export class World implements Grid {
   readonly w: number; readonly h: number;
@@ -401,6 +408,7 @@ export class World implements Grid {
     if (u.type === 'villager' && this.hasTech(u.owner, 'wheelbarrow')) s *= 1.15;
     if (d.mounted) s *= this.mods(u.owner).mountedSpeed ?? 1;
     if (d.trade && this.hasTech(u.owner, `up_${u.type as UnitType}`)) s *= 1.2;
+    if (u.cargo?.length) s *= 1 + 0.08 * u.cargo.length; // la infantería empuja el ariete
     return s;
   }
   rangeOf(u: Entity): number {
@@ -504,7 +512,7 @@ export class World implements Grid {
       if (e.owner < 0) continue;
       if (e.cat === 'unit') {
         this.ownUnits[e.owner].push(e);
-        this.popCache[e.owner]++;
+        this.popCache[e.owner] += 1 + (e.cargo?.length ?? 0);
         const k = Math.floor(e.x / CELL) * 4096 + Math.floor(e.y / CELL);
         let b = this.buckets.get(k); if (!b) this.buckets.set(k, (b = [])); b.push(e);
       } else if (e.cat === 'building') {
@@ -609,6 +617,12 @@ export class World implements Grid {
         this.events.push({ t: 'msg', p: to.id, text: `${pl.name} te mandó ${n} de ${RES_NAME[c.res].toLowerCase()}` });
         break;
       }
+      case 'unload':
+        for (const u of own(c.ids)) this.unload(u);
+        break;
+      case 'explore':
+        for (const u of own(c.ids)) if (World.canExplore(u)) { u.cmdQueue = []; this.setOrder(u, this.exploreOrder(u)); }
+        break;
       case 'delete':
         for (const id of c.ids) { const e = this.entities.get(id); if (e && e.owner === c.p && e.cat !== 'node') e.hp = 0; }
         break;
@@ -776,6 +790,7 @@ export class World implements Grid {
       return near;
     }
     if (this.isEnemy(u.owner, t.owner)) return this.canTarget(u, t) ? { t: 'attack', target: t.id } : near;
+    if (t.type === 'ram' && t.owner === u.owner && World.canBoard(u)) return { t: 'board', target: t.id };
     if (t.cat === 'building' && isVill && this.players[t.owner].team === this.players[u.owner].team) {
       if (t.progress < 1 || t.hp < t.maxHp) return { t: 'build', target: t.id };
       if (t.type === 'farm' && t.owner === u.owner) {
@@ -828,6 +843,7 @@ export class World implements Grid {
 
   private kill(e: Entity) {
     if (!this.entities.has(e.id)) return;
+    if (e.cargo?.length) this.unload(e);
     this.entities.delete(e.id);
     this.dirty = true;
     if (e.cat !== 'unit') this.occupy(e, false);
@@ -967,6 +983,7 @@ export class World implements Grid {
     }
     let dmg = atk + (bonus?.[cls] ?? 0);
     if (t.cat === 'unit' && bonus) for (const tag of UNITS[t.type as UnitType].tags ?? []) dmg += bonus[tag] ?? 0;
+    if (src?.cargo?.length) dmg *= 1 + 0.1 * src.cargo.length; // la infantería adentro empuja el ariete
     if (cls === 'building' && src && src.cat === 'unit' && UNITS[src.type as UnitType].cls === 'siege' && this.hasTech(src.owner, 'siegeeng')) dmg *= 1.2;
     return Math.max(1, dmg - armor);
   }
@@ -1068,6 +1085,18 @@ export class World implements Grid {
           }
           u.path = []; u.pathKey = '';
         } else if (!this.approach(u, tgt, INTERACT - 2)) this.setOrder(u, undefined);
+        break;
+      }
+      case 'board': {
+        const r = this.entities.get(o.target);
+        if (!r || r.hp <= 0 || r.owner !== u.owner || (r.cargo?.length ?? 0) >= RAM_CAPACITY) { this.setOrder(u, undefined); break; }
+        if (Math.hypot(u.x - r.x, u.y - r.y) <= r.radius + u.radius + 10) { this.board(u, r); break; }
+        this.moveTo(u, r.x, r.y);
+        break;
+      }
+      case 'explore': {
+        if (this.tick > o.until || this.moveTo(u, o.x, o.y)) u.order = this.exploreOrder(u);
+        else if (this.tick % 20 === 0 && this.players[u.owner].explored[Math.floor(o.y / TILE) * this.w + Math.floor(o.x / TILE)]) u.order = this.exploreOrder(u);
         break;
       }
       case 'heal': {
@@ -1436,7 +1465,55 @@ export class World implements Grid {
   }
 
   /** Cambia de dueño una unidad (soldados sin dueño que se unen al héroe) */
+  static canBoard(u: Entity): boolean {
+    const d = UNITS[u.type as UnitType];
+    return u.cat === 'unit' && d.cls === 'infantry' && !d.heals && !d.mounted && !u.hero && d.range <= 1.5 * TILE;
+  }
+  static canExplore(u: Entity): boolean { return u.type === 'scout' || u.type === 'eagle'; }
+  /** Sube una unidad al ariete: deja el mapa y viaja adentro */
+  private board(u: Entity, r: Entity) {
+    if (!r.cargo) r.cargo = [];
+    if (r.cargo.length >= RAM_CAPACITY) return;
+    this.entities.delete(u.id);
+    u.order = undefined; u.cmdQueue = []; u.path = []; u.pathKey = '';
+    r.cargo.push(u);
+    this.dirty = true;
+  }
+  /** Baja a toda la infantería alrededor del ariete */
+  unload(r: Entity) {
+    const list = r.cargo ?? [];
+    r.cargo = undefined;
+    list.forEach((u, i) => {
+      const a = (i / Math.max(1, list.length)) * Math.PI * 2;
+      const tx = Math.floor((r.x + Math.cos(a) * 22) / TILE), ty = Math.floor((r.y + Math.sin(a) * 22) / TILE);
+      const spot = this.nearestFree(tx, ty) ?? { x: Math.floor(r.x / TILE), y: Math.floor(r.y / TILE) };
+      u.x = spot.x * TILE + TILE / 2; u.y = spot.y * TILE + TILE / 2;
+      this.entities.set(u.id, u);
+    });
+    this.dirty = true;
+  }
+  /** Explorar: elige un punto sin descubrir, tirando a los más cercanos (como en el AoE2) */
+  private exploreOrder(u: Entity): Order {
+    const ex = this.players[u.owner].explored;
+    let best: { x: number; y: number } | null = null, bd = Infinity;
+    for (let k = 0; k < 40; k++) {
+      const tx = Math.floor(this.rng.next() * this.w), ty = Math.floor(this.rng.next() * this.h);
+      if (this.tileSolid(tx, ty) || ex[ty * this.w + tx]) continue;
+      const d = Math.hypot(tx * TILE - u.x, ty * TILE - u.y) * (0.6 + this.rng.next() * 0.8);
+      if (d < bd) { bd = d; best = { x: tx, y: ty }; }
+    }
+    if (!best) {
+      for (let k = 0; k < 40 && !best; k++) {
+        const tx = Math.floor(this.rng.next() * this.w), ty = Math.floor(this.rng.next() * this.h);
+        if (!this.tileSolid(tx, ty)) best = { x: tx, y: ty };
+      }
+    }
+    const b = best ?? { x: Math.floor(u.x / TILE), y: Math.floor(u.y / TILE) };
+    return { t: 'explore', x: b.x * TILE + TILE / 2, y: b.y * TILE + TILE / 2, until: this.tick + 30 * TICK_RATE };
+  }
+
   convert(e: Entity, p: number) {
+    if (e.cargo?.length) this.unload(e);
     e.owner = p; e.order = undefined; e.cmdQueue = []; e.path = []; e.pathKey = ''; e.stance = 'agg'; e.home = undefined;
     this.dirty = true;
   }

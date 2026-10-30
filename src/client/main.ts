@@ -415,6 +415,26 @@ async function tryFullscreen() {
   } catch { /* algunos navegadores no lo permiten */ }
 }
 
+// Botón "atrás" del celular: en vez de cerrar la app, vuelve a la pantalla anterior.
+// Siempre dejamos una entrada extra en el historial; al tocar atrás la consumimos y la reponemos.
+let lastBackOnHome = 0;
+function guard() { try { history.pushState({ aoep: 1 }, ''); } catch { /* sin historial */ } }
+guard();
+window.addEventListener('popstate', () => {
+  if (game) { game.back(); guard(); return; }
+  const back = menu.querySelector<HTMLElement>('[data-back]');
+  if (back) { back.click(); guard(); return; }
+  // en el menú principal: dos toques seguidos para salir
+  const now = Date.now();
+  if (now - lastBackOnHome < 2000) { history.back(); return; }
+  lastBackOnHome = now;
+  guard();
+  const t = document.createElement('div');
+  t.className = 'backtoast'; t.textContent = 'Tocá atrás de nuevo para salir';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 1800);
+});
+
 window.addEventListener('start-match', (e) => start((e as CustomEvent<MatchConfig>).detail));
 
 // Modo de prueba: ?demo=coop&dif=hard arranca directo

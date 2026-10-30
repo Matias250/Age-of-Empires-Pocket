@@ -307,6 +307,19 @@ export class Game {
     this.on(window, 'keyup', (ev) => this.keys.delete((ev as KeyboardEvent).key));
   }
 
+  /** Botón "atrás" del celular: cierra lo que esté abierto, y si no hay nada, pausa */
+  back() {
+    if (this.over) return;
+    if (!document.getElementById('dialog')!.hidden) return; // charla de una historia: se avanza tocando
+    if (this.paused) return this.hud.togglePause();
+    if (this.chat.open) return this.chat.toggle(false);
+    const tip = document.getElementById('tip');
+    if (tip && !tip.hidden) { tip.hidden = true; return; }
+    if (this.placing || this.wallStart || this.buildMenu || this.mode !== 'normal') return this.cancelModes();
+    if (this.sel.length) return this.select([]);
+    this.hud.togglePause();
+  }
+
   cancelModes() {
     this.placing = null; this.ghost = null; this.wallStart = null; this.mode = 'normal'; this.buildMenu = false;
   }

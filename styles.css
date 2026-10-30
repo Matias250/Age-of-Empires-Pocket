@@ -546,3 +546,6 @@ table.players td:nth-child(n+4) { text-align: right; font-variant-numeric: tabul
   #res sub { font-size: 8px; padding: 0 2px; }
   #btnChat, #btnPause { width: 30px; }
 }
+
+/* aviso al tocar "atrás" en el menú principal */
+.backtoast { position: fixed; left: 50%; bottom: 12%; transform: translateX(-50%); z-index: 99; background: rgba(20,14,8,.92); color: #f3e3c0; border: 1px solid #a8844c; padding: 9px 16px; border-radius: 20px; font-size: 14px; pointer-events: none; }

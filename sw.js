@@ -1,5 +1,5 @@
 // Service worker simple: guarda el juego para abrirlo sin conexión.
-const CACHE = 'aoe-pocket-v3';
+const CACHE = 'aoe-pocket-v4';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', (e) => {

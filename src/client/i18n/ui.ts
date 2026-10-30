@@ -378,4 +378,5 @@ export const UI: Record<string, [string, string]> = {
   "Destruí el Fortín de los Cuervos 🏴": ["Destroy the Crows' Fort 🏴", "Destrua o Forte dos Corvos 🏴"],
   "Varnia": ["Varnia", "Varnia"],
   "Cuervos Negros": ["Black Crows", "Corvos Negros"],
+  "Tocá atrás de nuevo para salir": ["Press back again to exit", "Toque em voltar de novo para sair"],
 };

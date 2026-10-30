@@ -1,1 +1,62 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#1a1410"/><path d="M96 400V230l40-30v-60h40v30l40-30 40 30v-60h40v60l40 30v-30h40v60l40 30v170z" fill="#c8a24a"/><path d="M230 400v-80a26 26 0 0 1 52 0v80z" fill="#1a1410"/><path d="M256 60v80" stroke="#c8a24a" stroke-width="10"/><path d="M256 60l60 18-60 22z" fill="#3b82f6"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+  <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+    <stop offset="0" stop-color="#3a5a8c"/><stop offset=".55" stop-color="#1b2a4a"/><stop offset="1" stop-color="#0c1222"/>
+  </radialGradient>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#fff1b0"/><stop offset=".35" stop-color="#e8bd4a"/><stop offset=".7" stop-color="#a8761c"/><stop offset="1" stop-color="#f3d27a"/>
+  </linearGradient>
+  <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#b8232f"/><stop offset="1" stop-color="#6e0f18"/>
+  </linearGradient>
+  <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#8d99a6"/><stop offset=".5" stop-color="#f2f6fa"/><stop offset="1" stop-color="#7b8794"/>
+  </linearGradient>
+  <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f4efe4"/><stop offset="1" stop-color="#c9bfae"/>
+  </linearGradient>
+  <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000" flood-opacity=".55"/></filter>
+</defs>
+
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<g opacity=".1" fill="#fff6d0"><path d="M256 250 L656 250 L653 298Z"/><path d="M256 250 L603 449 L577 489Z"/><path d="M256 250 L458 595 L416 617Z"/><path d="M256 250 L260 650 L212 648Z"/><path d="M256 250 L61 599 L21 573Z"/><path d="M256 250 L-87 456 L-109 414Z"/><path d="M256 250 L-144 259 L-142 211Z"/><path d="M256 250 L-95 59 L-70 18Z"/><path d="M256 250 L46 -91 L88 -113Z"/><path d="M256 250 L243 -150 L291 -148Z"/><path d="M256 250 L443 -103 L484 -78Z"/><path d="M256 250 L594 36 L617 78Z"/></g>
+<g transform="translate(256 262) scale(1.06) translate(-256 -262)">
+<g filter="url(#sh)">
+  <!-- espadas cruzadas detrás del escudo -->
+  <g>
+    <g transform="rotate(-38 256 270)">
+      <rect x="248" y="40" width="16" height="300" rx="3" fill="url(#steel)" stroke="#3a4048" stroke-width="3"/>
+      <path d="M248 40 L256 14 L264 40Z" fill="url(#steel)" stroke="#3a4048" stroke-width="3"/>
+      <rect x="214" y="336" width="84" height="16" rx="7" fill="url(#gold)" stroke="#5a3d0c" stroke-width="3"/>
+      <rect x="249" y="352" width="14" height="50" fill="#5a3518" stroke="#2b1a0b" stroke-width="3"/>
+      <circle cx="256" cy="410" r="13" fill="url(#gold)" stroke="#5a3d0c" stroke-width="3"/>
+    </g>
+    <g transform="rotate(38 256 270)">
+      <rect x="248" y="40" width="16" height="300" rx="3" fill="url(#steel)" stroke="#3a4048" stroke-width="3"/>
+      <path d="M248 40 L256 14 L264 40Z" fill="url(#steel)" stroke="#3a4048" stroke-width="3"/>
+      <rect x="214" y="336" width="84" height="16" rx="7" fill="url(#gold)" stroke="#5a3d0c" stroke-width="3"/>
+      <rect x="249" y="352" width="14" height="50" fill="#5a3518" stroke="#2b1a0b" stroke-width="3"/>
+      <circle cx="256" cy="410" r="13" fill="url(#gold)" stroke="#5a3d0c" stroke-width="3"/>
+    </g>
+  </g>
+  <!-- escudo -->
+  <path d="M256 112 C310 128 352 130 380 124 C384 250 352 352 256 410 C160 352 128 250 132 124 C160 130 202 128 256 112Z" fill="url(#gold)" stroke="#4a3208" stroke-width="5"/>
+  <path d="M256 134 C303 148 338 150 360 146 C360 252 332 336 256 384 C180 336 152 252 152 146 C174 150 209 148 256 134Z" fill="url(#field)"/>
+  <!-- castillo -->
+  <g stroke="#3d3428" stroke-width="3" stroke-linejoin="round">
+    <path d="M190 330 V250 h-8 v-26 h14 v12 h12 v-12 h14 v12 h12 v-12 h14 v26 h-8 v80Z" fill="url(#stone)"/>
+    <path d="M274 330 V250 h-8 v-26 h14 v12 h12 v-12 h14 v12 h12 v-12 h14 v26 h-8 v80Z" fill="url(#stone)"/>
+    <path d="M226 330 V214 h-8 v-30 h14 v13 h12 v-13 h24 v13 h12 v-13 h14 v30 h-8 v116Z" fill="url(#stone)"/>
+    <path d="M240 330 v-46 a16 16 0 0 1 32 0 v46Z" fill="#2a1d12"/>
+  </g>
+  <path d="M243 290 v40 M251 285 v45 M259 285 v45 M267 290 v40 M240 300 h32 M240 314 h32" stroke="#7d7466" stroke-width="2.5"/>
+  <rect x="250" y="226" width="12" height="20" rx="6" fill="#2a1d12"/>
+  <rect x="203" y="268" width="9" height="16" rx="4.5" fill="#2a1d12"/>
+  <rect x="300" y="268" width="9" height="16" rx="4.5" fill="#2a1d12"/>
+  <!-- estandarte -->
+  <path d="M256 184 V120" stroke="#3d2a14" stroke-width="5" stroke-linecap="round"/>
+  <path d="M258 122 C282 116 296 132 318 124 L312 142 L318 158 C296 166 282 150 258 156Z" fill="#2f6fd6" stroke="#173a74" stroke-width="3"/>
+  <circle cx="256" cy="116" r="6" fill="url(#gold)"/>
+</g>
+</g>
+</svg>

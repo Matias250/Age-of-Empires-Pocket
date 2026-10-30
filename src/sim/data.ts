@@ -43,7 +43,9 @@ export type Projectile = 'arrow' | 'stone' | 'ball' | 'fire' | 'axe' | 'bolt';
 export type TechType =
   | 'forge' | 'mail' | 'fletching' | 'barding'
   | 'axe' | 'plow' | 'mining' | 'wheelbarrow' | 'loom'
-  | 'masonry' | 'architecture' | 'chemistry' | 'ballistics' | 'murderholes' | 'siegeeng';
+  | 'masonry' | 'architecture' | 'chemistry' | 'ballistics' | 'murderholes' | 'siegeeng'
+  /** mejora de línea de cada unidad (élite) */
+  | `up_${UnitType}`;
 
 export interface UnitDef {
   name: string;
@@ -337,8 +339,8 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   stonewall: { name: 'Muralla de piedra', size: 1, hp: 1200, cost: { stone: 6 }, buildTime: 7, age: 2, sight: 1, line: true, desc: 'Muro de piedra muy resistente.' },
 };
 
-export interface TechDef { name: string; icon: string; cost: Partial<ResBag>; time: number; age: Age; desc: string }
-export const TECHS: Record<TechType, TechDef> = {
+export interface TechDef { name: string; icon: string; cost: Partial<ResBag>; time: number; age: Age; desc: string; unit?: UnitType }
+export const TECHS = {
   forge: { name: 'Forja', icon: '🔥', cost: { food: 150, gold: 50 }, time: 25, age: 2, desc: '+1 de ataque cuerpo a cuerpo.' },
   mail: { name: 'Cota de malla', icon: '🦺', cost: { food: 150, gold: 75 }, time: 30, age: 2, desc: 'Infantería +1/+1 de armadura.' },
   fletching: { name: 'Emplumado', icon: '🪶', cost: { food: 100, wood: 50 }, time: 25, age: 2, desc: 'Arqueros, torres y barcos +1 de ataque y alcance.' },
@@ -354,7 +356,7 @@ export const TECHS: Record<TechType, TechDef> = {
   ballistics: { name: 'Balística', icon: '🎯', cost: { wood: 300, gold: 175 }, time: 35, age: 3, desc: 'Las unidades a distancia disparan 10% más rápido.' },
   murderholes: { name: 'Matacanes', icon: '🏯', cost: { food: 200, stone: 100 }, time: 30, age: 3, desc: 'Torres, castillos y centros urbanos +3 de ataque.' },
   siegeeng: { name: 'Ingeniería de asedio', icon: '⚙️', cost: { food: 300, wood: 300 }, time: 40, age: 4, desc: 'Asedio +1 de alcance y +20% de daño a edificios.' },
-};
+} as Record<TechType, TechDef>;
 
 export const BUILDING_ARMOR = { melee: 2, pierce: 6 };
 
@@ -424,3 +426,26 @@ export const COUNTERS: Record<UnitType, { strong: (UnitType | 'building' | 'towe
   teutonic: { strong: ['militia', 'knight', 'spearman'], weak: ['archer', 'handcannon', 'mangonel'] },
   plumed: { strong: ['militia', 'spearman', 'champion'], weak: ['skirmisher', 'knight', 'huskarl'] },
 };
+
+/** Nombre de la mejora de línea de cada unidad (al estilo de las del AoE2) */
+const UP_NAME: Partial<Record<UnitType, string>> = {
+  villager: 'Aldeanos curtidos', militia: 'Espada larga', spearman: 'Piquero', champion: 'Mandoble', archer: 'Ballestero',
+  skirmisher: 'Escaramuzador de élite', cavarcher: 'Arquero a caballo pesado', handcannon: 'Pólvora refinada', scout: 'Caballería ligera',
+  knight: 'Paladín', camel: 'Camello pesado', ram: 'Ariete blindado', mangonel: 'Onagro', bombard: 'Cañón reforzado',
+  trebuchet: 'Contrapeso', monk: 'Herbolaria', fishship: 'Redes de arrastre', galleon: 'Galeón de guerra', fireship: 'Fuego griego',
+  cannongalleon: 'Galeón cañonero de élite', tradecart: 'Caravana', tradecog: 'Rutas marítimas',
+};
+for (const u of Object.keys(UNITS) as UnitType[]) {
+  const d = UNITS[u];
+  const age = (d.unique ? 4 : Math.min(4, Math.max(2, d.age + 1))) as Age;
+  const k = age - 1;
+  const cost: Partial<ResBag> = d.unique ? { food: 400, gold: 300 } : d.naval || d.cls === 'siege' || d.trade ? { wood: 100 * k, gold: 60 * k } : { food: 100 * k, gold: 60 * k };
+  const name = UP_NAME[u] ?? `${d.name} de élite`;
+  const desc = d.heals ? 'Monjes: +20% de vida y curan 50% más rápido.'
+    : d.gathers ? 'Barcos pesqueros: +20% de vida y pescan 25% más rápido.'
+    : d.trade ? `${d.name}: +20% de vida y 20% más rápida.`
+    : `${d.name}: +20% de vida, +${Math.max(1, Math.round(d.atk * (d.cls === 'siege' ? 0.2 : 0.15)))} de ataque y +1/+1 de armadura.`;
+  (TECHS as Record<string, TechDef>)[`up_${u}`] = { name, icon: '⬆️', cost, time: 20 + 10 * age, age, desc, unit: u };
+}
+/** Bonificación de ataque de la mejora de línea */
+export const upAtk = (u: UnitType) => (UNITS[u].atk ? Math.max(1, Math.round(UNITS[u].atk * (UNITS[u].cls === 'siege' ? 0.2 : 0.15))) : 0);

@@ -93,6 +93,7 @@ export const UI: Record<string, [string, string]> = {
   "{0} soldados": ["{0} soldiers", "{0} soldados"],
   "Héroe": ["Hero", "Herói"],
   "Solo tenés tu ejército: tocá al héroe para moverlo y buscá soldados en gris para sumarlos.": ["You only have your army: tap the hero to move them and look for grey soldiers to recruit.", "Você só tem seu exército: toque o herói para movê-lo e procure soldados em cinza para recrutar."],
+  "No tiene: {0}": ["Lacks: {0}", "Não tem: {0}"], "Tiene todas las unidades comunes.": ["Has every common unit.", "Tem todas as unidades comuns."],
   // ---------- escaramuza
   "⚔️ Escaramuza": ["⚔️ Skirmish", "⚔️ Escaramuça"],
   "Modo de juego": ["Game mode", "Modo de jogo"],

@@ -46,6 +46,13 @@ function costHtml(c: Partial<ResBag>, have?: ResBag): string {
   return RES_LIST.filter((r) => c[r]).map((r) => `<span class="${have && have[r] < (c[r] ?? 0) ? 'short' : ''}">${RES_ICON[r]}${c[r]}</span>`).join('');
 }
 const lock = (age: Age) => `🔒 ${AGE_SHORT[age]}`;
+/** Arma dos filas de botones (la grilla se llena por columnas: arriba, abajo, arriba, abajo…) */
+function twoRows(top: string[], bottom: string[]): string {
+  const n = Math.max(top.length, bottom.length);
+  let out = '';
+  for (let i = 0; i < n; i++) out += (top[i] ?? '<span class="act-gap"></span>') + (bottom[i] ?? '<span class="act-gap"></span>');
+  return out;
+}
 
 /** Ficha de una unidad para el "mantener apretado" */
 export function unitTip(u: UnitType): string {
@@ -518,19 +525,30 @@ export class Hud {
       if (!b.tech && b.progress >= 1 && b.ageT < 0 && !b.queue.length) html += `<div class="sub dim">${d.desc}</div>`;
       html += `</div><div class="acts">`;
       if (mine && b.progress >= 1) {
-        if (b.type === 'towncenter' && pl.age < 4 && !w.isResearchingAge(g.me)) {
-          const next = (pl.age + 1) as 2 | 3 | 4;
-          const cost = w.ageCost(g.me, next);
-          html += `<button class="act gold" data-a="age" ${w.canAfford(g.me, cost) ? '' : 'data-dis'}><i>👑</i><span>${AGE_NAME[next]}</span><em>${costHtml(cost, pl.res)}</em></button>`;
-        }
+        // unidades arriba y, debajo de cada una, su mejora de línea
+        const top: string[] = [], bottom: string[] = [];
         for (const u of w.trainsOf(g.me, b.type as BuildingType)) {
           const ud = UNITS[u];
           const locked = pl.age < ud.age;
           const needs = ud.requires && !pl.techs.has(ud.requires);
           const cost = w.unitCost(g.me, u);
           const n = allQ.filter((q) => q === u).length;
-          html += `<button class="act ${ud.unique ? 'uniq' : ''}" data-a="train:${u}" ${locked || needs || !w.canAfford(g.me, cost) ? 'data-dis' : ''}>
-            <i>${UNIT_ICON[u]}</i><span>${ud.name}</span><em>${locked ? lock(ud.age) : needs ? `🔒 ${TECHS[ud.requires!].name}` : costHtml(cost, pl.res)}</em>${n ? `<b class="badge">${n}</b>` : ''}</button>`;
+          top.push(`<button class="act ${ud.unique ? 'uniq' : ''}" data-a="train:${u}" ${locked || needs || !w.canAfford(g.me, cost) ? 'data-dis' : ''}>
+            <i>${UNIT_ICON[u]}</i><span>${ud.name}</span><em>${locked ? lock(ud.age) : needs ? `🔒 ${TECHS[ud.requires!].name}` : costHtml(cost, pl.res)}</em>${n ? `<b class="badge">${n}</b>` : ''}</button>`);
+          const t = `up_${u}` as TechType, td = TECHS[t];
+          if (pl.techs.has(t)) { bottom.push(`<button class="act up done" data-a="research:${t}" data-dis><i>${UNIT_ICON[u]}<sup>✔</sup></i><span>${td.name}</span><em>✔</em></button>`); continue; }
+          const queued = b.tech === t || b.techQueue.includes(t);
+          const elsewhere = !queued && w.isResearching(g.me, t);
+          const tl = pl.age < td.age;
+          const tc2 = w.techCost(g.me, t);
+          bottom.push(`<button class="act up ${queued ? 'on' : ''}" data-a="research:${t}" ${!tl && !queued && !elsewhere && w.canAfford(g.me, tc2) ? '' : 'data-dis'}>
+            <i>${UNIT_ICON[u]}<sup>⬆️</sup></i><span>${td.name}</span><em>${tl ? lock(td.age) : b.tech === t ? '⏳ investigando' : queued || elsewhere ? '⏳ en cola' : costHtml(tc2, pl.res)}</em></button>`);
+        }
+        html += twoRows(top, bottom);
+        if (b.type === 'towncenter' && pl.age < 4 && !w.isResearchingAge(g.me)) {
+          const next = (pl.age + 1) as 2 | 3 | 4;
+          const cost = w.ageCost(g.me, next);
+          html += `<button class="act gold" data-a="age" ${w.canAfford(g.me, cost) ? '' : 'data-dis'}><i>👑</i><span>${AGE_NAME[next]}</span><em>${costHtml(cost, pl.res)}</em></button>`;
         }
         for (const t of d.research ?? []) {
           const td = TECHS[t];
@@ -577,16 +595,18 @@ export class Hud {
     if (mine) {
       const vills = units.some((u) => u.type === 'villager');
       const fighters = units.filter((u) => UNITS[u.type as UnitType].atk > 0 && u.type !== 'villager' && !UNITS[u.type as UnitType].gathers);
-      if (vills) acts += `<button class="act gold" data-a="buildmenu"><i>🔨</i><span>Construir</span></button>`;
-      if (fighters.length) acts += `<button class="act ${g.mode === 'attack' ? 'on' : ''}" data-a="attack"><i>⚔️</i><span>Atacar zona</span></button>`;
-      acts += `<button class="act ${g.queueMode ? 'on' : ''}" data-a="queue"><i>➕</i><span>En cola${g.queueMode ? ' ✓' : ''}</span></button>`;
+      // fila de arriba: actitudes (o construir); fila de abajo: cola, detener y eliminar
+      const top: string[] = [], bottom: string[] = [];
+      if (vills) top.push(`<button class="act gold" data-a="buildmenu"><i>🔨</i><span>Construir</span></button>`);
       if (fighters.length) {
         const cur = new Set(fighters.map((u) => u.stance));
-        for (const s of ['agg', 'def', 'pas'] as Stance[])
-          acts += `<button class="act stance ${cur.size === 1 && cur.has(s) ? 'on' : ''}" data-a="stance:${s}"><i>${STANCE_ICON[s]}</i><span>${STANCE_NAME[s]}</span></button>`;
+        for (const s2 of ['agg', 'def', 'pas'] as Stance[])
+          top.push(`<button class="act stance ${cur.size === 1 && cur.has(s2) ? 'on' : ''}" data-a="stance:${s2}"><i>${STANCE_ICON[s2]}</i><span>${STANCE_NAME[s2]}</span></button>`);
       }
-      acts += `<button class="act" data-a="stop"><i>✋</i><span>Detener</span></button>`;
-      acts += this.delBtn('Eliminar');
+      bottom.push(`<button class="act ${g.queueMode ? 'on' : ''}" data-a="queue"><i>➕</i><span>En cola${g.queueMode ? ' ✓' : ''}</span></button>`);
+      bottom.push(`<button class="act" data-a="stop"><i>✋</i><span>Detener</span></button>`);
+      bottom.push(this.delBtn('Eliminar'));
+      acts = twoRows(top, bottom);
     }
     return `<div class="info">${info}</div><div class="acts">${acts}</div>`;
   }

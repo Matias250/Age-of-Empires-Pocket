@@ -1,4 +1,4 @@
-// Empaqueta el juego compilado (dist/) en un único HTML autocontenido: build/imperios-rapidos.html
+// Empaqueta el juego compilado (dist/) en un único HTML autocontenido: build/age-of-empires-pocket.html
 // Uso: npm run build && node scripts/bundle.mjs
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -42,5 +42,5 @@ html = html
   .replace(/<link rel="icon"[^>]*>/, `<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(readFileSync(join(root, 'icon.svg'), 'utf8'))}" />`)
   .replace(/<script type="module" src="dist\/client\/main.js"><\/script>/, () => `<script type="module">\n${js}</script>`);
 mkdirSync(join(root, 'build'), { recursive: true });
-writeFileSync(join(root, 'build', 'imperios-rapidos.html'), html);
-console.log('build/imperios-rapidos.html', (html.length / 1024).toFixed(0) + ' KB', order.length, 'módulos');
+writeFileSync(join(root, 'build', 'age-of-empires-pocket.html'), html);
+console.log('build/age-of-empires-pocket.html', (html.length / 1024).toFixed(0) + ' KB', order.length, 'módulos');

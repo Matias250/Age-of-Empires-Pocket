@@ -5,7 +5,7 @@
 import {
   Age, AGE_NAME, AGE_UPS, ArmorClass, BUILDINGS, BUILDING_ARMOR, BuildingType, CARRY, DT, FARM_RATE, MAX_POP,
   NODES, NodeType, Projectile, Res, ResBag, RES_LIST, RES_NAME, SHIP_CARRY, START_RES, TECHS, TechType, TICK_RATE, TILE,
-  TRADE, UNITS, UnitDef, UnitType,
+  TRADE, UNITS, UnitDef, UnitType, upAtk,
 } from './data.js';
 import { CivId, CIVS, CivMods } from './civs.js';
 import { findPath, Grid, lineClear, pathFound } from './path.js';
@@ -197,6 +197,8 @@ export class World implements Grid {
     const e = this.blank('unit', type, owner);
     e.x = x; e.y = y; e.hp = e.maxHp = Math.round(this.unitMaxHp(owner, type)); e.radius = d.radius;
     e.facing = this.rng.next() * Math.PI * 2;
+    // las unidades del jugador nacen en actitud neutral; las de la IA, agresivas
+    e.stance = this.players[owner] && !this.players[owner].isAI ? 'def' : 'agg';
     this.entities.set(e.id, e);
     this.dirty = true;
     return e;
@@ -363,8 +365,9 @@ export class World implements Grid {
 
   /** Qué entrena un edificio para este jugador (el castillo suma la unidad única) */
   trainsOf(p: number, b: BuildingType): UnitType[] {
-    const base = BUILDINGS[b].trains ?? [];
     const civ = this.players[p]?.civ;
+    const lacks = civ ? CIVS[civ].lacks ?? [] : [];
+    const base = (BUILDINGS[b].trains ?? []).filter((u) => !lacks.includes(u));
     if (b === 'castle' && civ) return [CIVS[civ].unique, ...base];
     return base;
   }
@@ -379,6 +382,7 @@ export class World implements Grid {
     if (t === 'fishship') hp *= m.fishShipHp ?? 1;
     if (d.cls === 'siege') hp *= m.siegeHp ?? 1;
     if (t === 'villager' && this.hasTech(p, 'loom')) hp += 15;
+    if (this.hasTech(p, `up_${t}`)) hp *= 1.2;
     return hp;
   }
   buildingHpMult(p: number, b: BuildingType): number {
@@ -396,6 +400,7 @@ export class World implements Grid {
     let s = d.speed;
     if (u.type === 'villager' && this.hasTech(u.owner, 'wheelbarrow')) s *= 1.15;
     if (d.mounted) s *= this.mods(u.owner).mountedSpeed ?? 1;
+    if (d.trade && this.hasTech(u.owner, `up_${u.type as UnitType}`)) s *= 1.2;
     return s;
   }
   rangeOf(u: Entity): number {
@@ -420,6 +425,7 @@ export class World implements Grid {
   attackOf(u: Entity): number {
     const d = UNITS[u.type as UnitType];
     let a = d.atk;
+    if (a && this.hasTech(u.owner, `up_${u.type as UnitType}`)) a += upAtk(u.type as UnitType);
     if (u.type === 'villager' || d.cls === 'siege' || a === 0) return a;
     if (d.atkType === 'melee' && d.range <= TILE) a += this.hasTech(u.owner, 'forge') ? 1 : 0;
     if (d.atkType === 'pierce' && !d.gunpowder) a += this.hasTech(u.owner, 'fletching') ? 1 : 0;
@@ -685,7 +691,8 @@ export class World implements Grid {
         const b = this.entities.get(c.bid);
         if (!b || b.owner !== c.p || b.cat !== 'building' || b.progress < 1 || b.techQueue.length >= 5) return;
         const td = TECHS[c.tech];
-        if (!BUILDINGS[b.type as BuildingType].research?.includes(c.tech)) return;
+        const okHere = td.unit ? this.trainsOf(c.p, b.type as BuildingType).includes(td.unit) : BUILDINGS[b.type as BuildingType].research?.includes(c.tech);
+        if (!okHere) return;
         if (pl.techs.has(c.tech) || this.isResearching(c.p, c.tech)) return;
         if (pl.age < td.age) return;
         const cost = this.techCost(c.p, c.tech);
@@ -837,6 +844,8 @@ export class World implements Grid {
     pl.techs.add(t);
     if (t === 'masonry' || t === 'architecture') for (const b of this.buildingsOf(p)) { b.maxHp = Math.round(b.maxHp * 1.1); b.hp = b.maxHp; }
     if (t === 'loom') for (const v of this.unitsOf(p, 'villager')) { v.maxHp += 15; v.hp += 15; }
+    const up = TECHS[t].unit;
+    if (up) for (const v of this.unitsOf(p, up)) { v.maxHp = Math.round(v.maxHp * 1.2); v.hp *= 1.2; }
   }
 
   private finishTech(p: number, t: TechType) {
@@ -847,6 +856,8 @@ export class World implements Grid {
       for (const b of this.buildingsOf(p)) { b.maxHp = Math.round(b.maxHp * 1.1); b.hp *= 1.1; }
     }
     if (t === 'loom') for (const v of this.unitsOf(p, 'villager')) { v.maxHp += 15; v.hp += 15; }
+    const up = TECHS[t].unit;
+    if (up) for (const v of this.unitsOf(p, up)) { v.maxHp = Math.round(v.maxHp * 1.2); v.hp *= 1.2; }
     this.events.push({ t: 'tech', p, tech: t });
     this.events.push({ t: 'msg', p, text: `Investigación lista: ${TECHS[t].name}` });
   }
@@ -952,6 +963,7 @@ export class World implements Grid {
       if (d.cls === 'infantry' && !d.heals && this.hasTech(t.owner, 'mail')) armor += 1;
       if (d.cls === 'cavalry' || d.mounted) armor += this.hasTech(t.owner, 'barding') ? (type === 'melee' ? 1 : 2) : 0;
       if (t.type === 'villager' && this.hasTech(t.owner, 'loom')) armor += type === 'melee' ? 1 : 2;
+      if (this.hasTech(t.owner, `up_${t.type as UnitType}`)) armor += 1;
     }
     let dmg = atk + (bonus?.[cls] ?? 0);
     if (t.cat === 'unit' && bonus) for (const tag of UNITS[t.type as UnitType].tags ?? []) dmg += bonus[tag] ?? 0;
@@ -1064,7 +1076,7 @@ export class World implements Grid {
         if (this.edgeDist(u, t) <= d.range) {
           u.path = [];
           u.facing = Math.atan2(t.y - u.y, t.x - u.x);
-          t.hp = Math.min(t.maxHp, t.hp + 4 * DT);
+          t.hp = Math.min(t.maxHp, t.hp + 4 * DT * (this.hasTech(u.owner, 'up_monk') ? 1.5 : 1));
           if (this.tick % 10 === 0) this.events.push({ t: 'heal', x: t.x, y: t.y });
         } else if (!this.approach(u, t, d.range * 0.8)) this.setOrder(u, undefined);
         break;
@@ -1090,14 +1102,15 @@ export class World implements Grid {
       if (best) this.setOrder(u, { t: 'heal', target: (best as Entity).id });
       return;
     }
-    const reach = u.stance === 'def' ? Math.min(d.sight * TILE, this.rangeOf(u) + 3 * TILE) : Math.max(d.sight * TILE, this.rangeOf(u));
+    // Agresiva: ataca todo lo que ve. Neutral: solo responde a quien la ataca (y lo persigue hasta cierta distancia).
+    const reach = u.stance === 'def' ? Math.max(d.sight * TILE, this.rangeOf(u)) + 4 * TILE : Math.max(d.sight * TILE, this.rangeOf(u));
     const hitter = this.get(u.lastHitBy);
     if (hitter && hitter.hp > 0 && this.isEnemy(u.owner, hitter.owner) && this.canTarget(u, hitter) && (u.stance === 'agg' || this.edgeDist(u, hitter) < reach + TILE)) {
       this.setOrder(u, { t: 'attack', target: hitter.id, auto: true });
       u.lastHitBy = 0;
       return;
     }
-    const e = this.findEnemy(u, reach);
+    const e = u.stance === 'def' ? undefined : this.findEnemy(u, reach);
     if (e) this.setOrder(u, { t: 'attack', target: e.id, auto: true });
     else if (u.stance === 'def' && u.home && Math.hypot(u.x - u.home.x, u.y - u.home.y) > TILE) this.setOrder(u, { t: 'move', x: u.home.x, y: u.home.y });
   }
@@ -1270,10 +1283,18 @@ export class World implements Grid {
       u.path = []; u.pathKey = '';
     }
     const n = node!;
-    if (this.edgeDist(u, n) <= INTERACT || (n.type === 'farm' && this.insideRect(u, n))) {
+    const atFarm = n.type === 'farm' && this.insideRect(u, n) && Math.abs(u.x - n.x) < n.fw * TILE / 2 - 6 && Math.abs(u.y - n.y) < n.fh * TILE / 2 - 6;
+    if ((n.type !== 'farm' && this.edgeDist(u, n) <= INTERACT) || atFarm) {
       u.path = [];
       u.lastNode = n.id;
-      u.facing = Math.atan2(n.y - u.y, n.x - u.x);
+      if (n.type === 'farm') {
+        // el granjero recorre los surcos dentro de su parcela
+        const w = n.fw * TILE - 20, rows = 3, rowH = (n.fh * TILE - 20) / (rows - 1);
+        const ph = ((this.tick + u.id * 37) * 0.35) % (w * rows * 2);
+        const row = Math.floor(ph / (w * 2)) % rows, along = ph % (w * 2);
+        const gx = n.tx * TILE + 10 + (along < w ? along : w * 2 - along), gy = n.ty * TILE + 10 + row * rowH;
+        if (Math.hypot(gx - u.x, gy - u.y) > 2) { const sp = Math.min(Math.hypot(gx - u.x, gy - u.y), 9 * DT); const a2 = Math.atan2(gy - u.y, gx - u.x); u.x += Math.cos(a2) * sp; u.y += Math.sin(a2) * sp; u.facing = a2; }
+      } else u.facing = Math.atan2(n.y - u.y, n.x - u.x);
       const m = pl.mods;
       let rate = (n.cat === 'node' ? NODES[n.type as NodeType].rate : FARM_RATE) * pl.gatherMult;
       if ((o.res === 'wood' && pl.techs.has('axe')) || (o.res === 'food' && !naval && pl.techs.has('plow')) ||
@@ -1281,6 +1302,7 @@ export class World implements Grid {
       if (o.res === 'gold') rate *= m.goldRate ?? 1;
       if (n.type === 'fish') rate *= m.fishRate ?? 1;
       if (n.type === 'farm') rate *= m.farmRate ?? 1;
+      if (naval && this.hasTech(u.owner, 'up_fishship')) rate *= 1.25;
       u.carryRes = o.res;
       u.gatherAcc += rate * DT;
       while (u.gatherAcc >= 1 && n.amount > 0 && u.carry < cap) {

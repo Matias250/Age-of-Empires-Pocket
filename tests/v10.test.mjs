@@ -103,3 +103,28 @@ test('historias de solo ejército y soldados sin dueño', () => {
     assert.equal(w.players[0].defeated, false);
   }
 });
+
+test('árbol por civilización y mejoras de línea', async () => {
+  const { CIVS } = await import('../dist/sim/civs.js');
+  const mk = (civ) => createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 2, map: 'continental', biome: 'templado', players: [{ ai: false, civ, team: 1, color: 0 }, { ai: true, civ: 'francos', team: 2, color: 1 }] });
+  assert.ok(!mk('aztecas').world.trainsOf(0, 'stable').length);
+  assert.ok(!mk('britanos').world.trainsOf(0, 'stable').includes('camel'));
+  assert.ok(mk('persas').world.trainsOf(0, 'stable').includes('camel'));
+  assert.ok(!mk('vikingos').world.trainsOf(0, 'workshop').includes('bombard'));
+  const m = mk('francos'), w = m.world;
+  const p = w.players[0];
+  p.age = 3; p.res = { food: 5000, wood: 5000, gold: 5000, stone: 5000 };
+  const tc = w.buildingsOf(0, 'towncenter')[0];
+  let bk;
+  for (let k = 0; k < 200 && !bk; k++) { const x = tc.tx + 4 + (k % 10), y = tc.ty - 5 + Math.floor(k / 10); if (!w.canPlace(0, 'barracks', x, y)) bk = w.placeBuilding(0, 'barracks', x, y, true); }
+  const s = w.spawnUnit(0, 'militia', tc.x + 100, tc.y);
+  const hp0 = s.maxHp, atk0 = w.attackOf(s);
+  w.issue({ t: 'research', p: 0, bid: bk.id, tech: 'up_militia' });
+  run(w, [], 80);
+  assert.ok(p.techs.has('up_militia'));
+  assert.ok(s.maxHp > hp0 && w.attackOf(s) > atk0);
+  // no se puede investigar en un edificio que no entrena esa unidad
+  w.issue({ t: 'research', p: 0, bid: bk.id, tech: 'up_archer' }); w.step();
+  assert.notEqual(bk.tech, 'up_archer');
+  void CIVS;
+});

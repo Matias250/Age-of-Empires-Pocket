@@ -1,4 +1,4 @@
-# ⚜️ Imperios Rápidos
+# ⚜️ Age of Empires Pocket
 
 Juego de estrategia en tiempo real inspirado en los clásicos del género (aldeanos, recursos, eras, ejércitos),
 pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
@@ -73,7 +73,7 @@ Otros comandos:
 
 ```bash
 npm test           # simula partidas IA contra IA sin pantalla (ver tests/)
-npm run bundle     # genera build/imperios-rapidos.html: el juego entero en UN archivo
+npm run bundle     # genera build/age-of-empires-pocket.html: el juego entero en UN archivo
 ```
 
 ## Publicación automática
@@ -110,4 +110,4 @@ Ver [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Créditos
 
-Diseño y código originales. Inspirado en el género RTS clásico; no usa arte, nombres ni contenido de otros juegos.
+Proyecto de fans, sin fines de lucro, inspirado en *Age of Empires II*. No está afiliado ni respaldado por Microsoft ni por World's Edge; "Age of Empires" es una marca de sus dueños. Todo el arte y el código del juego son originales.

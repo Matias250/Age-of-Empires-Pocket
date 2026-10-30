@@ -116,16 +116,23 @@ test('cola de órdenes: mover y después construir', () => {
   assert.ok(Math.hypot(v.x - (tc.x - 160), v.y - (tc.y + 160)) < 40, 'llegó al segundo punto');
 });
 
-test('actitud pasiva no ataca sola; agresiva sí', () => {
+test('actitudes: el jugador arranca en neutral; pasiva nunca ataca, neutral solo si la atacan, agresiva sí', () => {
   const { w, tc, run } = setup();
   const a = w.spawnUnit(0, 'militia', tc.x + 200, tc.y + 200);
   const b = w.spawnUnit(0, 'militia', tc.x + 200, tc.y + 230);
+  const c = w.spawnUnit(0, 'militia', tc.x + 200, tc.y + 260);
+  assert.equal(c.stance, 'def');
   w.issue({ t: 'stance', p: 0, ids: [a.id], stance: 'pas' });
+  w.issue({ t: 'stance', p: 0, ids: [b.id], stance: 'agg' });
   run(0.1);
-  w.spawnUnit(1, 'villager', tc.x + 240, tc.y + 215);
+  const v = w.spawnUnit(1, 'villager', tc.x + 240, tc.y + 230);
   run(1);
   assert.equal(a.order, undefined);
   assert.equal(b.order?.t, 'attack');
+  assert.equal(c.order, undefined); // neutral: nadie la atacó
+  c.lastHitBy = v.id;
+  run(1);
+  assert.equal(c.order?.t, 'attack');
 });
 
 test('investigaciones en cola y en paralelo al entrenamiento', () => {

@@ -534,3 +534,15 @@ table.players td:nth-child(n+4) { text-align: right; font-variant-numeric: tabul
 .chat-in { display: flex; gap: 6px; }
 .chat-in input { flex: 1; min-width: 0; padding: 8px; border-radius: 8px; border: 1px solid var(--edge); background: #0007; color: var(--ink); font-size: 14px; }
 .chat-in button { padding: 0 12px; border-radius: 8px; background: var(--gold); color: #1a1410; font-weight: 700; border: 0; }
+.act-gap { display: block; }
+.civcard .lacks { color: var(--dim); font-size: 12px; margin: 4px 0 0; }
+.act.up { background: linear-gradient(#3b3247, #241d2e); border-color: #7c6aa8; }
+.act.up i { position: relative; }
+.act.up i sup { position: absolute; right: -10px; top: -4px; font-size: 10px; }
+.act.up.done { opacity: .55; border-color: #4ade8066; }
+.home .logo h1 { font-size: clamp(24px, 4.8vh, 36px); line-height: 1.1; }
+@media (max-width: 400px) {
+  #res { font-size: 10.5px !important; gap: 3px !important; letter-spacing: -0.3px; }
+  #res sub { font-size: 8px; padding: 0 2px; }
+  #btnChat, #btnPause { width: 30px; }
+}

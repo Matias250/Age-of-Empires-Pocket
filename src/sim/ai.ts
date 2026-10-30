@@ -218,6 +218,16 @@ export class AI {
       this.techReserve = {};
       return;
     }
+    // mejoras de línea para la unidad que más usa (Normal y Difícil, con recursos de sobra)
+    if (this.diff === 'novice' || this.diff === 'easy' || pl.age < 3 || pl.res.food < 500 || pl.res.gold < 350) return;
+    const count = new Map<UnitType, number>();
+    for (const u of w.unitsOf(this.p)) if (isLandArmy(u.type as UnitType)) count.set(u.type as UnitType, (count.get(u.type as UnitType) ?? 0) + 1);
+    for (const [u] of [...count].sort((a2, b2) => b2[1] - a2[1])) {
+      const t = `up_${u}` as TechType;
+      if (pl.techs.has(t) || w.isResearching(this.p, t) || pl.age < TECHS[t].age || !w.canAfford(this.p, w.techCost(this.p, t))) continue;
+      const b = w.buildingsOf(this.p, undefined, true).find((x) => x.type !== 'towncenter' && w.trainsOf(this.p, x.type as BuildingType).includes(u) && !x.tech);
+      if (b) { w.issue({ t: 'research', p: this.p, bid: b.id, tech: t }); return; }
+    }
   }
 
   // ------------------------------------------------------------------ flota

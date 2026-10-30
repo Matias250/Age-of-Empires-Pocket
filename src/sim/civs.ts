@@ -46,6 +46,8 @@ export interface CivDef {
   mods: CivMods;
   /** logros necesarios para poder elegirla */
   unlock?: number;
+  /** unidades que no tiene (árbol tecnológico, basado en el AoE2 y simplificado) */
+  lacks?: UnitType[];
 }
 
 export const CIVS: Record<CivId, CivDef> = {
@@ -128,3 +130,24 @@ export const CIVS: Record<CivId, CivDef> = {
 };
 
 export const CIV_LIST = Object.keys(CIVS) as CivId[];
+
+// Árbol tecnológico: qué unidades comunes NO tiene cada civilización
+const MESO: UnitType[] = ['scout', 'knight', 'camel', 'cavarcher', 'handcannon', 'bombard', 'cannongalleon'];
+const LACKS: Record<CivId, UnitType[]> = {
+  britanos: ['camel', 'bombard', 'cannongalleon'],
+  francos: ['camel'],
+  espanoles: ['camel'],
+  bizantinos: [],
+  mongoles: ['handcannon', 'bombard', 'cannongalleon'],
+  japoneses: ['camel'],
+  chinos: ['camel'],
+  persas: [],
+  vikingos: ['camel', 'bombard', 'cannongalleon'],
+  turcos: [],
+  godos: ['camel'],
+  aztecas: MESO,
+  hunos: ['camel', 'handcannon', 'bombard', 'cannongalleon'],
+  teutones: ['camel'],
+  mayas: MESO,
+};
+for (const c of Object.keys(LACKS) as CivId[]) CIVS[c].lacks = LACKS[c];

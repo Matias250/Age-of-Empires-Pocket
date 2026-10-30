@@ -20,9 +20,9 @@ export const UNIT_ICON: Record<UnitType, string> = {
 };
 export const BUILD_ICON: Record<BuildingType, string> = {
   towncenter: '🏰', house: '🏠', barracks: '⚔️', range: '🎯', stable: '🐴', workshop: '⚙️',
-  mill: '🌾', lumbercamp: '🪓', miningcamp: '⛏️', farm: '🌱', tower: '🗼',
+  mill: '🌾', lumbercamp: '🪓', miningcamp: '⛏️', farm: '🌱', tower: '<svg class="ico" viewBox="0 0 24 24"><path d="M7 3h2v2h2V3h2v2h2V3h2v5l-1.5 1.5V21h-9V9.5L7 8z" fill="#b9b2a4" stroke="#4a4036" stroke-width="1.2" stroke-linejoin="round"/><path d="M8.5 9.5h7" stroke="#4a4036" stroke-width="1"/><rect x="11" y="11.5" width="2" height="3.5" rx="1" fill="#2b241c"/><path d="M10 21v-3.2a2 2 0 0 1 4 0V21" fill="#5b3b1e"/><path d="M8.5 14.5h2M13.5 17h2M9 19h1.5" stroke="#8c8375" stroke-width=".8"/></svg>',
   blacksmith: '⚒️', market: '⚖️', castle: '🏯', monastery: '⛪', wall: '🪵',
-  dock: '⚓', university: '🎓', stonewall: '🧱', gate: '🚪',
+  dock: '⚓', university: '🎓', stonewall: '🧱', gate: '<svg class="ico" viewBox="0 0 24 24"><path d="M2 21V7h1.5V5.5H5V7h1V5.5h1.5V7H9v14zM15 21V7h1.5V5.5H18V7h1V5.5h1.5V7H22v14z" fill="#b9b2a4" stroke="#4a4036" stroke-width="1.1" stroke-linejoin="round"/><path d="M9 21V10h6v11" fill="#a79f90" stroke="#4a4036" stroke-width="1.1"/><path d="M10 21v-6.5a2 2 0 0 1 4 0V21z" fill="#2b241c"/><path d="M10.6 15v6M12 13v8M13.4 15v6M10 17.3h4M10 19.4h4" stroke="#8a8a8a" stroke-width=".7"/></svg>',
 };
 export const RES_ICON: Record<Res, string> = { food: '🍖', wood: '🪵', gold: '🪙', stone: '🪨' };
 const NODE_ICON: Record<NodeType, string> = { tree: '🌳', berries: '🫐', goldmine: '🪙', stonemine: '🪨', fish: '🐟' };
@@ -308,13 +308,13 @@ export class Hud {
       ${tut || story ? '' : this.playersTable()}
       ${fresh.length ? `<div class="end-ach"><b>🏅 Logros nuevos</b>${fresh.map((a) => `<span>${a.icon} ${a.name}</span>`).join('')}</div>` : ''}
       <div class="end-btns two">
-        <button class="big ghost" data-o="map">🗺️ Ver mapa completo</button>
-        <button class="big ghost" data-o="stats">📊 Estadísticas</button>
+        <button class="big ghost" data-o="map">Ver mapa</button>
+        <button class="big ghost" data-o="stats">Estadísticas</button>
       </div>
       <div class="end-btns">
         ${story ? (next ? `<button class="big" data-o="next">Siguiente: ${next.title} ▸</button>` : win ? '' : '<button class="big" data-o="retry">Reintentar</button>')
           : tut ? '' : '<button class="big" data-o="again">Revancha</button>'}
-        <button class="big ghost" data-o="${story ? 'stories' : 'exit'}">${story ? '🗺️ Mapa de la campaña' : 'Menú principal'}</button>
+        <button class="big ghost" data-o="${story ? 'stories' : 'exit'}">${story ? 'Volver a campañas' : 'Menú principal'}</button>
       </div>
     </div>`;
     this.fitOverlay();
@@ -357,24 +357,14 @@ export class Hud {
       { k: 'built', icon: '🏗️', title: 'Edificios construidos', v: (p) => p.stats.built },
     ];
     const max = cols.map((c) => Math.max(...ps.map(c.v)));
-    const best = (f: (p: (typeof ps)[number]) => number) => { const m = Math.max(...ps.map(f)); return m > 0 ? ps.filter((p) => f(p) === m) : []; };
-    const who = (l: typeof ps) => l.length ? l.map((p) => `<b style="color:${p.color}">${p.id === g.me ? 'Vos' : p.name}</b>`).join(', ') : '<span>—</span>';
-    const total = (p: (typeof ps)[number]) => RES_LIST.reduce((n, r) => n + p.stats.gathered[r], 0);
-    const highlights = [
-      ...RES_LIST.map((r) => `<li><i>${RES_ICON[r]}</i> Más ${RES_NAME[r].toLowerCase()}: ${who(best((p) => p.stats.gathered[r]))}</li>`),
-      `<li><i>🧺</i> Mejor recolector: ${who(best(total))}</li>`,
-      `<li><i>⚔️</i> Mató más: ${who(best((p) => p.stats.kills))}</li>`,
-      `<li><i>💀</i> Le mataron más: ${who(best((p) => p.stats.lost))}</li>`,
-    ].join('');
+    const winTeam = w.winnerTeam;
     const o = $('overlay');
     o.hidden = false;
     o.innerHTML = `<div class="card end stats">
-      <h2>📊 Estadísticas</h2>
-      <ul class="hl">${highlights}</ul>
+      <h2>Estadísticas</h2>
       <div class="statwrap"><table class="players st"><tr class="hd"><td>Jugador</td>${cols.map((c) => `<td title="${c.title}">${c.icon}</td>`).join('')}</tr>
-      ${ps.map((p) => `<tr class="${p.defeated ? 'dead' : ''}"><td><i class="dot" style="background:${p.color}"></i>${p.id === g.me ? 'Vos' : p.name}</td>${cols.map((c, i) => { const v = c.v(p); return `<td class="${v > 0 && v === max[i] ? 'top' : ''}">${v}</td>`; }).join('')}</tr>`).join('')}
+      ${ps.map((p) => `<tr class="${p.team === winTeam ? 'winner' : 'loser'}"><td><i class="dot" style="background:${p.color}"></i>${p.id === g.me ? 'Vos' : p.name}</td>${cols.map((c, i) => { const v = c.v(p); return `<td class="${v > 0 && v === max[i] ? 'top' : ''}">${v}</td>`; }).join('')}</tr>`).join('')}
       </table></div>
-      <p class="dim">👑 en dorado: el mejor de cada columna.</p>
       <div class="end-btns"><button class="big" data-o="back">◂ Volver al resumen</button></div>
     </div>`;
     this.fitOverlay();
@@ -689,9 +679,10 @@ export class Hud {
       for (const b of list) {
         const d = BUILDINGS[b];
         const locked = pl.age < d.age;
+        const noMill = b === 'farm' && !w.buildingsOf(g.me, 'mill', true).length;
         const cost = w.buildingCost(g.me, b);
-        html += `<button class="bcard" data-a="place:${b}" ${locked || !w.canAfford(g.me, cost) ? 'data-dis' : ''}>
-          <i>${BUILD_ICON[b]}</i><b>${d.name}</b><em>${locked ? lock(d.age) : costHtml(cost, pl.res)}</em><small>${d.desc}</small></button>`;
+        html += `<button class="bcard" data-a="place:${b}" ${locked || noMill || !w.canAfford(g.me, cost) ? 'data-dis' : ''}>
+          <i>${BUILD_ICON[b]}</i><b>${d.name}</b><em>${locked ? lock(d.age) : noMill ? '🔒 Molino' : costHtml(cost, pl.res)}</em><small>${d.desc}</small></button>`;
       }
       html += `</div>`;
     }

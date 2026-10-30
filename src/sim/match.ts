@@ -99,7 +99,7 @@ export function createMatch(cfg: MatchConfig): Match {
   const size = Math.max(mapSizeFor(n), cfg.size ? MAP_SIZES[cfg.size].tiles : 0);
   const w = new World(size, size, cfg.seed);
   w.biome = biome; w.mapName = map;
-  w.popLimit = n <= 2 ? 125 : n <= 4 ? 100 : 75;
+  w.popLimit = 125; // máximo fijo para todos
 
   // jugadores en el orden de los lugares (vos siempre sos el 0)
   const used = new Map<string, number>();
@@ -282,6 +282,13 @@ function makeArena(w: World, bases: Base[]) {
       if (!isGate(t)) w.placeBuilding(p, 'stonewall', t.x, t.y, true);
     }
     w.placeBuilding(p, 'gate', vertical ? g.x : g.x - 1, vertical ? g.y - 1 : g.y, true, vertical);
+    // el pasaje del arco tiene que quedar libre a los dos lados (el anillo es doble en las diagonales)
+    for (const k of [-3, -2, -1, 1, 2, 3]) for (const side of [-1, 0, 1]) {
+      const x = vertical ? g.x + k : g.x + side, y = vertical ? g.y + side : g.y + k;
+      if (x < 0 || y < 0 || x >= w.w || y >= w.h) continue;
+      const o = w.get(w.occ[y * w.w + x]);
+      if (o && (o.cat === 'node' || (side === 0 && o.type === 'stonewall'))) w.remove(o.id);
+    }
     // dos torres de vigía a los costados de la puerta, del lado de adentro
     const px = -Math.sin(toC), py = Math.cos(toC);
     for (const s of [-1, 1]) {

@@ -311,11 +311,39 @@ export class Renderer {
         gr.addColorStop(0, `rgba(255,230,120,${glow})`); gr.addColorStop(1, 'rgba(255,230,120,0)');
         g.fillStyle = gr; g.beginPath(); g.arc(x, y, 22, 0, 7); g.fill();
       }
-      g.fillStyle = '#6b4a1c'; g.fillRect(x - 7 * k, y - 4 * k, 14 * k, 9 * k);
-      g.fillStyle = '#e8b93a'; g.fillRect(x - 7 * k, y - 7 * k, 14 * k, 4 * k);
-      g.fillStyle = '#fff2b0'; g.fillRect(x - 1.2 * k, y - 7 * k, 2.4 * k, 12 * k);
-      g.strokeStyle = '#3a2408'; g.lineWidth = 1; g.strokeRect(x - 7 * k, y - 7 * k, 14 * k, 12 * k);
+      this.relicShrine(x, y, k, time + r.id);
     }
+  }
+
+  /** Relicario: cofrecito de oro con techo a dos aguas, gemas y una cruz, sobre un paño */
+  private relicShrine(x: number, y: number, k: number, t: number) {
+    const g = this.ctx;
+    g.save(); g.translate(x, y); g.scale(k, k);
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(0, 6, 11, 3.6, 0, 0, 7); g.fill();
+    g.fillStyle = '#7a1f2b'; g.beginPath(); g.moveTo(-11, 5); g.lineTo(11, 5); g.lineTo(8, 7.5); g.lineTo(-8, 7.5); g.closePath(); g.fill();
+    const gold = g.createLinearGradient(-8, 0, 8, 0);
+    gold.addColorStop(0, '#8a5a12'); gold.addColorStop(0.35, '#f3cf5a'); gold.addColorStop(0.55, '#fff0a8'); gold.addColorStop(1, '#9a6a16');
+    // cuerpo
+    g.fillStyle = gold; g.fillRect(-8, -3, 16, 8);
+    g.strokeStyle = '#4a3008'; g.lineWidth = 0.8; g.strokeRect(-8, -3, 16, 8);
+    // arcos laterales grabados
+    g.strokeStyle = 'rgba(90,55,10,.8)'; g.lineWidth = 0.7;
+    for (const ax of [-4.5, 0, 4.5]) { g.beginPath(); g.arc(ax, 2.5, 1.6, Math.PI, 0); g.lineTo(ax + 1.6, 4.4); g.moveTo(ax - 1.6, 2.5); g.lineTo(ax - 1.6, 4.4); g.stroke(); }
+    // techo
+    const roof = g.createLinearGradient(0, -9, 0, -3);
+    roof.addColorStop(0, '#fff0a8'); roof.addColorStop(1, '#b8861e');
+    g.fillStyle = roof; g.beginPath(); g.moveTo(-9.5, -3); g.lineTo(-5, -8.5); g.lineTo(5, -8.5); g.lineTo(9.5, -3); g.closePath(); g.fill();
+    g.strokeStyle = '#4a3008'; g.stroke();
+    // gemas
+    g.fillStyle = '#c0182c'; g.beginPath(); g.arc(0, -5.6, 1.4, 0, 7); g.fill();
+    g.fillStyle = '#1d5fbf'; g.beginPath(); g.arc(-4.8, -4.5, 0.9, 0, 7); g.arc(4.8, -4.5, 0.9, 0, 7); g.fill();
+    // cruz
+    g.fillStyle = '#ffe9a0'; g.fillRect(-0.7, -13.5, 1.4, 5.2); g.fillRect(-2.3, -12, 4.6, 1.3);
+    // destello
+    const sp = (Math.sin(t * 2.3) + 1) / 2;
+    g.fillStyle = `rgba(255,255,255,${0.35 + sp * 0.5})`;
+    g.beginPath(); g.moveTo(5, -10 - sp * 2); g.lineTo(5.6, -8.4); g.lineTo(7.2, -7.8); g.lineTo(5.6, -7.2); g.lineTo(5, -5.6 + sp * 0); g.lineTo(4.4, -7.2); g.lineTo(2.8, -7.8); g.lineTo(4.4, -8.4); g.closePath(); g.fill();
+    g.restore();
   }
 
   private waterAnim(time: number, x0: number, y0: number, x1: number, y1: number) {
@@ -792,10 +820,28 @@ export class Renderer {
       g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(b[0], b[1] - H); g.lineTo(a[0], a[1] - H); g.closePath(); g.fill();
       if (tex) {
         g.save(); g.clip();
-        g.strokeStyle = tex === 'brick' ? 'rgba(40,30,20,0.22)' : 'rgba(40,25,10,0.3)'; g.lineWidth = 0.8;
+        g.strokeStyle = tex === 'brick' ? 'rgba(40,30,20,0.32)' : 'rgba(40,25,10,0.3)'; g.lineWidth = 0.8;
         g.beginPath();
         const steps = Math.max(1, Math.round(len / 8));
         if (tex === 'brick') {
+          // piedras con tonos distintos (fijos por posición) para que no se vea liso
+          for (let k = 0, row = 0; k < H; k += 5, row++) {
+            for (let s2 = row % 2 ? -0.5 : 0; s2 < steps; s2++) {
+              const f0 = Math.max(0, s2 / steps), f1 = Math.min(1, (s2 + 1) / steps);
+              const hsh = Math.sin((a[0] + s2 * 13.7) * 12.9898 + (a[1] + row * 7.3) * 78.233) * 43758.5453;
+              const rnd = hsh - Math.floor(hsh);
+              if (rnd > 0.33 && rnd < 0.66) continue;
+              g.fillStyle = rnd < 0.33 ? `rgba(0,0,0,${0.05 + rnd * 0.18})` : `rgba(255,255,255,${(rnd - 0.66) * 0.3})`;
+              const ax2 = a[0] + dx * f0, ay2 = a[1] + dy * f0, bx2 = a[0] + dx * f1, by2 = a[1] + dy * f1;
+              const k1 = Math.min(H, k + 5);
+              g.fillRect(Math.min(ax2, bx2), Math.min(ay2, by2) - k1, Math.max(1, Math.abs(bx2 - ax2)), k1 - k + Math.abs(by2 - ay2));
+            }
+          }
+          // sombra al pie y borde de luz arriba
+          const ao = g.createLinearGradient(0, Math.max(a[1], b[1]), 0, Math.max(a[1], b[1]) - H);
+          ao.addColorStop(0, 'rgba(0,0,0,0.28)'); ao.addColorStop(0.35, 'rgba(0,0,0,0)'); ao.addColorStop(0.92, 'rgba(255,255,255,0)'); ao.addColorStop(1, 'rgba(255,255,255,0.18)');
+          g.fillStyle = ao; g.fillRect(Math.min(a[0], b[0]) - 1, Math.min(a[1], b[1]) - H - 1, Math.abs(dx) + 2, Math.abs(dy) + H + 2);
+          g.beginPath();
           for (let k = 5, row = 0; k < H; k += 5, row++) {
             g.moveTo(a[0], a[1] - k); g.lineTo(b[0], b[1] - k);
             for (let s = row % 2 ? 0.5 : 0; s < steps; s++) {
@@ -894,7 +940,30 @@ export class Renderer {
     g.globalAlpha = 1;
   }
 
-  /** Portón de 3 tramos estilo castillo: torres en los extremos y puertas de madera dobles */
+  /** Qué tan levantada está cada reja (0 cerrada, 1 arriba): sube y baja con suavidad */
+  private gateLift = new Map<number, { v: number; t: number }>();
+  /** Reja levadiza de hierro sobre fondo oscuro; lift 0..1 la sube */
+  private portcullis(x: number, y: number, wd: number, ht: number, lift: number) {
+    const g = this.ctx;
+    g.fillStyle = '#1c1611'; g.fillRect(x, y, wd, ht);
+    g.fillStyle = 'rgba(138,122,92,.9)'; g.fillRect(x, y + ht - 3, wd, 3); // piso del pasaje
+    const oy = -lift * (ht - 2);
+    g.save(); g.translate(0, oy);
+    g.strokeStyle = '#3b3833'; g.lineWidth = 1.7;
+    g.beginPath();
+    for (let xx = x + 2; xx < x + wd; xx += 3.4) { g.moveTo(xx, y); g.lineTo(xx, y + ht); }
+    for (let yy = y + 3; yy < y + ht; yy += 4) { g.moveTo(x, yy); g.lineTo(x + wd, yy); }
+    g.stroke();
+    g.strokeStyle = 'rgba(200,200,190,.35)'; g.lineWidth = 0.6; g.beginPath();
+    for (let xx = x + 1.6; xx < x + wd; xx += 3.4) { g.moveTo(xx, y); g.lineTo(xx, y + ht); }
+    g.stroke();
+    // puntas de las barras
+    g.fillStyle = '#3b3833';
+    for (let xx = x + 2; xx < x + wd; xx += 3.4) { g.beginPath(); g.moveTo(xx - 1.1, y + ht); g.lineTo(xx + 1.1, y + ht); g.lineTo(xx, y + ht + 2.2); g.fill(); }
+    g.restore();
+  }
+
+  /** Portón de 3 tramos estilo castillo: torres en los extremos y reja levadiza en el arco */
   private gatePiece(e: Entity, col: string, time: number) {
     const g = this.ctx, w = this.w;
     const vertical = e.fh > e.fw;
@@ -910,7 +979,11 @@ export class Renderer {
       });
     }
     const face = '#9a958c', top = '#b9b4aa', towerF = '#8d887f', towerT = '#aaa49a';
-    const wood = '#7a5130', woodD = '#4e331c';
+    const st = this.gateLift.get(e.id) ?? { v: 0, t: time };
+    const dtl = Math.min(0.1, Math.max(0, time - st.t));
+    st.v = Math.max(0, Math.min(1, st.v + (open ? 1 : -1) * dtl * 2.2)); st.t = time;
+    this.gateLift.set(e.id, st);
+    const lift = st.v * st.v * (3 - 2 * st.v);
     const H = 22;
     if (!vertical) {
       const cy = y0 + 18;
@@ -925,22 +998,13 @@ export class Renderer {
       g.save(); g.translate(0, 0);
       g.beginPath(); g.moveTo(mx - aw / 2 + 1.5, fy); g.lineTo(mx - aw / 2 + 1.5, fy - ah + aw / 2); g.arc(mx, fy - ah + aw / 2, aw / 2 - 1.5, Math.PI, 0); g.lineTo(mx + aw / 2 - 1.5, fy); g.closePath();
       g.clip();
-      if (open) {
-        g.fillStyle = '#2a1f16'; g.fillRect(mx - aw / 2, fy - ah, aw, ah);
-        g.fillStyle = '#8a7a5c'; g.fillRect(mx - aw / 2, fy - 4, aw, 4);
-        // hojas abiertas, vistas de canto
-        g.fillStyle = wood; g.fillRect(mx - aw / 2 + 1.5, fy - ah + 2, 3, ah - 2); g.fillRect(mx + aw / 2 - 4.5, fy - ah + 2, 3, ah - 2);
-      } else {
-        g.fillStyle = wood; g.fillRect(mx - aw / 2, fy - ah, aw, ah);
-        g.strokeStyle = woodD; g.lineWidth = 0.9; g.beginPath();
-        for (let xx = mx - aw / 2 + 3; xx < mx + aw / 2; xx += 3) { g.moveTo(xx, fy - ah); g.lineTo(xx, fy); }
-        g.stroke();
-        g.strokeStyle = '#2b2b2b'; g.lineWidth = 1.6; g.beginPath();
-        g.moveTo(mx, fy - ah); g.lineTo(mx, fy);
-        g.moveTo(mx - aw / 2, fy - 5); g.lineTo(mx + aw / 2, fy - 5); g.moveTo(mx - aw / 2, fy - 12); g.lineTo(mx + aw / 2, fy - 12);
-        g.stroke();
-      }
+      this.portcullis(mx - aw / 2, fy - ah, aw, ah, lift);
       g.restore();
+      // dovelas del arco
+      g.strokeStyle = '#5d584f'; g.lineWidth = 2.2; g.beginPath(); g.arc(mx, fy - ah + aw / 2, aw / 2, Math.PI, 0); g.stroke();
+      g.strokeStyle = '#c8c2b6'; g.lineWidth = 0.7; g.beginPath();
+      for (let k = 1; k < 6; k++) { const a = Math.PI + (k / 6) * Math.PI; g.moveTo(mx + Math.cos(a) * (aw / 2 - 1.2), fy - ah + aw / 2 + Math.sin(a) * (aw / 2 - 1.2)); g.lineTo(mx + Math.cos(a) * (aw / 2 + 1.2), fy - ah + aw / 2 + Math.sin(a) * (aw / 2 + 1.2)); }
+      g.stroke();
       this.crenLine(lx + 8, cy - 8 - H, rx - 8, cy - 8 - H, '#c9c4ba');
       this.crenLine(lx + 8, cy + 8 - H, rx - 8, cy + 8 - H, '#c9c4ba');
       // torres
@@ -960,17 +1024,14 @@ export class Renderer {
       // abertura del portón vista desde arriba
       const gy = my - H;
       g.fillStyle = '#6d6860'; g.fillRect(cx - 10, gy - 10, 20, 20);
-      if (open) {
-        g.fillStyle = '#2a1f16'; g.fillRect(cx - 9, gy - 8, 18, 16);
-        g.fillStyle = '#8a7a5c'; g.fillRect(cx - 9, gy + 4, 18, 4);
-        g.fillStyle = wood; g.fillRect(cx - 9, gy - 8, 18, 2.5); g.fillRect(cx - 9, gy + 5.5, 18, 2.5);
-      } else {
-        g.fillStyle = wood; g.fillRect(cx - 9, gy - 8, 18, 16);
-        g.strokeStyle = woodD; g.lineWidth = 0.9; g.beginPath();
-        for (let yy = gy - 5; yy < gy + 8; yy += 3) { g.moveTo(cx - 9, yy); g.lineTo(cx + 9, yy); }
-        g.stroke();
-        g.strokeStyle = '#2b2b2b'; g.lineWidth = 1.6; g.beginPath();
-        g.moveTo(cx - 9, gy); g.lineTo(cx + 9, gy); g.moveTo(cx - 4, gy - 8); g.lineTo(cx - 4, gy + 8); g.moveTo(cx + 4, gy - 8); g.lineTo(cx + 4, gy + 8);
+      // pasaje visto desde arriba: la reja se ve como una franja de barras que se recoge hacia arriba
+      g.fillStyle = '#1c1611'; g.fillRect(cx - 9, gy - 8, 18, 16);
+      g.fillStyle = 'rgba(138,122,92,.9)'; g.fillRect(cx - 9, gy - 8, 18, 16 * Math.min(1, lift * 1.2));
+      const bars = 16 * (1 - lift);
+      if (bars > 0.5) {
+        g.fillStyle = '#3b3833'; g.fillRect(cx - 9, gy - 1.5 - bars / 2 + bars / 2, 18, 3);
+        g.strokeStyle = '#3b3833'; g.lineWidth = 1.6; g.beginPath();
+        for (let xx = cx - 7.5; xx <= cx + 8; xx += 3) { g.moveTo(xx, gy - bars / 2); g.lineTo(xx, gy + bars / 2); }
         g.stroke();
       }
       this.tower(cx, by, H + 12, towerF, towerT, col);
@@ -1032,20 +1093,58 @@ export class Renderer {
     else if (d.mounted) this.horse(x, y + 1, flip, bob, t === 'cataphract' || t === 'knight' ? col : null, t === 'cataphract' ? '#8a8f96' : t === 'scout' ? '#a87a4a' : '#7b5232');
     const by = y - (d.mounted ? 9 : 2) - bob;
     const body = t === 'monk' ? '#7a5a3a' : t === 'champion' || t === 'cataphract' || t === 'teutonic' ? '#b0b7bf' : t === 'jaguar' ? '#d9a441' : t === 'eagle' ? '#8a5a2e' : t === 'samurai' ? '#b23a3a' : t === 'janissary' ? '#e8e2d0' : col;
-    if (!d.mounted && t !== 'monk') {
-      g.fillStyle = '#4a3a2a';
-      const st = moving ? Math.sin(time * 12 + e.id) * 2 : 0;
-      g.fillRect(x - 3.5 + st * 0.5, y + 1, 2.5, 5); g.fillRect(x + 1 - st * 0.5, y + 1, 2.5, 5);
+    const skin = t === 'jaguar' || t === 'eagle' || t === 'plumed' ? '#c08a5c' : t === 'samurai' || t === 'chukonu' ? '#e8c39a' : '#e9bf98';
+    const metal = t === 'champion' || t === 'cataphract' || t === 'teutonic' || t === 'knight';
+    const pants = metal ? '#7c838b' : t === 'villager' ? '#6a5236' : '#4b3c2e';
+    const st = moving ? Math.sin(time * 12 + e.id) : 0;
+    const top0 = by - r * 0.62, hip = by + r * 0.5;
+    g.lineCap = 'round';
+    // piernas y botas (a caballo: la pierna cuelga sobre el flanco)
+    if (t === 'monk') {
+      g.fillStyle = '#2a1f17'; g.beginPath(); g.ellipse(x - 2 + st, y + 5.5, 2, 1.2, 0, 0, 7); g.ellipse(x + 2 - st, y + 5.5, 2, 1.2, 0, 0, 7); g.fill();
+    } else if (d.mounted) {
+      g.strokeStyle = pants; g.lineWidth = 2.4;
+      g.beginPath(); g.moveTo(x - flip * 0.5, hip - 1); g.lineTo(x + flip * 1.5, hip + 3.5); g.lineTo(x + flip * 0.8, hip + 7); g.stroke();
+      g.fillStyle = '#231a12'; g.beginPath(); g.ellipse(x + flip * 1.6, hip + 7.6, 2, 1.2, 0, 0, 7); g.fill();
+    } else {
+      for (const k of [-1, 1]) {
+        const sx = x + k * 1.9, fx2 = x + k * 2.2 + st * 2.4 * k;
+        g.strokeStyle = pants; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(sx, hip - 0.5); g.lineTo(fx2, y + 4.6); g.stroke();
+        g.fillStyle = '#231a12'; g.beginPath(); g.ellipse(fx2 + flip * 0.8, y + 5.6, 2.1, 1.25, 0, 0, 7); g.fill();
+      }
     }
-    g.fillStyle = shade(body, -0.4);
-    g.beginPath(); g.ellipse(x, by, r * 0.62 + 1, r * 0.78 + 1, 0, 0, 7); g.fill();
-    g.fillStyle = body;
-    g.beginPath(); g.ellipse(x, by, r * 0.62, r * 0.78, 0, 0, 7); g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.18)'; g.beginPath(); g.ellipse(x - r * 0.2, by - r * 0.25, r * 0.25, r * 0.35, 0, 0, 7); g.fill();
-    if (body !== col) { g.fillStyle = col; g.fillRect(x - r * 0.6, by + 1, r * 1.2, 2.5); }
-    // cabeza y tocado
+    // brazo de atrás (el del escudo)
+    const shBack = { x: x - flip * r * 0.5, y: top0 + 2 };
+    g.strokeStyle = shade(body, -0.3); g.lineWidth = 2.8;
+    g.beginPath(); g.moveTo(shBack.x, shBack.y); g.lineTo(x - flip * r * 0.62, by + r * 0.3); g.stroke();
+    g.fillStyle = skin; g.beginPath(); g.arc(x - flip * r * 0.62, by + r * 0.38, 1.3, 0, 7); g.fill();
+    // torso: hombros más anchos que la cintura, con luz de costado y contorno
+    const tw = r * 0.7, ww = r * 0.52, bot = t === 'monk' ? y + 5 : hip + 1;
+    const bw = t === 'monk' ? r * 0.75 : ww;
+    const tor = () => {
+      g.beginPath();
+      g.moveTo(x - tw, top0 + 2.5); g.quadraticCurveTo(x - tw, top0, x - tw + 2.5, top0);
+      g.lineTo(x + tw - 2.5, top0); g.quadraticCurveTo(x + tw, top0, x + tw, top0 + 2.5);
+      g.lineTo(x + bw, bot); g.lineTo(x - bw, bot); g.closePath();
+    };
+    const tg = g.createLinearGradient(x - tw, 0, x + tw, 0);
+    tg.addColorStop(0, shade(body, flip > 0 ? -0.28 : 0.12)); tg.addColorStop(0.5, body); tg.addColorStop(1, shade(body, flip > 0 ? 0.12 : -0.28));
+    g.fillStyle = tg; tor(); g.fill();
+    if (metal) { g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 0.6; g.beginPath(); for (let yy = top0 + 3; yy < bot - 1; yy += 2.2) { g.moveTo(x - tw + 1, yy); g.lineTo(x + tw - 1, yy); } g.stroke(); }
+    // tabardo con el color del jugador y cinturón
+    if (body !== col) { g.fillStyle = col; g.beginPath(); g.moveTo(x - 2.4, top0 + 1); g.lineTo(x + 2.4, top0 + 1); g.lineTo(x + 2, bot); g.lineTo(x - 2, bot); g.closePath(); g.fill(); }
+    if (t !== 'monk') { g.fillStyle = '#3a2a1a'; g.fillRect(x - ww - 0.3, hip - 2.6, ww * 2 + 0.6, 1.6); g.fillStyle = '#c9a227'; g.fillRect(x - 0.8, hip - 2.6, 1.6, 1.6); }
+    else { g.strokeStyle = '#d8c59a'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(x - r * 0.45, by + 1); g.lineTo(x + r * 0.45, by + 1); g.stroke(); }
+    g.strokeStyle = 'rgba(20,12,6,.55)'; g.lineWidth = 0.8; tor(); g.stroke();
+    // cabeza: cuello, cara con sombra y contorno
     const hx = x + flip, hy = by - r * 0.85, hr = r * 0.38;
-    g.fillStyle = '#f0c8a0'; g.beginPath(); g.arc(hx, hy, hr, 0, 7); g.fill();
+    g.fillStyle = shade(skin, -0.15); g.fillRect(hx - 1.2, hy + hr - 1, 2.4, 2.2);
+    const hg = g.createRadialGradient(hx - flip * hr * 0.3, hy - hr * 0.3, 0.5, hx, hy, hr + 0.5);
+    hg.addColorStop(0, shade(skin, 0.12)); hg.addColorStop(1, shade(skin, -0.22));
+    g.fillStyle = hg; g.beginPath(); g.arc(hx, hy, hr, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(20,12,6,.5)'; g.lineWidth = 0.7; g.stroke();
+    g.fillStyle = '#1d1410'; g.beginPath(); g.arc(hx + flip * hr * 0.45, hy - 0.3, 0.55, 0, 7); g.fill();
     switch (t) {
       case 'villager': g.fillStyle = '#c9a25a'; g.beginPath(); g.ellipse(hx, hy - 2.5, r * 0.55, 2, 0, 0, 7); g.fill(); break;
       case 'monk': g.fillStyle = '#5d4030'; g.beginPath(); g.arc(hx, hy - 1, hr + 0.5, Math.PI, 0); g.fill(); break;
@@ -1094,6 +1193,9 @@ export class Renderer {
     // arma
     g.lineCap = 'round';
     const ax = x + flip * r * 0.55, ay = by;
+    // brazo del arma: del hombro a la mano
+    g.strokeStyle = shade(body, -0.12); g.lineWidth = 2.8;
+    g.beginPath(); g.moveTo(x + flip * r * 0.5, top0 + 2); g.lineTo(ax, ay); g.stroke();
     switch (t) {
       case 'villager': {
         const swing = e.order && e.path.length === 0 && (e.order.t === 'gather' || e.order.t === 'build') ? Math.sin(time * 10 + e.id) * 0.9 : 0;
@@ -1107,9 +1209,7 @@ export class Renderer {
       case 'militia': case 'champion': case 'samurai': case 'huskarl': case 'teutonic': {
         const len = t === 'champion' ? 11 : t === 'samurai' ? 12 : t === 'teutonic' ? 13 : 9;
         const a = flip > 0 ? -0.7 + sw * 1.25 : Math.PI + 0.7 - sw * 1.25;
-        g.strokeStyle = '#e8eef3'; g.lineWidth = t === 'samurai' ? 1.8 : 2.5;
-        g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(a) * len, ay + Math.sin(a) * len); g.stroke();
-        g.strokeStyle = '#6d4c41'; g.lineWidth = 2; g.beginPath(); g.moveTo(ax + Math.cos(a + 1.57) * 3, ay + Math.sin(a + 1.57) * 3); g.lineTo(ax - Math.cos(a + 1.57) * 3, ay - Math.sin(a + 1.57) * 3); g.stroke();
+        this.sword(ax, ay, a, len, t === 'samurai' ? 1.5 : t === 'champion' || t === 'teutonic' ? 2.4 : 2, t === 'samurai');
         if (sw > 0.6) { g.strokeStyle = 'rgba(255,255,255,0.45)'; g.lineWidth = 1.5; g.beginPath(); g.arc(ax, ay, len, flip > 0 ? -0.7 : Math.PI - 0.5, flip > 0 ? 0.5 : Math.PI + 0.7); g.stroke(); }
         if (t !== 'samurai') this.shield(x - flip * r * 0.55, by + 1, col, t === 'champion' || t === 'huskarl' || t === 'teutonic' ? 5.5 : 4);
         break;
@@ -1171,7 +1271,7 @@ export class Renderer {
           g.beginPath(); g.moveTo(ax - flip * 4 + flip * th, ay + 1); g.lineTo(ax + flip * (17 + th), ay - 4 + Math.max(0, sw) * 3); g.stroke();
         } else {
           const a = flip > 0 ? -0.6 + sw * 1.2 : Math.PI + 0.6 - sw * 1.2;
-          g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(a) * 12, ay + Math.sin(a) * 12); g.stroke();
+          this.sword(ax, ay, a, 12, 2, false);
         }
         if (t !== 'scout') this.shield(x - flip * r * 0.4, by + 1, col, 4);
         break;
@@ -1181,6 +1281,9 @@ export class Renderer {
         g.fillStyle = '#ffd86b'; g.beginPath(); g.arc(ax, ay - 12, 2.5, 0, 7); g.fill();
         break;
     }
+    // mano sobre la empuñadura
+    g.fillStyle = skin; g.beginPath(); g.arc(ax, ay, 1.45, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(20,12,6,.45)'; g.lineWidth = 0.5; g.stroke();
     g.restore();
     if (e.hero) this.heroMark(e, time);
   }
@@ -1202,6 +1305,32 @@ export class Renderer {
     if (since >= 0 && since < 0.3) return 1 - since / 0.3;           // impacto y vuelta
     if (e.path.length === 0 && since < 6 && e.cooldown < 0.35) return -(1 - Math.max(0, e.cooldown) / 0.35); // levanta el arma
     return 0;
+  }
+
+  /** Espada: hoja de acero con filo y lomo, guarda, empuñadura de cuero y pomo */
+  private sword(x: number, y: number, a: number, len: number, wd: number, curved: boolean) {
+    const g = this.ctx;
+    const c = Math.cos(a), s = Math.sin(a), px = -s, py = c;
+    const gx = x + c * 2.2, gy = y + s * 2.2; // la guarda queda justo delante de la mano
+    const tipx = x + c * len, tipy = y + s * len;
+    const bend = curved ? 1.6 : 0;
+    g.fillStyle = '#d9e0e6';
+    g.beginPath();
+    g.moveTo(gx + px * wd / 2, gy + py * wd / 2);
+    g.quadraticCurveTo((gx + tipx) / 2 + px * (wd / 2 + bend), (gy + tipy) / 2 + py * (wd / 2 + bend), tipx, tipy);
+    g.quadraticCurveTo((gx + tipx) / 2 - px * (wd / 2 - bend), (gy + tipy) / 2 - py * (wd / 2 - bend), gx - px * wd / 2, gy - py * wd / 2);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(40,48,56,.75)'; g.lineWidth = 0.55; g.stroke();
+    // canal central (vaceo) más oscuro
+    g.strokeStyle = 'rgba(110,122,134,.85)'; g.lineWidth = 0.6;
+    g.beginPath(); g.moveTo(gx + c * 1, gy + s * 1); g.lineTo(x + c * len * 0.72, y + s * len * 0.72); g.stroke();
+    // guarda
+    g.strokeStyle = '#8a6a2a'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(gx + px * (wd + 1.6), gy + py * (wd + 1.6)); g.lineTo(gx - px * (wd + 1.6), gy - py * (wd + 1.6)); g.stroke();
+    // empuñadura y pomo
+    g.strokeStyle = '#4a2f1c'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(gx, gy); g.lineTo(x - c * 2.4, y - s * 2.4); g.stroke();
+    g.fillStyle = '#b8902e'; g.beginPath(); g.arc(x - c * 3, y - s * 3, 1.1, 0, 7); g.fill();
   }
 
   private camelMount(x: number, y: number, flip: number, bob: number, col: string) {

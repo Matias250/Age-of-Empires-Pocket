@@ -307,7 +307,7 @@ export interface BuildingDef {
 
 export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   towncenter: {
-    name: 'Centro Urbano', size: 3, hp: 1400, cost: { wood: 275, stone: 100 }, buildTime: 60, age: 1, pop: 10,
+    name: 'Centro Urbano', size: 3, hp: 1400, cost: { wood: 275, stone: 100 }, buildTime: 60, age: 3, pop: 10,
     trains: ['villager'], drop: ['food', 'wood', 'gold', 'stone'], sight: 8,
     attack: { atk: 5, range: 6 * TILE, cooldown: 2 }, desc: 'Corazón de tu aldea. Si cae, perdés.',
   },
@@ -319,7 +319,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   mill: { name: 'Molino', size: 2, hp: 500, cost: { wood: 100 }, buildTime: 14, age: 1, drop: ['food'], sight: 4, research: ['plow'], desc: 'Depósito de comida.' },
   lumbercamp: { name: 'Aserradero', size: 2, hp: 500, cost: { wood: 100 }, buildTime: 14, age: 1, drop: ['wood'], sight: 4, research: ['axe'], desc: 'Depósito de madera.' },
   miningcamp: { name: 'Campamento minero', size: 2, hp: 500, cost: { wood: 100 }, buildTime: 14, age: 1, drop: ['gold', 'stone'], sight: 4, research: ['mining'], desc: 'Depósito de oro y piedra.' },
-  farm: { name: 'Granja', size: 2, hp: 200, cost: { wood: 60 }, buildTime: 8, age: 1, sight: 1, food: 600, desc: 'Comida casi inagotable.' },
+  farm: { name: 'Granja', size: 2, hp: 200, cost: { wood: 60 }, buildTime: 8, age: 1, sight: 1, food: 600, desc: 'Comida casi inagotable. Necesita un molino.' },
   tower: {
     name: 'Torre de vigía', size: 1, hp: 700, cost: { wood: 50, stone: 125 }, buildTime: 28, age: 2, sight: 8,
     attack: { atk: 6, range: 7 * TILE, cooldown: 2 }, desc: 'Defensa que dispara flechas.',

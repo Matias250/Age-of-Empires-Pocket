@@ -265,9 +265,12 @@ export class World implements Grid {
     this.solid[i] = t === 1 || (o && o.type !== 'farm') ? 1 : 0;
     this.nav.solid[i] = t === 0 || o ? 1 : 0;
     // las puertas se abren solo para su equipo
-    const gateTeam = o && o.type === 'gate' && o.owner >= 0 && !o.locked ? this.players[o.owner]?.team : undefined;
+    const gateTeam = o && o.type === 'gate' && o.owner >= 0 && !o.locked && this.gateDoor(o) === i ? this.players[o.owner]?.team : undefined;
     for (const [team, g] of this.teamGrids) g.solid[i] = gateTeam !== undefined && gateTeam === team ? 0 : this.solid[i];
   }
+
+  /** Casilla del medio del portón: el arco por donde se pasa (las torres de los costados no se atraviesan) */
+  gateDoor(e: Entity): number { return (e.ty + (e.fh > 1 ? 1 : 0)) * this.w + e.tx + (e.fw > 1 ? 1 : 0); }
 
   private teamGrids = new Map<number, Grid>();
   /** Recursos que un equipo no puede alcanzar (se olvida cada minuto) */
@@ -279,7 +282,7 @@ export class World implements Grid {
       g = { w: this.w, h: this.h, solid: this.solid.slice() };
       for (const e of this.entities.values())
         if (e.type === 'gate' && e.owner >= 0 && !e.locked && this.players[e.owner].team === team)
-          for (let y = e.ty; y < e.ty + e.fh; y++) for (let x = e.tx; x < e.tx + e.fw; x++) g.solid[y * this.w + x] = 0;
+          g.solid[this.gateDoor(e)] = 0;
       this.teamGrids.set(team, g);
     }
     return g;
@@ -469,6 +472,7 @@ export class World implements Grid {
     const pl = this.players[p];
     const [fw, fh] = this.footprint(type, vertical);
     if (pl.age < d.age) return `Requiere la ${AGE_NAME[d.age]}`;
+    if (type === 'farm' && !this.buildingsOf(p, 'mill', true).length) return 'Primero construí un molino';
     if (d.onWater) { if (!this.dockSpotOk(tx, ty)) return 'El muelle va en el agua, pegado a la costa'; }
     else if (d.onWall) {
       for (let y = ty; y < ty + fh; y++)
@@ -513,6 +517,7 @@ export class World implements Grid {
     this.capCache = new Array(n).fill(0);
     this.buckets.clear();
     this.allBuildings = [];
+    const tcSeen: number[] = [];
     for (const e of this.entities.values()) {
       if (e.owner < 0) continue;
       if (e.cat === 'unit') {
@@ -525,6 +530,7 @@ export class World implements Grid {
         this.allBuildings.push(e);
         if (e.progress >= 1) {
           let pop = BUILDINGS[e.type as BuildingType].pop ?? 0;
+          if (e.type === 'towncenter' && (tcSeen[e.owner] = (tcSeen[e.owner] ?? 0) + 1) > 1) pop = 25; // centros urbanos nuevos: +25
           if (e.type === 'house') pop += this.mods(e.owner).housePop ?? 0;
           this.capCache[e.owner] += pop;
           if (e.queue.length && e.trainT > 0) this.popCache[e.owner]++;
@@ -1635,7 +1641,15 @@ export class World implements Grid {
   private tryMove(u: Entity, nx: number, ny: number) {
     const naval = this.gridOf(u);
     const inSolid = this.tileSolid(Math.floor(u.x / TILE), Math.floor(u.y / TILE), naval);
-    const ok = (x: number, y: number) => inSolid || !this.tileSolid(Math.floor(x / TILE), Math.floor(y / TILE), naval);
+    const cx = Math.floor(u.x / TILE), cy = Math.floor(u.y / TILE);
+    const ok = (x: number, y: number) => {
+      if (inSolid) return true;
+      const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+      if (this.tileSolid(tx, ty, naval)) return false;
+      // no colarse en diagonal entre dos casillas que se tocan por la esquina (murallas en escalera)
+      if (tx !== cx && ty !== cy && (this.tileSolid(tx, cy, naval) || this.tileSolid(cx, ty, naval))) return false;
+      return true;
+    };
     if (ok(nx, ny)) { u.x = nx; u.y = ny; return; }
     if (ok(nx, u.y)) { u.x = nx; return; }
     if (ok(u.x, ny)) { u.y = ny; }

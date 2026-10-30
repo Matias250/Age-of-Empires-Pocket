@@ -3,7 +3,7 @@ import { AGE_NAME, BUILDINGS, BuildingType, isLandArmy, NODES, NodeType, TICK_RA
 import { createMatch, Match, MatchConfig } from '../sim/match.js';
 import { createScenario, findScenario, scaleScenario } from '../sim/campaigns.js';
 import { ScenarioRunner } from './scenario.js';
-import { Entity, World } from '../sim/world.js';
+import { Entity, Order, World } from '../sim/world.js';
 import { Camera, Renderer } from './render.js';
 import { Hud } from './hud.js';
 import { Tutorial } from './tutorial.js';
@@ -154,15 +154,35 @@ export class Game {
 
   private drawOverlay(g: CanvasRenderingContext2D) {
     const w = this.world;
-    // punto de reunión
-    if (this.sel.length === 1) {
-      const b = w.get(this.sel[0]);
-      if (b && b.cat === 'building' && b.owner === this.me && b.rally) {
-        g.strokeStyle = 'rgba(255,255,255,0.5)'; g.setLineDash([4, 4]); g.lineWidth = 1.5;
-        g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.rally.x, b.rally.y); g.stroke(); g.setLineDash([]);
-        g.strokeStyle = '#fff'; g.beginPath(); g.moveTo(b.rally.x, b.rally.y); g.lineTo(b.rally.x, b.rally.y - 18); g.stroke();
-        g.fillStyle = w.players[this.me].color; g.fillRect(b.rally.x, b.rally.y - 18, 10, 7);
-      }
+    // punto de reunión de cada edificio propio seleccionado
+    const flag = (x: number, y: number, col: string, label?: string) => {
+      g.strokeStyle = '#3a2a1a'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - 20); g.stroke();
+      g.fillStyle = col; g.beginPath(); g.moveTo(x + 1, y - 20); g.lineTo(x + 13, y - 16.5); g.lineTo(x + 1, y - 13); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 1; g.stroke();
+      if (label) { g.fillStyle = '#fff'; g.font = 'bold 8px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(label, x + 5.5, y - 16.4); }
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(x, y, 4, 1.8, 0, 0, 7); g.fill();
+    };
+    const myCol = w.players[this.me].color;
+    for (const id of this.sel) {
+      const b = w.get(id);
+      if (!b || b.cat !== 'building' || b.owner !== this.me || !b.rally) continue;
+      g.strokeStyle = 'rgba(255,255,255,0.55)'; g.setLineDash([4, 4]); g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.rally.x, b.rally.y); g.stroke(); g.setLineDash([]);
+      flag(b.rally.x, b.rally.y, myCol);
+    }
+    // órdenes en cola: línea de puntos por el recorrido y banderitas numeradas en cada pendiente
+    const pointOf = (o: Order): { x: number; y: number } | null => {
+      if ('x' in o && 'y' in o) return { x: o.x, y: o.y };
+      if ('target' in o) { const t = w.get(o.target); return t ? { x: t.x, y: t.y } : null; }
+      if (o.t === 'relic') { const r = w.relics.find((x) => x.id === o.relic); return r ? { x: r.x, y: r.y } : null; }
+      return null;
+    };
+    for (const u of this.selUnits()) {
+      if (u.owner !== this.me || !u.cmdQueue.length) continue;
+      const pts = [u.order, ...u.cmdQueue].map((o) => (o ? pointOf(o) : null)).filter((q): q is { x: number; y: number } => !!q);
+      g.strokeStyle = 'rgba(255,240,200,0.75)'; g.setLineDash([3, 4]); g.lineWidth = 1.6;
+      g.beginPath(); g.moveTo(u.x, u.y); for (const q of pts) g.lineTo(q.x, q.y); g.stroke(); g.setLineDash([]);
+      pts.forEach((q, i) => flag(q.x, q.y, i === 0 ? '#7CFC8A' : myCol, String(i + 1)));
     }
     // fantasma de construcción
     if (this.placing && this.ghost) {

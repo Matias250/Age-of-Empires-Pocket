@@ -20,7 +20,7 @@ test('las puertas dejan pasar solo al propio equipo', () => {
   const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 3, map: 'arena', biome: 'templado' });
   const w = m.world;
   const gate = w.buildingsOf(0, 'gate')[0];
-  const i = gate.ty * w.w + gate.tx;
+  const i = w.gateDoor(gate);
   assert.equal(w.teamGrid(w.players[0].team).solid[i], 0, 'abierta para su equipo');
   assert.equal(w.teamGrid(w.players[1].team).solid[i], 1, 'cerrada para el enemigo');
 });
@@ -57,7 +57,7 @@ test('el portón bloqueado no deja pasar ni a su equipo', () => {
   const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 3, map: 'arena', biome: 'templado' });
   const w = m.world;
   const gate = w.buildingsOf(0, 'gate')[0];
-  const i = gate.ty * w.w + gate.tx;
+  const i = w.gateDoor(gate);
   w.issue({ t: 'gateLock', p: 0, bid: gate.id }); w.step();
   assert.equal(w.teamGrid(w.players[0].team).solid[i], 1);
   w.issue({ t: 'gateLock', p: 0, bid: gate.id }); w.step();

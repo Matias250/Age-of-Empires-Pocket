@@ -416,4 +416,10 @@ export const UI: Record<string, [string, string]> = {
   "Barco de arrastre": ["Trawler", "Barco de arrasto"],
   "Barco de fuego griego": ["Greek fire ship", "Navio de fogo grego"],
   "Coca mercante": ["Merchant cog", "Coca mercante"],
+  "Primero construí un molino": ["Build a mill first", "Construa um moinho primeiro"],
+  "🔒 Molino": ["🔒 Mill", "🔒 Moinho"],
+  "Comida casi inagotable. Necesita un molino.": ["Almost endless food. Needs a mill.", "Comida quase inesgotável. Precisa de um moinho."],
+  "Ver mapa": ["View map", "Ver mapa"],
+  "Estadísticas": ["Statistics", "Estatísticas"],
+  "Volver a campañas": ["Back to campaigns", "Voltar às campanhas"],
 };

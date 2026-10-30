@@ -561,3 +561,7 @@ table.players.st td { padding: 4px 5px; text-align: center; font-size: 13px; }
 table.players.st td:first-child { text-align: left; white-space: nowrap; }
 table.players.st td.top { color: #ffd23f; font-weight: 800; }
 table.players.st td.top::before { content: '👑'; font-size: 9px; margin-right: 1px; }
+table.players.st tr.winner td { background: rgba(201,162,39,.22); }
+table.players.st tr.winner td:first-child { box-shadow: inset 3px 0 0 #c9a227; }
+table.players.st tr.loser td { opacity: .78; }
+svg.ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; display: inline-block; }

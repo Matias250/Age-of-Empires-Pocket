@@ -116,11 +116,15 @@ export function findPath(
 export function lineClear(grid: Grid, tile: number, x0: number, y0: number, x1: number, y1: number): boolean {
   const d = Math.hypot(x1 - x0, y1 - y0);
   const steps = Math.ceil(d / 8);
-  for (let i = 1; i < steps; i++) {
+  let px = Math.floor(x0 / tile), py = Math.floor(y0 / tile);
+  for (let i = 1; i <= steps; i++) {
     const t = i / steps;
     const tx = Math.floor((x0 + (x1 - x0) * t) / tile), ty = Math.floor((y0 + (y1 - y0) * t) / tile);
     if (tx < 0 || ty < 0 || tx >= grid.w || ty >= grid.h) return false;
     if (grid.solid[ty * grid.w + tx]) return false;
+    // cruce en diagonal por una esquina: las dos casillas de al lado tienen que estar libres
+    if (tx !== px && ty !== py && (grid.solid[py * grid.w + tx] || grid.solid[ty * grid.w + px])) return false;
+    px = tx; py = ty;
   }
   return true;
 }

@@ -173,7 +173,11 @@ export class AI {
           count[r]++;
           break;
         }
-        if (r === 'food' && w.canAfford(this.p, w.buildingCost(this.p, 'farm'))) {
+        if (r === 'food' && !w.buildingsOf(this.p, 'mill').length) { // las granjas necesitan un molino
+          if (w.canAfford(this.p, w.buildingCost(this.p, 'mill')) && this.construct('mill', tc, 3, 9, v)) { count.food++; break; }
+          continue;
+        }
+        if (r === 'food' && w.buildingsOf(this.p, 'mill', true).length && w.canAfford(this.p, w.buildingCost(this.p, 'farm'))) {
           if (this.construct('farm', tc, 0, 6, v)) { count.food++; break; }
         }
       }

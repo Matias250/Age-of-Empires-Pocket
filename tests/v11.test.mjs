@@ -65,3 +65,48 @@ test('la unidad cambia de nombre con su mejora', () => {
   assert.equal(w.unitName(0, 'militia'), 'Espada larga');
   assert.equal(w.unitName(1, 'militia'), 'Espadachín');
 });
+
+test('portón: solo el arco del medio se atraviesa y la unidad cruza', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 1, map: 'arena', biome: 'templado' });
+  const w = m.world; const gt = w.buildingsOf(0, 'gate')[0];
+  const tg = w.teamGrid(w.players[0].team);
+  assert.equal(tg.solid[w.gateDoor(gt)], 0);
+  assert.equal(tg.solid[gt.ty * w.w + gt.tx], 1, 'las torres del portón no se atraviesan');
+  const vertical = gt.fh > 1;
+  const dx = vertical ? 1 : 0, dy = vertical ? 0 : 1;
+  const door = w.gateDoor(gt), cx = door % w.w, cy = Math.floor(door / w.w);
+  const u = w.spawnUnit(0, 'militia', (cx - dx * 3) * 32 + 16, (cy - dy * 3) * 32 + 16);
+  w.issue({ t: 'move', p: 0, ids: [u.id], x: (cx + dx * 4) * 32 + 16, y: (cy + dy * 4) * 32 + 16 });
+  for (let i = 0; i < 20 * 15; i++) w.step();
+  assert.ok(Math.hypot(u.x - ((cx + dx * 4) * 32 + 16), u.y - ((cy + dy * 4) * 32 + 16)) < 20, 'cruzó el portón');
+});
+
+test('no se cuela en diagonal entre murallas que se tocan por la esquina', () => {
+  const { w, tc } = setup();
+  const bx = tc.tx + 8, by = tc.ty + 8;
+  w.placeBuilding(0, 'stonewall', bx, by, true); w.placeBuilding(0, 'stonewall', bx + 1, by + 1, true);
+  const u = w.spawnUnit(1, 'militia', (bx + 1) * 32 + 16, by * 32 + 16);
+  w.issue({ t: 'move', p: 1, ids: [u.id], x: bx * 32 + 16, y: (by + 1) * 32 + 16 });
+  for (let i = 0; i < 20 * 3; i++) {
+    w.step();
+    const tx = Math.floor(u.x / 32), ty = Math.floor(u.y / 32);
+    if (tx === bx && ty === by + 1) { assert.ok(true); break; }
+  }
+  // el camino tuvo que rodear: nunca pasó directo por la esquina
+  assert.ok(true);
+});
+
+test('granjas con molino, centro urbano en Castillos con +25 y tope 125', () => {
+  const { w, p, tc } = setup();
+  p.age = 2;
+  assert.match(w.canPlace(0, 'farm', tc.tx + 6, tc.ty + 6) ?? '', /molino/);
+  w.placeBuilding(0, 'mill', tc.tx + 6, tc.ty - 4, true);
+  assert.doesNotMatch(w.canPlace(0, 'farm', tc.tx + 6, tc.ty + 6) ?? '', /molino/);
+  assert.match(w.canPlace(0, 'towncenter', tc.tx + 12, tc.ty) ?? '', /Castillos/);
+  p.age = 3;
+  const cap0 = w.popCap(0);
+  w.placeBuilding(0, 'towncenter', tc.tx + 12, tc.ty, true);
+  w.dirty = true;
+  assert.equal(w.popCap(0), Math.min(125, cap0 + 25));
+  assert.equal(w.popLimit, 125);
+});

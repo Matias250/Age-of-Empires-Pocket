@@ -25,7 +25,7 @@ jobs:
       - name: Preparar sitio
         run: |
           mkdir -p site
-          cp -r index.html styles.css icon.svg manifest.webmanifest sw.js dist site/
+          cp -r index.html styles.css icon.svg *.png manifest.webmanifest sw.js dist site/
           cp build/imperios-rapidos.html site/un-archivo.html
       - uses: actions/upload-pages-artifact@v3
         with:

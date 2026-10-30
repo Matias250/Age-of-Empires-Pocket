@@ -410,7 +410,6 @@ async function tryFullscreen() {
   try {
     if (matchMedia('(pointer:coarse)').matches && !document.fullscreenElement) {
       await document.documentElement.requestFullscreen?.();
-      await (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('landscape');
     }
   } catch { /* algunos navegadores no lo permiten */ }
 }

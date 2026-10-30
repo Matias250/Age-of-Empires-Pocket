@@ -409,4 +409,11 @@ export const UI: Record<string, [string, string]> = {
   "Guerrero águila de élite": ["Elite eagle warrior", "Guerreiro águia de elite"],
   "Guerrero águila: +20% de vida, +1 de ataque y +1/+1 de armadura.": ["Eagle warrior: +20% HP, +1 attack and +1/+1 armor.", "Guerreiro águia: +20% de vida, +1 de ataque e +1/+1 de armadura."],
   "Infantería barata y veloz de los pueblos mesoamericanos: hace de explorador y caza arqueros, monjes y asedio.": ["Cheap, fast Mesoamerican infantry: works as a scout and hunts archers, monks and siege.", "Infantaria barata e veloz dos povos mesoamericanos: serve de batedor e caça arqueiros, monges e cerco."],
+  "Aldeano curtido": ["Hardened villager", "Aldeão calejado"],
+  "Cañonero veterano": ["Veteran hand cannoneer", "Canhoneiro veterano"],
+  "Fundíbulo de contrapeso": ["Counterweight trebuchet", "Trabuco de contrapeso"],
+  "Monje herbolario": ["Herbalist monk", "Monge herbalista"],
+  "Barco de arrastre": ["Trawler", "Barco de arrasto"],
+  "Barco de fuego griego": ["Greek fire ship", "Navio de fogo grego"],
+  "Coca mercante": ["Merchant cog", "Coca mercante"],
 };

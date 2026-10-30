@@ -60,7 +60,7 @@ function localizeData() {
   const fix = <T extends Record<string, unknown>>(o: T, keys: string[]) => { for (const k of keys) if (typeof o[k] === 'string') (o as Record<string, unknown>)[k] = tr(o[k] as string); };
   for (const d of Object.values(UNITS)) fix(d as never, ['name', 'desc']);
   for (const d of Object.values(BUILDINGS)) fix(d as never, ['name', 'desc']);
-  for (const d of Object.values(TECHS)) fix(d as never, ['name', 'desc']);
+  for (const d of Object.values(TECHS)) fix(d as never, ['name', 'desc', 'unitName']);
   for (const d of Object.values(NODES)) fix(d as never, ['name']);
   for (const c of Object.values(CIVS)) { fix(c as never, ['name', 'region']); c.bonuses = c.bonuses.map(tr); }
   for (const rec of [AGE_NAME, AGE_SHORT, DIFF_NAME, STANCE_NAME, BIOMES] as Record<string, string>[]) for (const k of Object.keys(rec)) rec[k] = tr(rec[k]);

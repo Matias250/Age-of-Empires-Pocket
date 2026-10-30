@@ -50,19 +50,19 @@ const lock = (age: Age) => `🔒 ${AGE_SHORT[age]}`;
 function twoRows(top: string[], bottom: string[]): string {
   const n = Math.max(top.length, bottom.length);
   let out = '';
-  for (let i = 0; i < n; i++) out += (top[i] ?? '<span class="act-gap"></span>') + (bottom[i] ?? '<span class="act-gap"></span>');
+  for (let i = 0; i < n; i++) out += (top[i] ?? '<span class="act-gap"></span>') + (bottom[i] || '<span class="act-gap"></span>');
   return out;
 }
 
 /** Ficha de una unidad para el "mantener apretado" */
-export function unitTip(u: UnitType): string {
+export function unitTip(u: UnitType, shown?: string): string {
   const d = UNITS[u];
   const name = (k: string) => (k === 'building' ? CLS_NAME.building : k === 'tower' ? BUILDINGS.tower.name : UNITS[k as UnitType].name);
   const c = COUNTERS[u];
   const strong = c.strong.map(name);
   const weak = c.weak.map(name);
   const kind = d.atk === 0 ? '' : d.range > TILE ? `a distancia (alcance ${Math.round(d.range / TILE)})` : 'cuerpo a cuerpo';
-  return `<b>${UNIT_ICON[u]} ${d.name}</b><p>${d.desc}</p>
+  return `<b>${UNIT_ICON[u]} ${shown ?? d.name}</b><p>${d.desc}</p>
     <div class="stats"><span>❤️ ${d.hp} vida</span>${d.atk ? `<span>⚔️ ${d.atk} ataque ${kind}</span>` : ''}<span>🛡️ ${d.armorMelee} / ${d.armorPierce} armadura</span><span>🏃 ${d.speed > 75 ? 'rápida' : d.speed > 45 ? 'normal' : 'lenta'}</span></div>
     ${strong.length ? `<p class="good">💪 Fuerte contra: ${strong.join(', ')}</p>` : ''}
     ${weak.length ? `<p class="bad">⚠️ Débil contra: ${[...new Set(weak)].slice(0, 4).join(', ')}</p>` : ''}
@@ -154,7 +154,7 @@ export class Hud {
   private tipFor(a: string): string | null {
     const g = this.g, w = g.world;
     const [cmd, arg] = a.split(':');
-    if (cmd === 'train') return unitTip(arg as UnitType);
+    if (cmd === 'train') return unitTip(arg as UnitType, this.g.world.unitName(this.g.me, arg as UnitType));
     if (cmd === 'research') {
       const t = TECHS[arg as TechType];
       return `<b>${t.icon} ${t.name}</b><p>${t.desc}</p><p class="dim">Costo ${costHtml(w.techCost(g.me, arg as TechType))} · ${t.time} s · ${AGE_NAME[t.age]}</p>`;
@@ -579,7 +579,7 @@ export class Hud {
       if (b.type === 'gate') html += `<div class="sub">${b.locked ? '🔒 Bloqueado' : '🔓 Abierto para tu equipo'}</div>`;
       if (b.progress < 1) html += `<div class="prow"><span>🔨 En construcción</span>${bar('data-progress')}</div>`;
       else if (b.ageT >= 0 && pl.age < 4) html += `<div class="prow"><span>👑 ${AGE_NAME[(pl.age + 1) as Age]}</span>${bar('data-progress')}</div>`;
-      else if (allQ.length) html += `<div class="prow"><span>${UNIT_ICON[(b.queue[0] ?? allQ[0])]} ${UNITS[b.queue[0] ?? allQ[0]].name}${allQ.length > 1 ? ` <em>+${allQ.length - 1}</em>` : ''}</span>${bar('data-progress')}</div>`;
+      else if (allQ.length) html += `<div class="prow"><span>${UNIT_ICON[(b.queue[0] ?? allQ[0])]} ${w.unitName(b.owner, b.queue[0] ?? allQ[0])}${allQ.length > 1 ? ` <em>+${allQ.length - 1}</em>` : ''}</span>${bar('data-progress')}</div>`;
       if (b.tech) html += `<div class="prow"><span>📜 ${TECHS[b.tech].name}${b.techQueue.length ? ` <em>+${b.techQueue.length}</em>` : ''}</span>${bar('data-tprogress', true)}</div>`;
       if (mine && allQ.length && b.trainT === 0 && w.popOf(g.me) >= w.popCap(g.me)) html += '<div class="sub warn">⚠️ Sin población: construí casas</div>';
       if (!b.tech && b.progress >= 1 && b.ageT < 0 && !b.queue.length) html += `<div class="sub dim">${d.desc}</div>`;
@@ -594,9 +594,9 @@ export class Hud {
           const cost = w.unitCost(g.me, u);
           const n = allQ.filter((q) => q === u).length;
           top.push(`<button class="act ${ud.unique ? 'uniq' : ''}" data-a="train:${u}" ${locked || needs || !w.canAfford(g.me, cost) ? 'data-dis' : ''}>
-            <i>${UNIT_ICON[u]}</i><span>${ud.name}</span><em>${locked ? lock(ud.age) : needs ? `🔒 ${TECHS[ud.requires!].name}` : costHtml(cost, pl.res)}</em>${n ? `<b class="badge">${n}</b>` : ''}</button>`);
+            <i>${UNIT_ICON[u]}</i><span>${w.unitName(g.me, u)}</span><em>${locked ? lock(ud.age) : needs ? `🔒 ${TECHS[ud.requires!].name}` : costHtml(cost, pl.res)}</em>${n ? `<b class="badge">${n}</b>` : ''}</button>`);
           const t = `up_${u}` as TechType, td = TECHS[t];
-          if (pl.techs.has(t)) { bottom.push(`<button class="act up done" data-a="research:${t}" data-dis><i>${UNIT_ICON[u]}<sup>✔</sup></i><span>${td.name}</span><em>✔</em></button>`); continue; }
+          if (pl.techs.has(t)) { bottom.push(''); continue; } // ya investigada: no ocupa lugar
           const queued = b.tech === t || b.techQueue.includes(t);
           const elsewhere = !queued && w.isResearching(g.me, t);
           const tl = pl.age < td.age;
@@ -604,7 +604,7 @@ export class Hud {
           bottom.push(`<button class="act up ${queued ? 'on' : ''}" data-a="research:${t}" ${!tl && !queued && !elsewhere && w.canAfford(g.me, tc2) ? '' : 'data-dis'}>
             <i>${UNIT_ICON[u]}<sup>⬆️</sup></i><span>${td.name}</span><em>${tl ? lock(td.age) : b.tech === t ? '⏳ investigando' : queued || elsewhere ? '⏳ en cola' : costHtml(tc2, pl.res)}</em></button>`);
         }
-        html += twoRows(top, bottom);
+        html += bottom.some((x) => x) ? twoRows(top, bottom) : top.join('');
         if (b.type === 'towncenter' && pl.age < 4 && !w.isResearchingAge(g.me)) {
           const next = (pl.age + 1) as 2 | 3 | 4;
           const cost = w.ageCost(g.me, next);
@@ -644,7 +644,7 @@ export class Hud {
       const relicTxt = u.carryRelic && u.order?.t !== 'relic' ? ' · ✨ lleva una reliquia (construí un monasterio)' : '';
       const cargoTxt = u.type === 'ram' && mine ? `<span> · 🪖 ${u.cargo?.length ?? 0}/${RAM_CAPACITY} adentro</span>${u.cargo?.length ? `<span> · +${u.cargo.length * 10}% de daño</span>` : '<span> · Tocalo con infantería para meterla</span>'}` : '';
       const range = d.range > TILE ? ` · 🎯 ${Math.round(w.rangeOf(u) / TILE)}` : '';
-      info = `<div class="title">${UNIT_ICON[u.type as UnitType]} ${u.hero ? `👑 ${u.hero} <small>(${d.name})</small>` : d.name}${ownerTag}</div>
+      info = `<div class="title">${UNIT_ICON[u.type as UnitType]} ${u.hero ? `👑 ${u.hero} <small>(${w.unitName(u.owner, u.type as UnitType)})</small>` : w.unitName(u.owner, u.type as UnitType)}${ownerTag}</div>
         <div class="sub">❤️ <span data-hp>${Math.ceil(u.hp)}/${u.maxHp}</span>${d.atk ? ` · ⚔️ ${w.attackOf(u)}` : ''} · 🛡️ ${d.armorMelee}/${d.armorPierce}${range}</div>
         <div class="sub dim">${mine ? doing + (u.carry ? ` · lleva ${u.carry} ${RES_ICON[u.carryRes!]}` : '') + (u.cmdQueue.length ? ` · ${u.cmdQueue.length} en cola` : '') + relicTxt + cargoTxt : d.desc}</div>`;
     } else {

@@ -344,7 +344,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   stonewall: { name: 'Muralla de piedra', size: 1, hp: 1200, cost: { stone: 6 }, buildTime: 7, age: 2, sight: 1, line: true, desc: 'Muro de piedra muy resistente.' },
 };
 
-export interface TechDef { name: string; icon: string; cost: Partial<ResBag>; time: number; age: Age; desc: string; unit?: UnitType }
+export interface TechDef { name: string; icon: string; cost: Partial<ResBag>; time: number; age: Age; desc: string; unit?: UnitType; /** nombre de la unidad ya mejorada */ unitName?: string }
 export const TECHS = {
   forge: { name: 'Forja', icon: '🔥', cost: { food: 150, gold: 50 }, time: 25, age: 2, desc: '+1 de ataque cuerpo a cuerpo.' },
   mail: { name: 'Cota de malla', icon: '🦺', cost: { food: 150, gold: 75 }, time: 30, age: 2, desc: 'Infantería +1/+1 de armadura.' },
@@ -441,6 +441,14 @@ const UP_NAME: Partial<Record<UnitType, string>> = {
   trebuchet: 'Contrapeso', monk: 'Herbolaria', fishship: 'Redes de arrastre', galleon: 'Galeón de guerra', fireship: 'Fuego griego',
   cannongalleon: 'Galeón cañonero de élite', tradecart: 'Caravana', tradecog: 'Rutas marítimas',
 };
+/** Cómo se llama la unidad después de su mejora de línea */
+const UP_UNIT_NAME: Partial<Record<UnitType, string>> = {
+  villager: 'Aldeano curtido', militia: 'Espada larga', spearman: 'Piquero', champion: 'Mandoble', archer: 'Ballestero',
+  skirmisher: 'Escaramuzador de élite', cavarcher: 'Arquero a caballo pesado', handcannon: 'Cañonero veterano', scout: 'Caballería ligera',
+  knight: 'Paladín', camel: 'Camello pesado', ram: 'Ariete blindado', mangonel: 'Onagro', bombard: 'Cañón reforzado',
+  trebuchet: 'Fundíbulo de contrapeso', monk: 'Monje herbolario', fishship: 'Barco de arrastre', galleon: 'Galeón de guerra',
+  fireship: 'Barco de fuego griego', cannongalleon: 'Galeón cañonero de élite', tradecart: 'Caravana', tradecog: 'Coca mercante',
+};
 for (const u of Object.keys(UNITS) as UnitType[]) {
   const d = UNITS[u];
   const age = (d.unique ? 4 : Math.min(4, Math.max(2, d.age + 1))) as Age;
@@ -451,7 +459,7 @@ for (const u of Object.keys(UNITS) as UnitType[]) {
     : d.gathers ? 'Barcos pesqueros: +20% de vida y pescan 25% más rápido.'
     : d.trade ? `${d.name}: +20% de vida y 20% más rápida.`
     : `${d.name}: +20% de vida, +${Math.max(1, Math.round(d.atk * (d.cls === 'siege' ? 0.2 : 0.15)))} de ataque y +1/+1 de armadura.`;
-  (TECHS as Record<string, TechDef>)[`up_${u}`] = { name, icon: '⬆️', cost, time: 20 + 10 * age, age, desc, unit: u };
+  (TECHS as Record<string, TechDef>)[`up_${u}`] = { name, icon: '⬆️', cost, time: 20 + 10 * age, age, desc, unit: u, unitName: UP_UNIT_NAME[u] ?? `${d.name} de élite` };
 }
 /** Bonificación de ataque de la mejora de línea */
 export const upAtk = (u: UnitType) => (UNITS[u].atk ? Math.max(1, Math.round(UNITS[u].atk * (UNITS[u].cls === 'siege' ? 0.2 : 0.15))) : 0);

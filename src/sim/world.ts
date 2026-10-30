@@ -401,6 +401,11 @@ export class World implements Grid {
     return k;
   }
 
+  /** Nombre de la unidad para ese jugador: cambia cuando investiga su mejora (Espadachín → Espada larga) */
+  unitName(p: number, u: UnitType): string {
+    const t = `up_${u}` as TechType;
+    return p >= 0 && this.players[p]?.techs.has(t) ? TECHS[t].unitName ?? UNITS[u].name : UNITS[u].name;
+  }
   isNaval(u: Entity): boolean { return u.cat === 'unit' && !!UNITS[u.type as UnitType].naval; }
   speedOf(u: Entity): number {
     const d = UNITS[u.type as UnitType];

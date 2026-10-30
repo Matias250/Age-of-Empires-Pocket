@@ -406,16 +406,7 @@ function showHowTo() {
 
 function start(cfg: MatchConfig) {
   menu.hidden = true;
-  tryFullscreen();
   game = new Game(canvas, cfg, () => { game = null; renderMenu(); });
-}
-
-async function tryFullscreen() {
-  try {
-    if (matchMedia('(pointer:coarse)').matches && !document.fullscreenElement) {
-      await document.documentElement.requestFullscreen?.();
-    }
-  } catch { /* algunos navegadores no lo permiten */ }
 }
 
 // Botón "atrás" del celular: en vez de cerrar la app, vuelve a la pantalla anterior.

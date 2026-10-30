@@ -57,3 +57,11 @@ test('guerrero águila solo para aztecas y mayas; telar y carretilla ya no está
   assert.ok(!f.w.trainsOf(0, 'barracks').includes('eagle'));
   assert.ok(!f.w.trainsOf(0, 'towncenter').length || true);
 });
+
+test('la unidad cambia de nombre con su mejora', () => {
+  const { w } = setup();
+  assert.equal(w.unitName(0, 'militia'), 'Espadachín');
+  w.grantTech(0, 'up_militia');
+  assert.equal(w.unitName(0, 'militia'), 'Espada larga');
+  assert.equal(w.unitName(1, 'militia'), 'Espadachín');
+});

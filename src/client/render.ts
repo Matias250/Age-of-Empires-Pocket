@@ -1200,9 +1200,11 @@ export class Renderer {
       case 'villager': {
         const swing = e.order && e.path.length === 0 && (e.order.t === 'gather' || e.order.t === 'build') ? Math.sin(time * 10 + e.id) * 0.9 : 0;
         const a = (flip > 0 ? -0.9 : Math.PI + 0.9) + swing * flip;
-        g.strokeStyle = '#6d4c41'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(a) * 9, ay + Math.sin(a) * 9); g.stroke();
-        g.fillStyle = '#9e9e9e'; g.beginPath(); g.arc(ax + Math.cos(a) * 9, ay + Math.sin(a) * 9, 2, 0, 7); g.fill();
+        // herramienta según la tarea: oz (comida), pico (oro y piedra), hacha (madera), martillo (construir)
+        const o = e.order;
+        const res = o?.t === 'gather' ? o.res : !o ? e.carryRes : undefined;
+        const tool = o?.t === 'build' ? 'hammer' : res === 'wood' ? 'axe' : res === 'gold' || res === 'stone' ? 'pick' : res === 'food' ? 'sickle' : null;
+        if (tool) this.villagerTool(tool, ax, ay, a, flip);
         if (e.carry > 0 && e.carryRes) { g.fillStyle = RES_COLOR[e.carryRes]; g.fillRect(x - flip * 6 - 3, by - 4, 6, 6); }
         break;
       }
@@ -1305,6 +1307,52 @@ export class Renderer {
     if (since >= 0 && since < 0.3) return 1 - since / 0.3;           // impacto y vuelta
     if (e.path.length === 0 && since < 6 && e.cooldown < 0.35) return -(1 - Math.max(0, e.cooldown) / 0.35); // levanta el arma
     return 0;
+  }
+
+  /** Herramientas del aldeano, dibujadas desde la mano (ax, ay) hacia el ángulo a */
+  private villagerTool(tool: 'hammer' | 'axe' | 'pick' | 'sickle', x: number, y: number, a: number, flip: number) {
+    const g = this.ctx;
+    const c = Math.cos(a), s = Math.sin(a), px = -s, py = c;
+    const handle = (len: number) => {
+      g.strokeStyle = '#7a5532'; g.lineWidth = 1.8;
+      g.beginPath(); g.moveTo(x - c * 2, y - s * 2); g.lineTo(x + c * len, y + s * len); g.stroke();
+    };
+    const metal = '#c3cbd2', edge = '#3b4148';
+    g.lineJoin = 'round';
+    if (tool === 'axe') {
+      handle(10);
+      const hx = x + c * 9, hy = y + s * 9, d = flip; // la hoja mira hacia adelante
+      g.fillStyle = metal; g.beginPath();
+      g.moveTo(hx - px * 0.5 * d, hy - py * 0.5 * d);
+      g.lineTo(hx + px * 4.2 * d + c * 2.4, hy + py * 4.2 * d + s * 2.4);
+      g.quadraticCurveTo(hx + px * 5.2 * d, hy + py * 5.2 * d, hx + px * 4.2 * d - c * 2.4, hy + py * 4.2 * d - s * 2.4);
+      g.closePath(); g.fill(); g.strokeStyle = edge; g.lineWidth = 0.6; g.stroke();
+    } else if (tool === 'pick') {
+      handle(10);
+      const hx = x + c * 9.5, hy = y + s * 9.5;
+      g.strokeStyle = metal; g.lineWidth = 1.9; g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(hx - px * 5 + c * 1.6, hy - py * 5 + s * 1.6);
+      g.quadraticCurveTo(hx + c * 1.2, hy + s * 1.2, hx + px * 5 + c * 1.6, hy + py * 5 + s * 1.6);
+      g.stroke();
+      g.strokeStyle = edge; g.lineWidth = 0.5; g.stroke();
+    } else if (tool === 'hammer') {
+      handle(8);
+      const hx = x + c * 8, hy = y + s * 8;
+      g.fillStyle = '#8f969c'; g.beginPath();
+      g.moveTo(hx - px * 3 - c * 1.6, hy - py * 3 - s * 1.6); g.lineTo(hx + px * 3 - c * 1.6, hy + py * 3 - s * 1.6);
+      g.lineTo(hx + px * 3 + c * 1.6, hy + py * 3 + s * 1.6); g.lineTo(hx - px * 3 + c * 1.6, hy - py * 3 + s * 1.6); g.closePath();
+      g.fill(); g.strokeStyle = edge; g.lineWidth = 0.6; g.stroke();
+    } else {
+      // oz: mango corto y hoja en media luna
+      handle(3.5);
+      const hx = x + c * 3.5, hy = y + s * 3.5;
+      const base = Math.atan2(s, c);
+      g.strokeStyle = metal; g.lineWidth = 1.5;
+      g.beginPath(); g.arc(hx + c * 3, hy + s * 3, 3.1, base + Math.PI, base + Math.PI + flip * 3.2, flip < 0); g.stroke();
+      g.strokeStyle = edge; g.lineWidth = 0.45; g.stroke();
+    }
+    g.lineCap = 'round';
   }
 
   /** Espada: hoja de acero con filo y lomo, guarda, empuñadura de cuero y pomo */

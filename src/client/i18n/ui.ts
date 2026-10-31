@@ -422,4 +422,13 @@ export const UI: Record<string, [string, string]> = {
   "Ver mapa": ["View map", "Ver mapa"],
   "Estadísticas": ["Statistics", "Estatísticas"],
   "Volver a campañas": ["Back to campaigns", "Voltar às campanhas"],
+  "Barco de transporte": ["Transport ship", "Navio de transporte"],
+  "Cruza unidades de tierra por el agua: lleva 5 (10 con su mejora). Si se hunde, se hunden con él.": ["Carries land units across water: holds 5 (10 with its upgrade). If it sinks, they sink with it.", "Leva unidades de terra pela água: leva 5 (10 com a melhoria). Se afundar, afundam junto."],
+  "Transporte pesado": ["Heavy transport", "Transporte pesado"],
+  "Barco de transporte: +20% de vida y lleva 10 unidades.": ["Transport ship: +20% HP and carries 10 units.", "Navio de transporte: +20% de vida e leva 10 unidades."],
+  "· 🪖 {0}/{1} a bordo": ["· 🪖 {0}/{1} aboard", "· 🪖 {0}/{1} a bordo"],
+  "· Tocalo con unidades de tierra para subirlas": ["· Tap it with land units to board them", "· Toque nele com unidades de terra para embarcá-las"],
+  "Acercá el barco a la costa para desembarcar": ["Bring the ship to the shore to unload", "Aproxime o navio da costa para desembarcar"],
+  "⛴️ Suben al barco (máx. {0})": ["⛴️ Boarding the ship (max {0})", "⛴️ Embarcando no navio (máx. {0})"],
+  "Requiere {0}": ["Requires {0}", "Requer {0}"],
 };

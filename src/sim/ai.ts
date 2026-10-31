@@ -254,14 +254,14 @@ export class AI {
     const dock = docks.find((d) => d.progress >= 1);
     if (!dock) return;
     const fishers = w.unitsOf(this.p, 'fishship');
-    const ships = w.unitsOf(this.p).filter((u) => UNITS[u.type as UnitType].naval && !UNITS[u.type as UnitType].gathers && !UNITS[u.type as UnitType].trade);
+    const ships = w.unitsOf(this.p).filter((u) => UNITS[u.type as UnitType].naval && !UNITS[u.type as UnitType].gathers && !UNITS[u.type as UnitType].trade && !UNITS[u.type as UnitType].carries);
     const queued = dock.queue.length;
     // producción
     if (queued < 2) {
       const fishLeft = w.findNode(fishers[0] ?? ({ ...dock, cat: 'unit', type: 'fishship' } as Entity), 'food', 26 * TILE);
       if (fishers.length < P.fish && fishLeft && w.canAfford(this.p, w.unitCost(this.p, 'fishship'))) w.issue({ t: 'train', p: this.p, bid: dock.id, u: 'fishship' });
       else if (pl.age >= 2 && ships.length < P.warships && !this.savingForAge(vills)) {
-        const opts = w.trainsOf(this.p, 'dock').filter((u) => u !== 'fishship' && !UNITS[u].trade && UNITS[u].age <= pl.age && (!UNITS[u].requires || pl.techs.has(UNITS[u].requires!)));
+        const opts = w.trainsOf(this.p, 'dock').filter((u) => u !== 'fishship' && !UNITS[u].trade && !UNITS[u].carries && UNITS[u].age <= pl.age && (!UNITS[u].requires || pl.techs.has(UNITS[u].requires!)));
         const u = opts.length ? opts[Math.floor(w.rng.next() * opts.length)] : undefined;
         if (u && w.canAfford(this.p, w.unitCost(this.p, u))) w.issue({ t: 'train', p: this.p, bid: dock.id, u });
       }

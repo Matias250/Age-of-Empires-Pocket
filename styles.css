@@ -22,7 +22,7 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 /* ---------- barra superior ---------- */
 #topbar { position: fixed; top: 0; left: 0; right: 0; padding: calc(4px + var(--sat)) calc(8px + var(--sar)) 4px calc(8px + var(--sal));
   display: flex; align-items: center; gap: 10px; background: linear-gradient(#1c150fee, #1c150fcc); border-bottom: 2px solid var(--edge); z-index: 5; }
-#res { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+#res { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; flex: 1 1 auto; justify-content: space-between; min-width: 0; max-width: 560px; }
 #res b { font-variant-numeric: tabular-nums; }
 #res .short, .short { color: #ff8a80; }
 #clock { margin-left: auto; color: var(--dim); font-size: 12px; white-space: nowrap; }

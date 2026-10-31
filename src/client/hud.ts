@@ -13,7 +13,7 @@ export const UNIT_ICON: Record<UnitType, string> = {
   villager: '🧑‍🌾', militia: '🗡️', spearman: '🔱', champion: '⚔️',
   archer: '🏹', skirmisher: '🎯', cavarcher: '🏇', handcannon: '🔫',
   scout: '🐎', knight: '🛡️', camel: '🐪', eagle: '🦅', ram: '🐏', mangonel: '🪨', bombard: '💣', trebuchet: '🏗️', monk: '🧙',
-  fishship: '🎣', tradecart: '🛒', tradecog: '🛶', galleon: '⛵', fireship: '🔥', cannongalleon: '🚢',
+  fishship: '🎣', tradecart: '🛒', tradecog: '🛶', galleon: '⛵', fireship: '🔥', cannongalleon: '🚢', transport: '⛴️',
   huskarl: '🛡️', jaguar: '🐆', tarkan: '🔥', teutonic: '⚜️', plumed: '🪶',
   longbow: '🏹', axeman: '🪓', conquistador: '🤠', cataphract: '🐴', mangudai: '🏇',
   samurai: '🗡️', chukonu: '🎯', elephant: '🐘', berserker: '🪓', janissary: '🔫',
@@ -590,9 +590,10 @@ export class Hud {
           const queued = b.tech === t || b.techQueue.includes(t);
           const elsewhere = !queued && w.isResearching(g.me, t);
           const tl = pl.age < td.age;
+          const tneed = needs ? ud.requires : undefined;
           const tc2 = w.techCost(g.me, t);
-          bottom.push(`<button class="act up ${queued ? 'on' : ''}" data-a="research:${t}" ${!tl && !queued && !elsewhere && w.canAfford(g.me, tc2) ? '' : 'data-dis'}>
-            <i>${UNIT_ICON[u]}<sup>⬆️</sup></i><span>${td.name}</span><em>${tl ? lock(td.age) : b.tech === t ? '⏳ investigando' : queued || elsewhere ? '⏳ en cola' : costHtml(tc2, pl.res)}</em></button>`);
+          bottom.push(`<button class="act up ${queued ? 'on' : ''}" data-a="research:${t}" ${!tl && !tneed && !queued && !elsewhere && w.canAfford(g.me, tc2) ? '' : 'data-dis'}>
+            <i>${UNIT_ICON[u]}<sup>⬆️</sup></i><span>${td.name}</span><em>${tl ? lock(td.age) : tneed ? `🔒 ${TECHS[tneed].name}` : b.tech === t ? '⏳ investigando' : queued || elsewhere ? '⏳ en cola' : costHtml(tc2, pl.res)}</em></button>`);
         }
         html += bottom.some((x) => x) ? twoRows(top, bottom) : top.join('');
         if (b.type === 'towncenter' && pl.age < 4 && !w.isResearchingAge(g.me)) {
@@ -632,7 +633,8 @@ export class Hud {
       const u = units[0], d = UNITS[u.type as UnitType];
       const doing = !u.order ? 'Ocioso' : u.order.t === 'gather' ? `${d.naval ? 'Pescando' : 'Recolectando'} ${RES_ICON[u.order.res]}` : u.order.t === 'build' ? 'Construyendo' : u.order.t === 'move' ? 'Moviéndose' : u.order.t === 'heal' ? 'Curando' : u.order.t === 'trade' ? (u.order.leg === 'go' ? 'Viajando a comerciar' : `Volviendo con ${u.carry} 🪙`) : u.order.t === 'relic' ? (u.carryRelic ? 'Llevando la reliquia' : 'Buscando una reliquia') : u.order.t === 'explore' ? 'Explorando' : u.order.t === 'board' ? 'Subiendo al ariete' : 'Atacando';
       const relicTxt = u.carryRelic && u.order?.t !== 'relic' ? ' · ✨ lleva una reliquia (construí un monasterio)' : '';
-      const cargoTxt = u.type === 'ram' && mine ? `<span> · 🪖 ${u.cargo?.length ?? 0}/${RAM_CAPACITY} adentro</span>${u.cargo?.length ? `<span> · +${u.cargo.length * 10}% de daño</span>` : '<span> · Tocalo con infantería para meterla</span>'}` : '';
+      const cargoTxt = u.type === 'ram' && mine ? `<span> · 🪖 ${u.cargo?.length ?? 0}/${RAM_CAPACITY} adentro</span>${u.cargo?.length ? `<span> · +${u.cargo.length * 10}% de daño</span>` : '<span> · Tocalo con infantería para meterla</span>'}`
+        : d.carries && mine ? `<span> · 🪖 ${u.cargo?.length ?? 0}/${w.capacityOf(u)} a bordo</span>${u.cargo?.length ? '' : '<span> · Tocalo con unidades de tierra para subirlas</span>'}` : '';
       const range = d.range > TILE ? ` · 🎯 ${Math.round(w.rangeOf(u) / TILE)}` : '';
       info = `<div class="title">${UNIT_ICON[u.type as UnitType]} ${u.hero ? `👑 ${u.hero} <small>(${w.unitName(u.owner, u.type as UnitType)})</small>` : w.unitName(u.owner, u.type as UnitType)}${ownerTag}</div>
         <div class="sub">❤️ <span data-hp>${Math.ceil(u.hp)}/${u.maxHp}</span>${d.atk ? ` · ⚔️ ${w.attackOf(u)}` : ''} · 🛡️ ${d.armorMelee}/${d.armorPierce}${range}</div>

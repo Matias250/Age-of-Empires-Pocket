@@ -1068,7 +1068,14 @@ export class Renderer {
     const col = this.w.players[e.owner].color;
     const x = e.x, y = e.y, r = e.radius;
     const moving = e.path.length > 0;
-    if (d.naval) { this.ship(e, col, time); return; }
+    if (d.naval) {
+      this.ship(e, col, time);
+      if (e.cargo?.length) {
+        g.fillStyle = 'rgba(20,14,8,.85)'; g.beginPath(); g.arc(x + 14, y - 22, 6.5, 0, 7); g.fill();
+        g.fillStyle = '#ffe08a'; g.font = 'bold 8px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(e.cargo.length), x + 14, y - 21.5);
+      }
+      return;
+    }
     g.fillStyle = 'rgba(0,0,0,0.3)';
     g.beginPath(); g.ellipse(x, y + r * 0.75, r * 0.95, r * 0.42, 0, 0, 7); g.fill();
     if (d.cls === 'siege') {
@@ -1587,7 +1594,7 @@ export class Renderer {
     const t = e.type as UnitType;
     const x = e.x, y = e.y;
     const cg = t === 'cannongalleon';
-    const big = cg ? 1.35 : t === 'galleon' ? 1.1 : t === 'fireship' ? 1.05 : t === 'tradecog' ? 0.95 : 0.8;
+    const big = cg ? 1.35 : t === 'galleon' ? 1.1 : t === 'fireship' ? 1.05 : t === 'tradecog' ? 0.95 : t === 'transport' ? 1.08 : 0.8;
     const roll = Math.sin(time * 2 + e.id) * 0.05;
     g.save(); g.translate(x, y); g.rotate(e.facing + roll);
     // estela
@@ -1627,10 +1634,23 @@ export class Renderer {
       g.fillStyle = '#f0c8a0'; for (const i of [-4, 4]) { g.beginPath(); g.arc(i * big, 0, 1.8, 0, 7); g.fill(); }
       g.fillStyle = col; for (const i of [-4, 4]) { g.beginPath(); g.arc(i * big, 0, 1, 0, 7); g.fill(); }
     }
+    if (t === 'transport') {
+      // barco de transporte: cubierta ancha con baranda, rampa en la proa y la gente a bordo
+      g.strokeStyle = '#5a3e22'; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(13 * big, 0); g.quadraticCurveTo(6 * big, -6 * big, -11 * big, -5 * big); g.moveTo(13 * big, 0); g.quadraticCurveTo(6 * big, 6 * big, -11 * big, 5 * big); g.stroke();
+      g.fillStyle = '#6f4e2c'; g.fillRect(12 * big, -2.5, 5 * big, 5); // rampa
+      g.strokeStyle = 'rgba(60,40,20,.6)'; g.lineWidth = 0.6; g.beginPath(); for (let i = -9; i < 12; i += 3) { g.moveTo(i * big, -4.5 * big); g.lineTo(i * big, 4.5 * big); } g.stroke();
+      const n = e.cargo?.length ?? 0;
+      for (let k = 0; k < Math.min(n, 10); k++) {
+        const px = (-7 + (k % 5) * 4) * big, py = (k < 5 ? -1.8 : 1.8) * big;
+        g.fillStyle = col; g.beginPath(); g.arc(px, py, 1.7, 0, 7); g.fill();
+        g.fillStyle = '#e9bf98'; g.beginPath(); g.arc(px + 0.6, py, 0.9, 0, 7); g.fill();
+      }
+    }
     if (t === 'fishship') { g.strokeStyle = 'rgba(240,240,240,0.6)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(-10, 0); g.lineTo(-20, 6); g.stroke(); }
     g.restore();
     // vela (no rota con el barco, siempre hacia arriba)
-    const masts = cg ? [-8, 0, 8] : t === 'galleon' ? [-5, 5] : [0];
+    const masts = cg ? [-8, 0, 8] : t === 'galleon' ? [-5, 5] : t === 'transport' ? [-7] : [0];
     for (const m of masts) {
       const mx = x + Math.cos(e.facing) * m * big, my = y + Math.sin(e.facing) * m * big;
       g.strokeStyle = '#4e342e'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(mx, my); g.lineTo(mx, my - 20 * big); g.stroke();

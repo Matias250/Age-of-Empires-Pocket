@@ -503,10 +503,10 @@ export class Game {
         w.issue({ t: attack ? 'attackMove' : 'move', p: this.me, ids: units.map((u) => u.id), x: p.x, y: p.y, queue: this.queuing });
         this.mark(p.x, p.y, attack ? '#ff6b6b' : '#7CFC8A');
       } else {
-        const board = hit.type === 'ram' && hit.owner === this.me;
-        const ids = (board ? units.filter((u) => World.canBoard(u)) : units).map((u) => u.id);
+        const board = hit.owner === this.me && hit.cat === 'unit' && units.some((u) => w.canBoardInto(u, hit));
+        const ids = (board ? units.filter((u) => w.canBoardInto(u, hit)) : units).map((u) => u.id);
         w.issue({ t: 'target', p: this.me, ids, target: hit.id, queue: this.queuing });
-        if (board) this.hud.toast(`🪖 Suben al ariete (máx. 5): más rápido y más fuerte`);
+        if (board) this.hud.toast(hit.type === 'ram' ? '🪖 Suben al ariete (máx. 5): más rápido y más fuerte' : `⛴️ Suben al barco (máx. ${w.capacityOf(hit)})`);
         this.mark(hit.x, hit.y, w.isEnemy(this.me, hit.owner) ? '#ff6b6b' : '#ffe08a');
       }
       this.mode = 'normal';
@@ -535,7 +535,7 @@ export class Game {
     if (!hit) return true;
     if (hit.cat === 'node') return true;
     if (w.isEnemy(this.me, hit.owner)) return true;
-    if (hit.cat === 'unit') return hit.type === 'ram' && hit.owner === this.me && units.some((u) => u.id !== hit.id && World.canBoard(u));
+    if (hit.cat === 'unit') return hit.owner === this.me && units.some((u) => w.canBoardInto(u, hit));
     // edificio propio o aliado
     const vills = units.some((u) => u.type === 'villager');
     if (!vills) return false;

@@ -24,7 +24,7 @@ export type UnitType =
   | 'scout' | 'knight' | 'camel' | 'eagle'
   | 'ram' | 'mangonel' | 'bombard' | 'trebuchet'
   | 'monk'
-  | 'fishship' | 'galleon' | 'fireship' | 'cannongalleon' | 'tradecart' | 'tradecog'
+  | 'fishship' | 'galleon' | 'fireship' | 'cannongalleon' | 'tradecart' | 'tradecog' | 'transport'
   // unidades únicas de cada civilización
   | 'longbow' | 'axeman' | 'conquistador' | 'cataphract' | 'mangudai'
   | 'samurai' | 'chukonu' | 'elephant' | 'berserker' | 'janissary'
@@ -80,6 +80,8 @@ export interface UnitDef {
   tags?: ArmorClass[];
   /** comercia con mercados (carreta) o muelles (barca) aliados */
   trade?: boolean;
+  /** barco de transporte: cuántas unidades de tierra lleva */
+  carries?: number;
   desc: string;
 }
 
@@ -185,6 +187,11 @@ export const UNITS: Record<UnitType, UnitDef> = {
     name: 'Carreta mercante', hp: 70, atk: 0, atkType: 'melee', cooldown: 1, range: 4, armorMelee: 0, armorPierce: 0,
     speed: 60, radius: 10, sight: 4, cost: { wood: 100, gold: 50 }, trainTime: 20, age: 2, cls: 'villager', trade: true,
     desc: 'Viaja hasta el mercado de un aliado y vuelve con oro. Cuanto más lejos, más oro.',
+  },
+  transport: {
+    name: 'Barco de transporte', hp: 150, atk: 0, atkType: 'melee', cooldown: 1, range: 4, armorMelee: 0, armorPierce: 4,
+    speed: 64, radius: 12, sight: 5, cost: { wood: 125 }, trainTime: 15, age: 2, cls: 'ship', naval: true, carries: 5,
+    desc: 'Cruza unidades de tierra por el agua: lleva 5 (10 con su mejora). Si se hunde, se hunden con él.',
   },
   tradecog: {
     name: 'Barca mercante', hp: 80, atk: 0, atkType: 'melee', cooldown: 1, range: 4, armorMelee: 0, armorPierce: 2,
@@ -337,7 +344,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   },
   dock: {
     name: 'Muelle', size: 2, hp: 1200, cost: { wood: 150 }, buildTime: 25, age: 1, sight: 6, onWater: true,
-    trains: ['fishship', 'galleon', 'fireship', 'cannongalleon', 'tradecog'], drop: ['food'], desc: 'Se construye en el agua, pegado a la costa.',
+    trains: ['fishship', 'transport', 'galleon', 'fireship', 'cannongalleon', 'tradecog'], drop: ['food'], desc: 'Se construye en el agua, pegado a la costa.',
   },
   wall: { name: 'Empalizada', size: 1, hp: 350, cost: { wood: 4 }, buildTime: 4, age: 1, sight: 1, line: true, desc: 'Muro de madera. Tocá dos puntos para trazarla.' },
   gate: { name: 'Portón', size: 3, hp: 2000, cost: { stone: 40 }, buildTime: 20, age: 2, sight: 3, onWall: true, desc: 'Ocupa 3 tramos de tu muralla. Se abre para tu equipo y se puede bloquear.' },
@@ -413,6 +420,7 @@ export const COUNTERS: Record<UnitType, { strong: (UnitType | 'building' | 'towe
   fishship: { strong: [], weak: ['galleon', 'fireship'] },
   tradecart: { strong: [], weak: ['scout', 'knight', 'archer'] },
   tradecog: { strong: [], weak: ['galleon', 'fireship'] },
+  transport: { strong: [], weak: ['galleon', 'fireship', 'cannongalleon'] },
   galleon: { strong: ['fishship', 'cannongalleon'], weak: ['fireship', 'tower'] },
   fireship: { strong: ['galleon', 'cannongalleon', 'fishship'], weak: ['tower'] },
   cannongalleon: { strong: ['building'], weak: ['fireship', 'galleon'] },
@@ -439,7 +447,7 @@ const UP_NAME: Partial<Record<UnitType, string>> = {
   skirmisher: 'Escaramuzador de élite', cavarcher: 'Arquero a caballo pesado', handcannon: 'Pólvora refinada', scout: 'Caballería ligera',
   knight: 'Paladín', camel: 'Camello pesado', ram: 'Ariete blindado', mangonel: 'Onagro', bombard: 'Cañón reforzado',
   trebuchet: 'Contrapeso', monk: 'Herbolaria', fishship: 'Redes de arrastre', galleon: 'Galeón de guerra', fireship: 'Fuego griego',
-  cannongalleon: 'Galeón cañonero de élite', tradecart: 'Caravana', tradecog: 'Rutas marítimas',
+  cannongalleon: 'Galeón cañonero de élite', tradecart: 'Caravana', tradecog: 'Rutas marítimas', transport: 'Transporte pesado',
 };
 /** Cómo se llama la unidad después de su mejora de línea */
 const UP_UNIT_NAME: Partial<Record<UnitType, string>> = {
@@ -447,7 +455,7 @@ const UP_UNIT_NAME: Partial<Record<UnitType, string>> = {
   skirmisher: 'Escaramuzador de élite', cavarcher: 'Arquero a caballo pesado', handcannon: 'Cañonero veterano', scout: 'Caballería ligera',
   knight: 'Paladín', camel: 'Camello pesado', ram: 'Ariete blindado', mangonel: 'Onagro', bombard: 'Cañón reforzado',
   trebuchet: 'Fundíbulo de contrapeso', monk: 'Monje herbolario', fishship: 'Barco de arrastre', galleon: 'Galeón de guerra',
-  fireship: 'Barco de fuego griego', cannongalleon: 'Galeón cañonero de élite', tradecart: 'Caravana', tradecog: 'Coca mercante',
+  fireship: 'Barco de fuego griego', cannongalleon: 'Galeón cañonero de élite', tradecart: 'Caravana', tradecog: 'Coca mercante', transport: 'Transporte pesado',
 };
 for (const u of Object.keys(UNITS) as UnitType[]) {
   const d = UNITS[u];
@@ -455,7 +463,8 @@ for (const u of Object.keys(UNITS) as UnitType[]) {
   const k = age - 1;
   const cost: Partial<ResBag> = d.unique ? { food: 400, gold: 300 } : d.naval || d.cls === 'siege' || d.trade ? { wood: 100 * k, gold: 60 * k } : { food: 100 * k, gold: 60 * k };
   const name = UP_NAME[u] ?? `${d.name} de élite`;
-  const desc = d.heals ? 'Monjes: +20% de vida y curan 50% más rápido.'
+  const desc = d.carries ? `${d.name}: +20% de vida y lleva ${d.carries * 2} unidades.`
+    : d.heals ? 'Monjes: +20% de vida y curan 50% más rápido.'
     : d.gathers ? 'Barcos pesqueros: +20% de vida y pescan 25% más rápido.'
     : d.trade ? `${d.name}: +20% de vida y 20% más rápida.`
     : `${d.name}: +20% de vida, +${Math.max(1, Math.round(d.atk * (d.cls === 'siege' ? 0.2 : 0.15)))} de ataque y +1/+1 de armadura.`;

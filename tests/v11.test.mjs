@@ -110,3 +110,53 @@ test('granjas con molino, centro urbano en Castillos con +25 y tope 125', () => 
   assert.equal(w.popCap(0), Math.min(125, cap0 + 25));
   assert.equal(w.popLimit, 125);
 });
+
+test('barco de transporte: lleva 5, con mejora 10, desembarca en la costa y si se hunde mueren', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 4, map: 'islas', biome: 'templado' });
+  const w = m.world; const p = w.players[0]; p.explored.fill(1);
+  const tc = w.buildingsOf(0, 'towncenter')[0];
+  // casilla de agua pegada a tierra libre, la más cercana al centro urbano
+  let best = null, bd = Infinity;
+  for (let y = 1; y < w.h - 1; y++) for (let x = 1; x < w.w - 1; x++) {
+    if (w.terrain[y * w.w + x] === 0) continue;
+    const land = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !w.tileSolid(x + dx, y + dy));
+    if (!land) continue;
+    const d = Math.hypot(x * 32 - tc.x, y * 32 - tc.y);
+    if (d < bd) { bd = d; best = { x, y, lx: x + land[0], ly: y + land[1] }; }
+  }
+  assert.ok(best);
+  const ship = w.spawnUnit(0, 'transport', best.x * 32 + 16, best.y * 32 + 16);
+  const us = Array.from({ length: 6 }, () => w.spawnUnit(0, 'spearman', best.lx * 32 + 16, best.ly * 32 + 16));
+  us.push(w.spawnUnit(0, 'knight', best.lx * 32 + 16, best.ly * 32 + 16));
+  w.issue({ t: 'target', p: 0, ids: us.map((u) => u.id), target: ship.id });
+  for (let i = 0; i < 20 * 8; i++) w.step();
+  assert.equal(ship.cargo?.length, 5);
+  w.grantTech(0, 'up_transport');
+  assert.equal(w.capacityOf(ship), 10);
+  w.issue({ t: 'target', p: 0, ids: us.filter((u) => w.get(u.id)).map((u) => u.id), target: ship.id });
+  for (let i = 0; i < 20 * 8; i++) w.step();
+  assert.equal(ship.cargo?.length, 7);
+  w.issue({ t: 'unload', p: 0, ids: [ship.id] });
+  for (let i = 0; i < 4; i++) w.step();
+  assert.equal(us.filter((u) => w.get(u.id)).length, 7, 'bajaron todos');
+  assert.ok(us.every((u) => !w.tileSolid(Math.floor(u.x / 32), Math.floor(u.y / 32))), 'en tierra');
+  w.issue({ t: 'target', p: 0, ids: us.slice(0, 3).map((u) => u.id), target: ship.id });
+  for (let i = 0; i < 20 * 8; i++) w.step();
+  const lost0 = p.stats.lost;
+  ship.hp = 0; w.step();
+  assert.equal(us.slice(0, 3).filter((u) => w.get(u.id)).length, 0, 'se hundieron con el barco');
+  assert.equal(p.stats.lost, lost0 + 4);
+});
+
+test('la mejora de una unidad que pide Química no se puede investigar antes', () => {
+  const { w, p, tc } = setup();
+  p.techs.delete('chemistry');
+  const r = w.placeBuilding(0, 'range', tc.tx + 6, tc.ty, true);
+  w.issue({ t: 'research', p: 0, bid: r.id, tech: 'up_handcannon' });
+  w.step();
+  assert.ok(!r.tech, 'rechazada sin Química');
+  p.techs.add('chemistry');
+  w.issue({ t: 'research', p: 0, bid: r.id, tech: 'up_handcannon' });
+  w.step();
+  assert.equal(r.tech, 'up_handcannon');
+});

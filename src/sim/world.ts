@@ -416,7 +416,7 @@ export class World implements Grid {
     if (u.type === 'villager' && this.hasTech(u.owner, 'wheelbarrow')) s *= 1.15;
     if (d.mounted) s *= this.mods(u.owner).mountedSpeed ?? 1;
     if (d.trade && this.hasTech(u.owner, `up_${u.type as UnitType}`)) s *= 1.2;
-    if (u.cargo?.length) s *= 1 + 0.08 * u.cargo.length; // la infantería empuja el ariete
+    if (u.type === 'ram' && u.cargo?.length) s *= 1 + 0.08 * u.cargo.length; // la infantería empuja el ariete
     return s;
   }
   rangeOf(u: Entity): number {
@@ -720,6 +720,8 @@ export class World implements Grid {
         if (!okHere) return;
         if (pl.techs.has(c.tech) || this.isResearching(c.p, c.tech)) return;
         if (pl.age < td.age) return;
+        const needU = td.unit ? UNITS[td.unit].requires : undefined; // la mejora necesita poder hacer la unidad
+        if (needU && !pl.techs.has(needU)) { msg(`Requiere ${TECHS[needU].name}`); return; }
         const cost = this.techCost(c.p, c.tech);
         if (!this.canAfford(c.p, cost)) { msg('Recursos insuficientes'); return; }
         this.pay(c.p, cost);
@@ -801,7 +803,7 @@ export class World implements Grid {
       return near;
     }
     if (this.isEnemy(u.owner, t.owner)) return this.canTarget(u, t) ? { t: 'attack', target: t.id } : near;
-    if (t.type === 'ram' && t.owner === u.owner && World.canBoard(u)) return { t: 'board', target: t.id };
+    if (t.owner === u.owner && this.canBoardInto(u, t)) return { t: 'board', target: t.id };
     if (t.cat === 'building' && isVill && this.players[t.owner].team === this.players[u.owner].team) {
       if (t.progress < 1 || t.hp < t.maxHp) return { t: 'build', target: t.id };
       if (t.type === 'farm' && t.owner === u.owner) {
@@ -854,7 +856,12 @@ export class World implements Grid {
 
   private kill(e: Entity) {
     if (!this.entities.has(e.id)) return;
-    if (e.cargo?.length) this.unload(e);
+    if (e.cargo?.length) {
+      if (e.type === 'transport') { // se hunde con todos adentro
+        for (const c of e.cargo) { this.players[c.owner].stats.lost++; this.events.push({ t: 'death', x: e.x, y: e.y, cat: 'unit', owner: c.owner, naval: true }); }
+        e.cargo = undefined;
+      } else this.unload(e);
+    }
     this.entities.delete(e.id);
     this.dirty = true;
     if (e.cat !== 'unit') this.occupy(e, false);
@@ -994,7 +1001,7 @@ export class World implements Grid {
     }
     let dmg = atk + (bonus?.[cls] ?? 0);
     if (t.cat === 'unit' && bonus) for (const tag of UNITS[t.type as UnitType].tags ?? []) dmg += bonus[tag] ?? 0;
-    if (src?.cargo?.length) dmg *= 1 + 0.1 * src.cargo.length; // la infantería adentro empuja el ariete
+    if (src?.type === 'ram' && src.cargo?.length) dmg *= 1 + 0.1 * src.cargo.length; // la infantería adentro empuja el ariete
     if (cls === 'building' && src && src.cat === 'unit' && UNITS[src.type as UnitType].cls === 'siege' && this.hasTech(src.owner, 'siegeeng')) dmg *= 1.2;
     return Math.max(1, dmg - armor);
   }
@@ -1100,8 +1107,8 @@ export class World implements Grid {
       }
       case 'board': {
         const r = this.entities.get(o.target);
-        if (!r || r.hp <= 0 || r.owner !== u.owner || (r.cargo?.length ?? 0) >= RAM_CAPACITY) { this.setOrder(u, undefined); break; }
-        if (Math.hypot(u.x - r.x, u.y - r.y) <= r.radius + u.radius + 10) { this.board(u, r); break; }
+        if (!r || r.hp <= 0 || r.owner !== u.owner || (r.cargo?.length ?? 0) >= this.capacityOf(r)) { this.setOrder(u, undefined); break; }
+        if (Math.hypot(u.x - r.x, u.y - r.y) <= r.radius + u.radius + (r.type === 'ram' ? 10 : TILE * 1.6)) { this.board(u, r); break; }
         this.moveTo(u, r.x, r.y);
         break;
       }
@@ -1480,11 +1487,23 @@ export class World implements Grid {
     const d = UNITS[u.type as UnitType];
     return u.cat === 'unit' && d.cls === 'infantry' && !d.heals && !d.mounted && !u.hero && d.range <= 1.5 * TILE;
   }
+  /** ¿Esta unidad puede subir a ese ariete o barco de transporte? */
+  canBoardInto(u: Entity, r: Entity): boolean {
+    if (u.id === r.id || u.cat !== 'unit' || r.cat !== 'unit') return false;
+    if (r.type === 'ram') return World.canBoard(u);
+    if (r.type === 'transport') return !UNITS[u.type as UnitType].naval;
+    return false;
+  }
+  capacityOf(r: Entity): number {
+    if (r.type === 'ram') return RAM_CAPACITY;
+    const d = UNITS[r.type as UnitType];
+    return d.carries ? d.carries * (this.hasTech(r.owner, `up_${r.type as UnitType}`) ? 2 : 1) : 0;
+  }
   static canExplore(u: Entity): boolean { return u.type === 'scout' || u.type === 'eagle'; }
   /** Sube una unidad al ariete: deja el mapa y viaja adentro */
   private board(u: Entity, r: Entity) {
     if (!r.cargo) r.cargo = [];
-    if (r.cargo.length >= RAM_CAPACITY) return;
+    if (r.cargo.length >= this.capacityOf(r)) return;
     this.entities.delete(u.id);
     u.order = undefined; u.cmdQueue = []; u.path = []; u.pathKey = '';
     r.cargo.push(u);
@@ -1493,11 +1512,14 @@ export class World implements Grid {
   /** Baja a toda la infantería alrededor del ariete */
   unload(r: Entity) {
     const list = r.cargo ?? [];
+    const ship = this.isNaval(r);
+    // el barco desembarca solo si está pegado a la costa
+    if (ship && !this.nearestFree(Math.floor(r.x / TILE), Math.floor(r.y / TILE), 3)) { this.events.push({ t: 'msg', p: r.owner, text: 'Acercá el barco a la costa para desembarcar' }); return; }
     r.cargo = undefined;
     list.forEach((u, i) => {
       const a = (i / Math.max(1, list.length)) * Math.PI * 2;
       const tx = Math.floor((r.x + Math.cos(a) * 22) / TILE), ty = Math.floor((r.y + Math.sin(a) * 22) / TILE);
-      const spot = this.nearestFree(tx, ty) ?? { x: Math.floor(r.x / TILE), y: Math.floor(r.y / TILE) };
+      const spot = this.nearestFree(tx, ty, ship ? 4 : 12) ?? this.nearestFree(Math.floor(r.x / TILE), Math.floor(r.y / TILE), 4) ?? { x: Math.floor(r.x / TILE), y: Math.floor(r.y / TILE) };
       u.x = spot.x * TILE + TILE / 2; u.y = spot.y * TILE + TILE / 2;
       this.entities.set(u.id, u);
     });

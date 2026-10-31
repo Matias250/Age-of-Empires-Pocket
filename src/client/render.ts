@@ -51,16 +51,50 @@ export function makeGround(w: World): HTMLCanvasElement {
   let seed = 1234;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const n1 = valueNoise(7), n2 = valueNoise(19);
-  // base: mezcla de dos tonos con ruido, por bloques de 8px para un look pintado
-  const B = 8;
-  for (let y = 0; y < c.height; y += B)
-    for (let x = 0; x < c.width; x += B) {
-      const t = n1(x / 180, y / 180) * 0.7 + n2(x / 60, y / 60) * 0.3;
-      const k = 0.94 + rnd() * 0.06;
-      const col = pal.ground.map((v, i) => Math.round((v + (pal.ground2[i] - v) * t) * k));
-      g.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
-      g.fillRect(x, y, B, B);
+  // base: mezcla suave de dos tonos con ruido (se pinta chico y se agranda con suavizado)
+  const B = 4, sw = Math.ceil(c.width / B), sh = Math.ceil(c.height / B);
+  const [lo, lg] = mkCanvas(sw, sh);
+  const img = lg.createImageData(sw, sh);
+  const n3 = valueNoise(31);
+  for (let y = 0; y < sh; y++)
+    for (let x = 0; x < sw; x++) {
+      const px = x * B, py = y * B;
+      const t = Math.min(1, Math.max(0, n1(px / 200, py / 200) * 0.6 + n2(px / 70, py / 70) * 0.3 + n3(px / 18, py / 18) * 0.1));
+      const k = 0.96 + n3(px / 7, py / 7) * 0.07;
+      const o = (y * sw + x) * 4;
+      for (let i = 0; i < 3; i++) img.data[o + i] = Math.round((pal.ground[i] + (pal.ground2[i] - pal.ground[i]) * t) * k);
+      img.data[o + 3] = 255;
     }
+  lg.putImageData(img, 0, 0);
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  g.drawImage(lo, 0, 0, c.width, c.height);
+  // manchas de tierra donde el ruido es bajo (caminos naturales)
+  if (w.biome !== 'nieve') {
+    const nd = valueNoise(53);
+    g.fillStyle = w.biome === 'desierto' ? 'rgba(150,110,60,0.10)' : 'rgba(120,96,58,0.16)';
+    for (let y = 0; y < c.height; y += 6) for (let x = 0; x < c.width; x += 6) {
+      const v = nd(x / 90, y / 90);
+      if (v < 0.22) { g.beginPath(); g.arc(x + rnd() * 6, y + rnd() * 6, 2 + (0.22 - v) * 18 * rnd(), 0, 7); g.fill(); }
+    }
+  }
+  // matas de pasto: hojitas finas con luz arriba
+  if (w.biome !== 'desierto' && w.biome !== 'nieve') {
+    for (let i = 0; i < w.w * w.h * 2.2; i++) {
+      const x = rnd() * c.width, y = rnd() * c.height;
+      const dark = rnd() < 0.6;
+      g.strokeStyle = dark ? `rgba(30,60,20,${0.18 + rnd() * 0.18})` : `rgba(200,230,140,${0.12 + rnd() * 0.14})`;
+      g.lineWidth = 0.9;
+      g.beginPath();
+      for (let k = 0; k < 3; k++) { const a = -Math.PI / 2 + (rnd() - 0.5) * 1.1, l = 2.5 + rnd() * 3.5; g.moveTo(x + k * 1.2, y); g.lineTo(x + k * 1.2 + Math.cos(a) * l, y + Math.sin(a) * l); }
+      g.stroke();
+    }
+    // florcitas sueltas
+    for (let i = 0; i < w.w * w.h * 0.08; i++) {
+      const x = rnd() * c.width, y = rnd() * c.height;
+      g.fillStyle = ['#f3e9a8', '#e8b4d8', '#ffffff', '#b8d4f5'][Math.floor(rnd() * 4)];
+      g.globalAlpha = 0.7; g.beginPath(); g.arc(x, y, 1.1, 0, 7); g.fill(); g.globalAlpha = 1;
+    }
+  }
   // detalles del bioma
   for (let i = 0; i < w.w * w.h * 1.4; i++) {
     const x = rnd() * c.width, y = rnd() * c.height;
@@ -177,15 +211,31 @@ function treeSprite(biome: string, v: number): HTMLCanvasElement {
     };
     const [base, hi] = (sets[biome] ?? sets.templado)[Math.floor(v * 3) % 3];
     const r = 12 + v * 3;
-    g.fillStyle = leaf(base, hi, r);
-    if (biome === 'tropical') {
-      for (const [dx, dy, rr] of [[-7, -12, 9], [7, -13, 9], [0, -20, 10], [0, -10, 8]]) { g.beginPath(); g.arc(x + dx, y + dy, rr + v * 2, 0, 7); g.fill(); }
-    } else {
-      g.beginPath(); g.arc(x, y - 15, r, 0, 7); g.fill();
-      g.beginPath(); g.arc(x - 7, y - 10, r * 0.7, 0, 7); g.fill();
-      g.beginPath(); g.arc(x + 7, y - 10, r * 0.7, 0, 7); g.fill();
+    // tronco con corteza y raíces
+    const tg = g.createLinearGradient(x - 3, 0, x + 3, 0); tg.addColorStop(0, '#3e2a1e'); tg.addColorStop(0.5, '#6d4c38'); tg.addColorStop(1, '#3a281c');
+    g.fillStyle = tg; g.beginPath(); g.moveTo(x - 3, y + 5); g.lineTo(x - 2, y - 10); g.lineTo(x + 2, y - 10); g.lineTo(x + 3.5, y + 5); g.closePath(); g.fill();
+    g.fillStyle = '#4a3326'; g.beginPath(); g.ellipse(x, y + 5, 5, 1.6, 0, 0, 7); g.fill();
+    // copa: varios racimos, los de abajo más oscuros, borde definido
+    let sd = Math.floor(v * 1000) + 7;
+    const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    const blobs: [number, number, number][] = biome === 'tropical'
+      ? [[-7, -12, 9], [7, -13, 9], [0, -20, 10], [0, -10, 8]]
+      : [[0, -16, r * 0.82], [-7, -11, r * 0.66], [7, -11, r * 0.66], [-4, -21, r * 0.55], [5, -21, r * 0.55], [0, -8, r * 0.6]];
+    g.fillStyle = shade(base, -0.35);
+    for (const [dx, dy, br] of blobs) { g.beginPath(); g.arc(x + dx, y + dy, br + 1.3, 0, 7); g.fill(); }
+    for (const [dx, dy, br] of blobs.sort((a, b) => b[1] - a[1])) {
+      const gr = g.createRadialGradient(x + dx - br * 0.35, y + dy - br * 0.45, 0.5, x + dx, y + dy, br * 1.1);
+      gr.addColorStop(0, hi); gr.addColorStop(0.65, base); gr.addColorStop(1, shade(base, -0.2));
+      g.fillStyle = gr; g.beginPath(); g.arc(x + dx, y + dy, br, 0, 7); g.fill();
     }
-    g.fillStyle = 'rgba(255,255,255,0.12)'; g.beginPath(); g.arc(x - 4, y - 20, r * 0.35, 0, 7); g.fill();
+    // hojitas sueltas en el borde y brillos
+    for (let i = 0; i < 26; i++) {
+      const a = rr() * Math.PI * 2, d = r * (0.5 + rr() * 0.6);
+      g.fillStyle = rr() < 0.5 ? shade(hi, 0.1) : shade(base, -0.25);
+      g.globalAlpha = 0.55; g.beginPath(); g.arc(x + Math.cos(a) * d, y - 14 + Math.sin(a) * d * 0.8, 1.3 + rr(), 0, 7); g.fill();
+    }
+    g.globalAlpha = 1;
+    void leaf;
   }
   return c;
 }
@@ -196,6 +246,9 @@ function mineSprite(gold: boolean, snow: boolean): HTMLCanvasElement {
   g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(x + 2, y + 9, 16, 6, 0, 0, 7); g.fill();
   const rock = (pts: number[][], col: string) => { g.fillStyle = col; g.beginPath(); g.moveTo(x + pts[0][0], y + pts[0][1]); for (const p of pts.slice(1)) g.lineTo(x + p[0], y + p[1]); g.closePath(); g.fill(); };
   rock([[-15, 9], [-10, -6], [0, -11], [12, -6], [15, 6], [8, 11], [-8, 11]], '#6e6a66');
+  g.strokeStyle = 'rgba(30,26,22,.65)'; g.lineWidth = 1.2; g.stroke();
+  rock([[-15, 9], [-8, 11], [8, 11], [15, 6], [6, 4], [-5, 5]], '#57534f');
+  g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(x - 10, y - 6); g.lineTo(x, y - 11); g.lineTo(x + 12, y - 6); g.stroke();
   rock([[-10, -6], [0, -11], [3, -1], [-5, 2]], '#8e8a85');
   rock([[3, -1], [12, -6], [15, 6], [6, 4]], '#5a5753');
   if (snow) rock([[-9, -6], [0, -11], [8, -8], [0, -6]], '#f1f5f9');
@@ -259,8 +312,8 @@ export class Renderer {
     const visible = (e: Entity) => {
       const tx = Math.floor(e.x / TILE), ty = Math.floor(e.y / TILE);
       const i = ty * w.w + tx;
-      if (e.cat === 'unit') return e.owner === me || !w.isEnemy(me, e.owner) || pl.visible[i] === 1;
-      for (let y = e.ty; y < e.ty + e.fh; y++) for (let x = e.tx; x < e.tx + e.fw; x++) if (pl.explored[y * w.w + x]) return true;
+      if (e.cat === 'unit') return e.owner === me || !w.isEnemy(me, e.owner) || this.exOf(pl.visible)[i] === 1;
+      for (let y = e.ty; y < e.ty + e.fh; y++) for (let x = e.tx; x < e.tx + e.fw; x++) if (this.exOf(pl.explored)[y * w.w + x]) return true;
       return false;
     };
 
@@ -281,17 +334,26 @@ export class Renderer {
       else if (e.cat === 'building') this.building(e, time);
       else this.unit(e, time);
     }
-    this.drawRelics(pl.explored, time, vx0, vy0, vx1, vy1);
+    this.drawRelics(this.exOf(pl.explored), time, vx0, vy0, vx1, vy1);
     for (const e of list) {
       if (e.cat === 'node' || e.type === 'wall') continue;
       if (sel.has(e.id) || (e.cat === 'unit' && (e.hp < e.maxHp || (settings.hpBars && e.owner === me))) || (e.cat === 'building' && (e.progress < 1 || e.hp < e.maxHp * 0.98))) this.hpBar(e);
     }
     this.drawFx(time);
     extra(g);
-    this.fog(pl.explored, pl.visible);
+    this.fog(this.exOf(pl.explored), this.exOf(pl.visible));
   }
 
   /** Reliquias: cofre dorado en el suelo, en la espalda del monje o en el monasterio */
+  /** Sin niebla (repeticiones): todo se ve */
+  noFog = false;
+  private ones?: Uint8Array;
+  private exOf(a: Uint8Array): Uint8Array {
+    if (!this.noFog) return a;
+    if (!this.ones || this.ones.length !== a.length) this.ones = new Uint8Array(a.length).fill(1);
+    return this.ones;
+  }
+
   private drawRelics(explored: Uint8Array, time: number, x0: number, y0: number, x1: number, y1: number) {
     const g = this.ctx, w = this.w;
     for (const r of w.relics) {
@@ -429,9 +491,15 @@ export class Renderer {
     const max = NODES[e.type as NodeType].amount;
     const SPOTS = [[-6, 3, 2.6], [5, 2, 2.8], [-1, 6, 2.2], [9, 7, 2], [-3, -3, 2], [-10, 6, 2], [2, -5, 2.2], [10, -1, 1.8], [-7, -1, 1.8], [4, 8, 2]];
     const n = Math.ceil((e.amount / max) * SPOTS.length);
-    g.fillStyle = col;
-    for (let i = 0; i < n; i++) { const [dx, dy, r] = SPOTS[i]; g.beginPath(); g.arc(e.x + dx, e.y + dy, r, 0, 7); g.fill(); }
-    if (n > 1) { g.fillStyle = hi; g.beginPath(); g.arc(e.x + 4, e.y + 1, 1, 0, 7); g.fill(); }
+    // vetas de mineral incrustadas en la roca: facetas con sombra, luz y un borde oscuro
+    for (let i = 0; i < n; i++) {
+      const [dx, dy, r0] = SPOTS[i], r = r0 * 0.8, cx = e.x + dx, cy = e.y + dy;
+      g.fillStyle = shade(col, -0.45);
+      g.beginPath(); g.moveTo(cx - r, cy + r * 0.3); g.lineTo(cx - r * 0.3, cy - r); g.lineTo(cx + r, cy - r * 0.4); g.lineTo(cx + r * 0.7, cy + r * 0.8); g.lineTo(cx - r * 0.4, cy + r); g.closePath(); g.fill();
+      g.fillStyle = col;
+      g.beginPath(); g.moveTo(cx - r * 0.7, cy + r * 0.1); g.lineTo(cx - r * 0.2, cy - r * 0.75); g.lineTo(cx + r * 0.7, cy - r * 0.3); g.lineTo(cx + r * 0.2, cy + r * 0.4); g.closePath(); g.fill();
+      g.fillStyle = hi; g.fillRect(cx - r * 0.25, cy - r * 0.55, 0.9, 0.9);
+    }
   }
 
   // --------------------------------------------------------------- edificios
@@ -440,8 +508,19 @@ export class Renderer {
     const g = this.ctx;
     const top = y0 + s - wallH; // donde empieza la pared frontal
     const wx0 = x0 + 3, wx1 = x0 + s - 3, wb = y0 + s - 3;
-    // pared frontal
-    g.fillStyle = wall; g.fillRect(wx0, top, wx1 - wx0, wb - top);
+    // pared frontal con luz de arriba y textura de revoque o piedra
+    const wg = g.createLinearGradient(0, top, 0, wb);
+    wg.addColorStop(0, shade(wall, 0.08)); wg.addColorStop(1, shade(wall, -0.12));
+    g.fillStyle = wg; g.fillRect(wx0, top, wx1 - wx0, wb - top);
+    {
+      let sd = Math.floor(x0 * 7 + y0 * 13) % 2147483646 + 1;
+      const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+      const n = Math.round((wx1 - wx0) * (wb - top) / 18);
+      for (let i = 0; i < n; i++) {
+        g.fillStyle = rr() < 0.5 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.08)';
+        g.fillRect(wx0 + rr() * (wx1 - wx0), top + rr() * (wb - top), 1 + rr() * 2.5, 1 + rr() * 1.5);
+      }
+    }
     g.beginPath();
     if (opts.stone) {
       // sillares
@@ -501,6 +580,21 @@ export class Renderer {
       g.stroke();
       g.fillStyle = 'rgba(255,255,255,0.07)';
       for (let yy = eave - 4; yy > ridgeY; yy -= 8) g.fillRect(x0, yy - 4, s, 2);
+      // tejas sueltas de otro tono: el techo no se ve liso
+      {
+        let sd = Math.floor(x0 * 11 + y0 * 3) % 2147483646 + 1;
+        const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+        for (let yy = eave - 4, row = 0; yy > ridgeY; yy -= 4, row++)
+          for (let xx = x0 + (row % 2 ? 3 : 0); xx < x0 + s; xx += 6) {
+            const q = rr();
+            if (q < 0.18) { g.fillStyle = 'rgba(0,0,0,0.13)'; g.fillRect(xx + 0.5, yy + 0.5, 5, 3); }
+            else if (q > 0.86) { g.fillStyle = 'rgba(255,240,220,0.13)'; g.fillRect(xx + 0.5, yy + 0.5, 5, 3); }
+          }
+      }
+      // sombra que el techo proyecta sobre sí mismo cerca del alero
+      const eg = g.createLinearGradient(0, eave - 6, 0, eave);
+      eg.addColorStop(0, 'rgba(0,0,0,0)'); eg.addColorStop(1, 'rgba(0,0,0,0.18)');
+      g.fillStyle = eg; g.fillRect(x0, eave - 6, s, 6);
       g.restore();
       // cumbrera (con el color del jugador como remate)
       g.strokeStyle = opts.trim ?? shade(roof, -0.35); g.lineWidth = opts.trim ? 3 : 1.5;
@@ -510,18 +604,32 @@ export class Renderer {
       g.strokeStyle = shade(roof, -0.3); g.lineWidth = 1;
       g.beginPath(); g.moveTo(x0, eave); g.lineTo(x0 + s, eave); g.stroke();
     }
+    // contorno: define la silueta del edificio sobre el pasto
+    g.strokeStyle = 'rgba(20,12,6,0.45)'; g.lineWidth = 1;
+    g.strokeRect(wx0 + 0.5, top + 0.5, wx1 - wx0 - 1, wb - top - 1);
     return top;
   }
 
   private door(cx: number, bottom: number, w: number, h: number) {
     const g = this.ctx;
-    g.fillStyle = '#3e2a1a';
-    g.beginPath(); g.moveTo(cx - w / 2, bottom); g.lineTo(cx - w / 2, bottom - h + w / 2); g.arc(cx, bottom - h + w / 2, w / 2, Math.PI, 0); g.lineTo(cx + w / 2, bottom); g.closePath(); g.fill();
+    const shape = () => { g.beginPath(); g.moveTo(cx - w / 2, bottom); g.lineTo(cx - w / 2, bottom - h + w / 2); g.arc(cx, bottom - h + w / 2, w / 2, Math.PI, 0); g.lineTo(cx + w / 2, bottom); g.closePath(); };
+    // marco de piedra, puerta de tablones con herrajes
+    g.fillStyle = '#8a8378'; g.save(); g.translate(0, 0); shape(); g.lineWidth = 3; g.strokeStyle = '#8a8378'; g.stroke(); g.restore();
+    g.fillStyle = '#5b3b22'; shape(); g.fill();
+    g.save(); shape(); g.clip();
+    g.strokeStyle = 'rgba(25,15,8,0.55)'; g.lineWidth = 0.8; g.beginPath();
+    for (let xx = cx - w / 2 + w / 4; xx < cx + w / 2; xx += w / 4) { g.moveTo(xx, bottom - h); g.lineTo(xx, bottom); }
+    g.stroke();
+    g.fillStyle = '#2a2622'; g.fillRect(cx - w / 2, bottom - h * 0.72, w, 1.4); g.fillRect(cx - w / 2, bottom - h * 0.3, w, 1.4);
+    g.restore();
+    g.fillStyle = '#c9a227'; g.beginPath(); g.arc(cx + w * 0.22, bottom - h * 0.48, 0.9, 0, 7); g.fill();
   }
   private windowAt(x: number, y: number) {
     const g = this.ctx;
-    g.fillStyle = '#2b2018'; g.fillRect(x, y, 6, 6);
-    g.fillStyle = 'rgba(255,214,120,0.55)'; g.fillRect(x + 1, y + 1, 4, 4);
+    g.fillStyle = '#3a2a1c'; g.fillRect(x - 1, y - 1, 8, 8); // marco
+    g.fillStyle = 'rgba(255,214,120,0.6)'; g.fillRect(x + 0.5, y + 0.5, 5, 5);
+    g.strokeStyle = '#3a2a1c'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(x + 3, y); g.lineTo(x + 3, y + 6); g.moveTo(x, y + 3); g.lineTo(x + 6, y + 3); g.stroke();
+    g.fillStyle = '#8a8378'; g.fillRect(x - 1.5, y + 7, 9, 1.4); // alféizar
   }
   private banner(x: number, y: number, col: string, time: number, h = 16) {
     const g = this.ctx;
@@ -1754,15 +1862,15 @@ export class Renderer {
     g.fillStyle = `rgb(${p.ground[0]},${p.ground[1]},${p.ground[2]})`; g.fillRect(0, 0, c.width, c.height);
     for (let i = 0; i < w.terrain.length; i++) if (w.terrain[i]) { g.fillStyle = w.terrain[i] === 1 ? p.water : p.shallow; g.fillRect((i % w.w) * sx, ((i / w.w) | 0) * sy, sx + 0.5, sy + 0.5); }
     for (const e of w.entities.values()) {
-      if (e.cat === 'unit' && w.isEnemy(me, e.owner) && !pl.visible[Math.floor(e.y / TILE) * w.w + Math.floor(e.x / TILE)]) continue;
-      if (e.cat !== 'unit' && !pl.explored[e.ty * w.w + e.tx]) continue;
+      if (e.cat === 'unit' && w.isEnemy(me, e.owner) && !this.exOf(pl.visible)[Math.floor(e.y / TILE) * w.w + Math.floor(e.x / TILE)]) continue;
+      if (e.cat !== 'unit' && !this.exOf(pl.explored)[e.ty * w.w + e.tx]) continue;
       if (e.cat === 'node') g.fillStyle = e.type === 'tree' ? '#1f4d22' : e.type === 'goldmine' ? '#f5c518' : e.type === 'berries' ? '#d6336c' : '#cfd8dc';
       else g.fillStyle = w.players[e.owner].color;
       if (e.cat === 'unit') g.fillRect(e.x / TILE * sx - 1, e.y / TILE * sy - 1, 2.5, 2.5);
       else g.fillRect(e.tx * sx, e.ty * sy, Math.max(2, e.fw * sx), Math.max(2, e.fh * sy));
     }
     g.fillStyle = '#05070a';
-    for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (!pl.explored[y * w.w + x]) g.fillRect(x * sx, y * sy, sx + 0.5, sy + 0.5);
+    for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (!this.exOf(pl.explored)[y * w.w + x]) g.fillRect(x * sx, y * sy, sx + 0.5, sy + 0.5);
     g.strokeStyle = '#fff'; g.lineWidth = 1;
     g.strokeRect(cam.x / TILE * sx, cam.y / TILE * sy, vw / cam.zoom / TILE * sx, vh / cam.zoom / TILE * sy);
   }

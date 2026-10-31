@@ -160,3 +160,17 @@ test('la mejora de una unidad que pide Química no se puede investigar antes', (
   w.step();
   assert.equal(r.tech, 'up_handcannon');
 });
+
+test('mapa Islas: cada reino en su isla y la IA cruza en barco de transporte', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'hard', seed: 1, map: 'islotes', biome: 'templado', players: [
+    { ai: true, civ: 'francos', team: 1, color: 0, difficulty: 'hard' }, { ai: true, civ: 'britanos', team: 2, color: 1, difficulty: 'normal' }] });
+  const w = m.world;
+  const tcs = w.players.map((p) => w.buildingsOf(p.id, 'towncenter')[0]);
+  assert.notEqual(w.regionOf(tcs[0]), w.regionOf(tcs[1]), 'islas separadas');
+  let landed = 0;
+  for (let i = 0; i < 20 * 60 * 16 && w.winnerTeam < 0; i++) {
+    for (const ai of m.ais) ai.update(); w.step();
+    if (i % 400 === 0) landed = Math.max(landed, w.unitsOf(0).filter((u) => !u.type.includes('ship') && u.type !== 'transport' && w.regionOf(u) === w.regionOf(tcs[1])).length);
+  }
+  assert.ok(landed > 0, 'desembarcó en la isla enemiga');
+});

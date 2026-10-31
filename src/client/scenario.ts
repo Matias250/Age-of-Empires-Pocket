@@ -24,9 +24,12 @@ export class ScenarioRunner {
   private lastGoal = '';
   result: 'win' | 'lose' | null = null;
 
-  constructor(private g: Game, readonly scn: Scenario) {
-    this.state = new ScenarioState(g.world, scn);
+  constructor(private g: Game, readonly scn: Scenario, state?: ScenarioState, private replay = false) {
+    this.state = state ?? new ScenarioState(g.world, scn);
   }
+
+  /** Partida cargada o repetición: sin la presentación, directo al objetivo */
+  resume() { this.renderGoal(); }
 
   start() {
     const extra: ScnLine[] = [];
@@ -61,7 +64,7 @@ export class ScenarioRunner {
   tick() {
     if (this.result) return;
     this.result = this.state.step();
-    if (this.result === 'win') markStoryDone(this.scn.id);
+    if (this.result === 'win' && !this.replay) markStoryDone(this.scn.id);
   }
 
   /** Cada cuadro */

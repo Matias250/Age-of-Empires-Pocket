@@ -56,6 +56,7 @@ export class Tutorial {
         lines: [
           { who: 'Ilen', text: 'Necesitamos más manos. Tocá el 🏰 Centro Urbano y entrená aldeanos.' },
           { who: 'Bram', text: 'Y mandá a alguno a las bayas 🫐: sin comida no hay aldeanos ni soldados. Los vecinos nos mandaron 100 de comida.' },
+          { who: 'Ilen', text: 'Cuando se acaben las bayas: primero un 🌾 Molino y después granjas alrededor, con un aldeano en cada una.' },
         ],
         enter: () => { document.getElementById('btnBuild')?.classList.remove('pulse'); gift(100, 0, 0); },
         goal: 'Llegá a 6 aldeanos',
@@ -99,7 +100,8 @@ export class Tutorial {
       {
         lines: [
           { who: 'Ilen', text: 'Bien hecho. Ahora llevemos la pelea a su puerta: el Fortín de los Cuervos está al noreste.' },
-          { who: 'Bram', text: 'Juntá tu ejército, tocá ⚔️ Atacar zona y tocá cerca del fortín. Si te faltan soldados, entrená más: el pueblo donó recursos.' },
+          { who: 'Bram', text: 'Tocá 🛡️ Ejército y después tocá el fortín para atacarlo. Si te faltan soldados, entrená más: el pueblo donó recursos.' },
+          { who: 'Ilen', text: 'Un truco: con el ejército elegido, mantené apretado el botón 1 de la izquierda y queda guardado. Después, un toque al 1 y los tenés de nuevo.' },
           { who: 'Bram', text: 'Los vecinos levantaron dos casas 🏠 más, así podés entrenar más soldados.' },
           { who: 'Narrador', text: 'Regla de las partidas rápidas: el bando que pierde su Centro Urbano, pierde la partida.' },
         ],

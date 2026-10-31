@@ -1,7 +1,7 @@
 {
-  "name": "Age of Empires Pocket",
-  "short_name": "AoE Pocket",
-  "description": "Estrategia en tiempo real de partidas rápidas para el celular",
+  "name": "Imperios Pocket",
+  "short_name": "Imperios Pocket",
+  "description": "Fangame de estrategia en tiempo real para el celular, inspirado en Age of Empires II",
   "id": "./",
   "start_url": "./",
   "scope": "./",

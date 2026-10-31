@@ -1,9 +1,18 @@
-# ⚜️ Age of Empires Pocket
+# ⚜️ Imperios Pocket
 
 Juego de estrategia en tiempo real inspirado en los clásicos del género (aldeanos, recursos, eras, ejércitos),
 pensado para **celular** y para **partidas cortas de 10 a 15 minutos**.
 
 > Prototipo jugable v1.0 — arte y código originales. En español (por defecto), inglés y portugués.
+
+
+## Novedades
+
+- Partida guardada automáticamente: si se cierra la app, aparece **Continuar** en el menú.
+- **Repeticiones** de las últimas 5 partidas, sin niebla y a 1×, 2×, 4× u 8×.
+- Sonido y música medieval (se apagan en Configuración o en la pausa).
+- Mapa **Islas**: cada reino en su isla; hay que cruzar en barco de transporte (la IA también lo hace).
+- Gráfico en las estadísticas, grupos de unidades 1·2·3 y aviso cuando hay más botones en el panel.
 
 ## Qué incluye
 
@@ -73,7 +82,7 @@ Otros comandos:
 
 ```bash
 npm test           # simula partidas IA contra IA sin pantalla (ver tests/)
-npm run bundle     # genera build/age-of-empires-pocket.html: el juego entero en UN archivo
+npm run bundle     # genera build/imperios-pocket.html: el juego entero en UN archivo
 ```
 
 ## Publicación automática

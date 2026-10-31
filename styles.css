@@ -565,3 +565,40 @@ table.players.st tr.winner td { background: rgba(201,162,39,.22); }
 table.players.st tr.winner td:first-child { box-shadow: inset 3px 0 0 #c9a227; }
 table.players.st tr.loser td { opacity: .78; }
 svg.ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; display: inline-block; }
+.logo .fan { font-size: 11px; opacity: .65; margin-top: 2px; letter-spacing: .3px; }
+
+/* continuar partida guardada */
+.hbig.cont { position: relative; border-color: #c9a227; background: linear-gradient(135deg, #4a3417, #2c2012); }
+.hbig.cont i { color: #ffd23f; }
+.hbig .x { position: absolute; right: 8px; top: 6px; font-size: 13px; opacity: .6; padding: 4px 6px; }
+/* repeticiones */
+.replays { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 14px; }
+.replay { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--edge); background: var(--wood2); color: inherit; }
+.replay i { font-style: normal; font-size: 22px; } .replay div { flex: 1; display: flex; flex-direction: column; } .replay small { opacity: .7; } .replay span { font-size: 18px; color: #ffd23f; }
+#replaybar { position: fixed; left: 50%; transform: translateX(-50%); top: calc(86px + var(--sat)); white-space: nowrap; z-index: 30; display: flex; gap: 6px; align-items: center;
+  background: rgba(28,21,15,.92); border: 1px solid var(--edge); border-radius: 22px; padding: 5px 10px; color: #f3e3c0; font-size: 13px; }
+#replaybar button { background: var(--wood2); color: inherit; border: 1px solid var(--edge); border-radius: 12px; padding: 4px 9px; font-size: 13px; }
+#replaybar button.on { background: #c9a227; color: #1a1410; }
+
+/* botones de acción: el degradado solo cuando hay más, y una flecha para verlos */
+.acts { -webkit-mask-image: none; mask-image: none; }
+.acts.fade { -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
+#panel { position: relative; }
+.more-arrow { position: absolute; right: 2px; bottom: 34px; width: 30px; height: 44px; border-radius: 10px; z-index: 3;
+  background: rgba(201,162,39,.92); color: #1a1410; font-size: 26px; font-weight: 800; line-height: 1; border: 1px solid #f3d27a;
+  box-shadow: 0 2px 8px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; }
+.more-arrow[hidden] { display: none; }
+
+/* grupos de unidades 1 · 2 · 3 */
+#groups { position: fixed; left: calc(8px + var(--sal)); top: calc(88px + var(--sat)); display: flex; flex-direction: column; gap: 6px; z-index: 4; }
+#groups button { position: relative; width: 38px; height: 38px; border-radius: 10px; background: rgba(28,21,15,.82); border: 1px solid var(--edge);
+  color: #cdbb94; font-weight: 800; font-size: 16px; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#groups button.on { color: #ffe08a; border-color: #c9a227; }
+#groups button small { position: absolute; right: 2px; bottom: 1px; font-size: 9px; font-weight: 700; color: #f3e3c0; }
+.chart-tabs { display: flex; gap: 6px; justify-content: center; margin: 10px 0 4px; flex-wrap: wrap; }
+.chart-tabs button { background: var(--wood2); color: #e8d6ae; border: 1px solid var(--edge); border-radius: 14px; padding: 4px 10px; font-size: 12px; }
+.chart-tabs button.on { background: #c9a227; color: #1a1410; }
+canvas.chart { width: 100%; max-width: 340px; height: auto; display: block; margin: 0 auto 6px; background: rgba(0,0,0,.18); border-radius: 8px; }
+table.players.st td { padding: 4px 3px; font-size: 12px; }
+table.players.st td.top::before { content: none; }
+table.players.st td.top { background: rgba(201,162,39,.28); border-radius: 4px; }

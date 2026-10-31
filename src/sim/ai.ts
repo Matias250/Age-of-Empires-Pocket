@@ -54,6 +54,9 @@ export class AI {
   /** órdenes recibidas por el chat */
   chatOrder: 'auto' | 'attack' | 'defend' | 'hold' = 'auto';
   private orderFrom = -1;
+  /** cruce en barco de transporte (mapas de islas sin vados) */
+  private ferry: { ship: number; phase: 'load' | 'sail' | 'drop'; until: number; dx: number; dy: number } | null = null;
+  private island = -1; // -1 sin calcular, 0 se llega por tierra, 1 hace falta barco
   private chatIdx = 0;
 
   constructor(private w: World, p: number, readonly diff: Difficulty) {
@@ -237,7 +240,7 @@ export class AI {
   // ------------------------------------------------------------------ flota
   private navy(tc: Entity) {
     const w = this.w, pl = this.pl, P = this.prof;
-    if (!P.fish && !P.warships) return;
+    if (!P.fish && !P.warships && !this.needsBoats(tc)) return;
     const docks = w.buildingsOf(this.p, 'dock');
     const vills = w.unitsOf(this.p, 'villager').length;
     if (!docks.length) {
@@ -259,7 +262,9 @@ export class AI {
     // producción
     if (queued < 2) {
       const fishLeft = w.findNode(fishers[0] ?? ({ ...dock, cat: 'unit', type: 'fishship' } as Entity), 'food', 26 * TILE);
-      if (fishers.length < P.fish && fishLeft && w.canAfford(this.p, w.unitCost(this.p, 'fishship'))) w.issue({ t: 'train', p: this.p, bid: dock.id, u: 'fishship' });
+      const boats = w.unitsOf(this.p, 'transport').length + dock.queue.filter((q) => q === 'transport').length;
+      if (this.needsBoats(tc) && pl.age >= 2 && boats < (this.diff === 'hard' ? 3 : this.diff === 'normal' ? 2 : 1) && fishers.length >= 2) { if (w.canAfford(this.p, w.unitCost(this.p, 'transport'))) w.issue({ t: 'train', p: this.p, bid: dock.id, u: 'transport' }); }
+      else if (fishers.length < P.fish && fishLeft && w.canAfford(this.p, w.unitCost(this.p, 'fishship'))) w.issue({ t: 'train', p: this.p, bid: dock.id, u: 'fishship' });
       else if (pl.age >= 2 && ships.length < P.warships && !this.savingForAge(vills)) {
         const opts = w.trainsOf(this.p, 'dock').filter((u) => u !== 'fishship' && !UNITS[u].trade && !UNITS[u].carries && UNITS[u].age <= pl.age && (!UNITS[u].requires || pl.techs.has(UNITS[u].requires!)));
         const u = opts.length ? opts[Math.floor(w.rng.next() * opts.length)] : undefined;
@@ -399,6 +404,7 @@ export class AI {
         this.attackTarget = target?.id ?? 0;
       }
       if (!target) return;
+      if (w.regionOf(target) !== w.regionOf(tc) && w.regionOf(target) >= 0) { this.amphibious(fighters, target, tc); return; }
       const idle = army.filter((u) => !u.order).map((u) => u.id);
       if (idle.length) w.issue({ t: 'attackMove', p: this.p, ids: idle, x: target.x, y: target.y });
     } else {
@@ -407,6 +413,83 @@ export class AI {
       const gy = enemyDir ? tc.y + Math.sign(enemyDir.y - tc.y) * 4 * TILE : tc.y + 4 * TILE;
       const idle = army.filter((u) => !u.order && Math.hypot(u.x - gx, u.y - gy) > 3 * TILE).map((u) => u.id);
       if (idle.length) w.issue({ t: 'move', p: this.p, ids: idle, x: gx, y: gy });
+    }
+  }
+
+  /** ¿Algún enemigo está en otra isla? (entonces hacen falta barcos de transporte) */
+  private needsBoats(tc: Entity): boolean {
+    if (this.island < 0) {
+      const w = this.w, home = w.regionOf(tc);
+      this.island = w.players.some((o) => w.isEnemy(this.p, o.id) && w.buildingsOf(o.id, 'towncenter').some((t) => w.regionOf(t) !== home)) ? 1 : 0;
+    }
+    return this.island === 1;
+  }
+
+  /** Casilla de agua navegable pegada a la costa de una región, lo más cerca posible de un punto */
+  private shoreSpot(region: number, near: { x: number; y: number }): { x: number; y: number } | null {
+    const w = this.w;
+    let best: { x: number; y: number } | null = null, bd = Infinity;
+    for (let y = 1; y < w.h - 1; y++) for (let x = 1; x < w.w - 1; x++) {
+      const i = y * w.w + x;
+      if (w.terrain[i] !== 1 || w.nav.solid[i]) continue;
+      if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => w.regionAt(x + dx, y + dy) === region && !w.tileSolid(x + dx, y + dy))) continue;
+      const d = Math.hypot(x * TILE - near.x, y * TILE - near.y);
+      if (d < bd) { bd = d; best = { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 }; }
+    }
+    return best;
+  }
+
+  /** Lleva el ejército en barco hasta la isla del objetivo: cargar, navegar y desembarcar */
+  private amphibious(fighters: Entity[], target: Entity, tc: Entity) {
+    const w = this.w, home = w.regionOf(tc);
+    const there = fighters.filter((u) => !u.order && w.regionOf(u) === w.regionOf(target)).map((u) => u.id);
+    if (there.length) w.issue({ t: 'attackMove', p: this.p, ids: there, x: target.x, y: target.y });
+    const ships = w.unitsOf(this.p, 'transport');
+    let f = this.ferry;
+    if (!f) {
+      if (!ships.length) return;
+      f = this.ferry = { ship: ships[0].id, phase: 'load', until: w.tick + 50 * TICK_RATE, dx: 0, dy: 0 };
+    }
+    // la flota: todos los barcos de transporte viajan juntos
+    const fleet = ships;
+    if (!fleet.length) { this.ferry = null; return; }
+    const cargo = (s2: Entity) => s2.cargo?.length ?? 0;
+    const load = fleet.reduce((n, s2) => n + cargo(s2), 0);
+    const cap = fleet.reduce((n, s2) => n + w.capacityOf(s2), 0);
+    if (f.phase === 'load') {
+      const pick = this.shoreSpot(home, tc);
+      if (!pick) return;
+      const away = fleet.filter((s2) => Math.hypot(s2.x - pick.x, s2.y - pick.y) > TILE * 2.5);
+      const moving = away.filter((s2) => !s2.order).map((s2) => s2.id);
+      if (moving.length) w.issue({ t: 'move', p: this.p, ids: moving, x: pick.x, y: pick.y });
+      const ready = fleet.filter((s2) => !away.includes(s2) && cargo(s2) < w.capacityOf(s2));
+      const waiting = fighters.filter((u) => w.regionOf(u) === home && u.order?.t !== 'board');
+      const boarding = fighters.filter((u) => u.order?.t === 'board').length;
+      let k = 0;
+      for (const s2 of ready) {
+        const room = w.capacityOf(s2) - cargo(s2) - fighters.filter((u) => u.order?.t === 'board' && u.order.target === s2.id).length;
+        if (room <= 0) continue;
+        const ids = waiting.slice(k, k + room).map((u) => u.id); k += room;
+        if (ids.length) w.issue({ t: 'target', p: this.p, ids, target: s2.id });
+      }
+      if (load >= cap || (load > 0 && (w.tick > f.until || (!waiting.length && !boarding)))) {
+        const drop = this.shoreSpot(w.regionOf(target), target);
+        if (!drop) return;
+        f.phase = 'sail'; f.dx = drop.x; f.dy = drop.y;
+        w.issue({ t: 'move', p: this.p, ids: fleet.filter((s2) => cargo(s2) > 0).map((s2) => s2.id), x: drop.x, y: drop.y });
+      }
+    } else if (f.phase === 'sail') {
+      const loaded = fleet.filter((s2) => cargo(s2) > 0);
+      if (!loaded.length) { f.phase = 'load'; return; }
+      const arrived = loaded.filter((s2) => !s2.order).map((s2) => s2.id);
+      if (arrived.length) w.issue({ t: 'unload', p: this.p, ids: arrived });
+      if (arrived.length === loaded.length) f.phase = 'drop';
+    } else {
+      const loaded = fleet.filter((s2) => cargo(s2) > 0);
+      if (!loaded.length) { f.phase = 'load'; f.until = w.tick + 50 * TICK_RATE; return; }
+      const idle = loaded.filter((s2) => !s2.order).map((s2) => s2.id);
+      if (idle.length) w.issue({ t: 'move', p: this.p, ids: idle, x: f.dx + (w.rng.next() - 0.5) * TILE * 3, y: f.dy + (w.rng.next() - 0.5) * TILE * 3 });
+      w.issue({ t: 'unload', p: this.p, ids: loaded.map((s2) => s2.id) });
     }
   }
 

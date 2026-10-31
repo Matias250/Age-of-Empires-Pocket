@@ -334,14 +334,14 @@ export class World implements Grid {
     const e = this.get(this.occ[i]);
     if (e && e.cat === 'node') this.kill(e);
     else if (e) return;
-    this.terrain[i] = kind;
+    this.terrain[i] = kind; this.landReg = undefined;
     this.refreshCell(i);
   }
 
   setLand(x: number, y: number) {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
     const i = y * this.w + x;
-    this.terrain[i] = 0;
+    this.terrain[i] = 0; this.landReg = undefined;
     this.refreshCell(i);
   }
 
@@ -588,7 +588,53 @@ export class World implements Grid {
   }
 
   // -------------------------------------------------------------- comandos
-  issue(c: Command) { this.pending.push(c); }
+  /** jugador cuyos comandos se anotan (para guardar la partida y las repeticiones) */
+  recordFor = -1;
+  cmdLog: { tick: number; c: Command }[] = [];
+  /** en una repetición los comandos de ese jugador solo llegan grabados */
+  lockedFor = -1;
+  issue(c: Command) {
+    if (c.p === this.lockedFor) return;
+    if (c.p === this.recordFor) this.cmdLog.push({ tick: this.tick, c: JSON.parse(JSON.stringify(c)) });
+    this.pending.push(c);
+  }
+  /** Mete un comando grabado (repeticiones) */
+  inject(c: Command) { this.pending.push(c); }
+  /** Regiones de tierra conectada (para saber si hace falta cruzar en barco) */
+  private landReg?: Int32Array;
+  regionAt(tx: number, ty: number): number {
+    if (!this.landReg) {
+      const r = new Int32Array(this.w * this.h).fill(-1);
+      let n = 0;
+      for (let i = 0; i < r.length; i++) {
+        if (r[i] >= 0 || this.terrain[i] === 1) continue;
+        const st = [i]; r[i] = n;
+        while (st.length) {
+          const c = st.pop()!, x = c % this.w, y = (c / this.w) | 0;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= this.w || ny >= this.h) continue;
+            const j = ny * this.w + nx;
+            if (r[j] >= 0 || this.terrain[j] === 1) continue;
+            r[j] = n; st.push(j);
+          }
+        }
+        n++;
+      }
+      this.landReg = r;
+    }
+    if (tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return -1;
+    return this.landReg[ty * this.w + tx];
+  }
+  /** Región de tierra de una entidad (los edificios: la de su casilla) */
+  regionOf(e: { x: number; y: number }): number { return this.regionAt(Math.floor(e.x / TILE), Math.floor(e.y / TILE)); }
+
+  /** Después de cargar una partida guardada: rehacer los índices que no se guardan */
+  afterRestore() {
+    this.ownUnits = []; this.ownBuildings = []; this.popCache = []; this.capCache = [];
+    this.buckets = new Map(); this.allBuildings = []; this.teamGrids = new Map(); this.unreachable = new Map();
+    this.events = []; this.dirty = true; this.landReg = undefined;
+  }
 
   private applyCommand(c: Command) {
     const pl = this.players[c.p];

@@ -3,12 +3,40 @@ import { AGE_NAME, BUILDINGS, BuildingType, isLandArmy, NODES, NodeType, TICK_RA
 import { createMatch, Match, MatchConfig } from '../sim/match.js';
 import { createScenario, findScenario, scaleScenario } from '../sim/campaigns.js';
 import { ScenarioRunner } from './scenario.js';
-import { Entity, Order, World } from '../sim/world.js';
+import { Command, Entity, Order, World } from '../sim/world.js';
 import { Camera, Renderer } from './render.js';
 import { Hud } from './hud.js';
 import { Tutorial } from './tutorial.js';
 import { AchTracker } from './achievements.js';
 import { Chat } from './chat.js';
+import { loadGame, saveGame } from '../sim/save.js';
+import type { Scenario } from '../sim/campaigns.js';
+import { Sound } from './sound.js';
+import { CIVS } from '../sim/civs.js';
+
+/** Muestra periódica para el gráfico de las estadísticas */
+export interface HistPoint { t: number; v: { pop: number; army: number; res: number; score: number }[] }
+interface SaveExtra { cam: Camera; startCfg: MatchConfig; history: HistPoint[] }
+export interface ReplayData { cfg: MatchConfig; log: { tick: number; c: Command }[]; end: number; title: string; date: number; win: boolean; me: number }
+
+const SAVE_KEY = 'partida', INFO_KEY = 'partida-info', REPLAYS_KEY = 'repeticiones';
+export interface SaveInfo { title: string; minutes: number; date: number; mode: string }
+export function savedInfo(): SaveInfo | null {
+  try { const v = localStorage.getItem(INFO_KEY); return v && localStorage.getItem(SAVE_KEY) ? JSON.parse(v) : null; } catch { return null; }
+}
+export function loadSaved(): { cfg: MatchConfig; json: string } | null {
+  try {
+    const json = localStorage.getItem(SAVE_KEY); const info = localStorage.getItem(INFO_KEY);
+    if (!json || !info) return null;
+    return { cfg: (JSON.parse(info) as SaveInfo & { cfg: MatchConfig }).cfg, json };
+  } catch { return null; }
+}
+export function clearSaved() { try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(INFO_KEY); } catch { /* nada */ } }
+export function listReplays(): ReplayData[] { try { return JSON.parse(localStorage.getItem(REPLAYS_KEY) ?? '[]'); } catch { return []; } }
+function storeReplay(r: ReplayData) {
+  const l = listReplays(); l.unshift(r);
+  while (l.length) { try { localStorage.setItem(REPLAYS_KEY, JSON.stringify(l.slice(0, 5))); return; } catch { l.pop(); } }
+}
 
 export type InputMode = 'normal' | 'attack' | 'rally' | 'box';
 
@@ -56,20 +84,43 @@ export class Game {
   private minimapAt = 0;
   private listeners: [EventTarget, string, EventListener][] = [];
 
-  constructor(private canvas: HTMLCanvasElement, cfg: MatchConfig, private onExit: () => void) {
+  /** repetición en curso (si no, partida normal) */
+  replay?: ReplayData;
+  private replayIdx = 0;
+  private scn?: Scenario;
+  private startCfg: MatchConfig;
+  history: HistPoint[] = [];
+  private lastSave = 0;
+  sound = new Sound();
+
+  constructor(private canvas: HTMLCanvasElement, cfg: MatchConfig, private onExit: () => void, opts: { resume?: string; replay?: ReplayData } = {}) {
     const found = cfg.mode === 'scenario' && cfg.scenario ? findScenario(cfg.scenario) : undefined;
     const scn = found ? scaleScenario(found.scn, cfg.difficulty) : undefined;
-    this.match = scn ? createScenario(scn, cfg.color ?? 0) : createMatch(cfg);
-    if (scn) this.match.cfg.difficulty = cfg.difficulty;
+    this.scn = scn;
+    this.startCfg = cfg;
+    this.replay = opts.replay;
+    let restoredStory;
+    let extra: SaveExtra | undefined;
+    if (opts.resume) {
+      const sv = loadGame<SaveExtra>(opts.resume, scn);
+      this.match = sv.match; restoredStory = sv.story; extra = sv.extra;
+      if (extra?.history) this.history = extra.history;
+    } else {
+      this.match = scn ? createScenario(scn, cfg.color ?? 0) : createMatch(cfg);
+      if (scn) this.match.cfg.difficulty = cfg.difficulty;
+    }
     this.world = this.match.world;
     this.me = this.match.human;
+    if (this.replay) { this.world.lockedFor = this.me; this.world.recordFor = -1; }
+    else if (cfg.mode !== 'tutorial' && !opts.resume) this.world.recordFor = this.me;
     this.ctx = canvas.getContext('2d')!;
     this.renderer = new Renderer(this.ctx, this.world);
+    if (this.replay) this.renderer.noFog = true;
     this.hud = new Hud(this);
     this.ach = new AchTracker(this);
     this.chat = new Chat(this);
-    if (cfg.mode === 'tutorial') this.tutorial = new Tutorial(this);
-    if (scn) this.story = new ScenarioRunner(this, scn);
+    if (cfg.mode === 'tutorial' && !opts.resume && !this.replay) this.tutorial = new Tutorial(this);
+    if (scn) this.story = new ScenarioRunner(this, scn, restoredStory, !!this.replay);
     this.resize();
     const tc = this.world.buildingsOf(this.me, 'towncenter')[0];
     if (tc) this.centerOn(tc.x, tc.y);
@@ -78,12 +129,80 @@ export class Game {
     this.bindInput();
     this.last = performance.now();
     this.raf = requestAnimationFrame((t) => this.frame(t));
+    if (extra?.cam) { this.cam = { ...extra.cam }; this.clampCam(); }
     this.tutorial?.start();
-    this.story?.start();
+    if (opts.resume || this.replay) this.story?.resume(); else this.story?.start();
+    if (this.replay) this.buildReplayBar();
+    else if (cfg.mode !== 'tutorial') {
+      this.on(document, 'visibilitychange', () => { if (document.visibilityState === 'hidden') this.save(); });
+      this.on(window, 'pagehide', () => this.save());
+    }
+    this.sound.music(true);
+  }
+
+  // ------------------------------------------------------------- guardar
+  /** Guarda la partida para poder seguirla después (no en tutorial ni repeticiones) */
+  save() {
+    if (this.replay || this.over || this.tutorial || this.match.cfg.mode === 'tutorial') return;
+    try {
+      const json = saveGame<SaveExtra>({ match: this.match, story: this.story?.state, extra: { cam: { ...this.cam }, startCfg: this.startCfg, history: this.history } }, this.scn);
+      localStorage.setItem(SAVE_KEY, json);
+      const civ = this.world.players[this.me].civ;
+      const title = this.scn ? this.scn.title : `Escaramuza${civ ? ' · ' + CIVS[civ].name : ''}`;
+      localStorage.setItem(INFO_KEY, JSON.stringify({ title, minutes: Math.floor(this.world.tick / TICK_RATE / 60), date: Date.now(), mode: this.startCfg.mode, cfg: this.startCfg }));
+      this.lastSave = performance.now();
+    } catch { /* sin lugar: se sigue sin guardar */ }
+  }
+
+  /** Al terminar: se borra la partida guardada y queda la repetición */
+  private finish(win: boolean) {
+    clearSaved();
+    if (this.replay || this.match.cfg.mode === 'tutorial') return;
+    const w = this.world;
+    storeReplay({
+      cfg: this.startCfg, log: w.cmdLog, end: w.tick, date: Date.now(), win, me: this.me,
+      title: this.scn ? this.scn.title : `${w.players.filter((p) => !p.neutral).length} jugadores · ${Math.floor(w.tick / TICK_RATE / 60)} min`,
+    });
+  }
+
+  // ------------------------------------------------------------- repeticiones
+  private replayBar?: HTMLElement;
+  private buildReplayBar() {
+    const b = document.createElement('div');
+    b.id = 'replaybar';
+    const render = () => {
+      b.innerHTML = `<b>🎬</b>
+        <button data-r="pause">${this.paused ? '▶' : '⏸'}</button>
+        ${[1, 2, 4, 8].map((k) => `<button data-r="${k}" class="${this.speed === k ? 'on' : ''}">${k}×</button>`).join('')}
+        <button data-r="exit">Salir</button>`;
+    };
+    render();
+    b.onclick = (e) => {
+      const r = (e.target as HTMLElement).closest('[data-r]')?.getAttribute('data-r');
+      if (!r) return;
+      if (r === 'exit') return this.exit();
+      if (r === 'pause') this.paused = !this.paused; else this.speed = Number(r);
+      render();
+    };
+    document.body.appendChild(b);
+    this.replayBar = b;
+  }
+
+  /** Muestra para el gráfico de estadísticas */
+  private sample() {
+    const w = this.world;
+    this.history.push({ t: w.tick, v: w.players.map((p) => ({
+      pop: w.popOf(p.id),
+      army: w.unitsOf(p.id).filter((u) => u.type !== 'villager' && UNITS[u.type as UnitType].atk > 0).length,
+      res: Math.round(p.stats.gathered.food + p.stats.gathered.wood + p.stats.gathered.gold + p.stats.gathered.stone),
+      score: w.score(p.id).total,
+    })) });
   }
 
   destroy() {
     cancelAnimationFrame(this.raf);
+    this.replayBar?.remove();
+    this.sound.music(false);
     for (const [t, n, f] of this.listeners) t.removeEventListener(n, f);
     this.hud.destroy();
     this.tutorial?.destroy();
@@ -91,32 +210,55 @@ export class Game {
     this.story?.destroy();
   }
 
-  exit() { this.destroy(); this.onExit(); }
+  exit() { if (!this.over) this.save(); this.destroy(); this.onExit(); }
 
   // ------------------------------------------------------------- bucle
+  /** calidad automática: si el celular no da abasto, se dibuja a menor resolución */
+  private lowRes = false;
+  private frameMs = 16;
+  private slowFor = 0;
   private frame(now: number) {
     this.raf = requestAnimationFrame((t) => this.frame(t));
     const dt = Math.min(0.1, (now - this.last) / 1000);
+    this.frameMs = this.frameMs * 0.95 + (now - this.last) * 0.05;
+    if (!this.lowRes && this.dpr > 1 && !document.hidden) {
+      this.slowFor = this.frameMs > 26 ? this.slowFor + dt : 0;
+      if (this.slowFor > 4) { this.lowRes = true; this.resize(); }
+    }
     this.last = now;
     this.time += dt;
     const w = this.world;
     if (!this.paused && !this.over) {
       this.acc += dt * this.speed;
       let steps = 0;
-      while (this.acc >= 1 / TICK_RATE && steps < 8) {
+      while (this.acc >= 1 / TICK_RATE && steps < 12) {
+        if (this.replay) { const L = this.replay.log; while (this.replayIdx < L.length && L[this.replayIdx].tick <= w.tick) w.inject(L[this.replayIdx++].c); }
         for (const ai of this.match.ais) ai.update();
         w.step();
         this.story?.tick();
+        if (w.tick % (TICK_RATE * 30) === 0) this.sample();
         this.acc -= 1 / TICK_RATE;
         steps++;
       }
       this.consumeEvents();
       this.tutorial?.update();
       this.story?.update();
-      this.ach.update();
+      if (!this.replay) this.ach.update();
+      if (!this.replay && now - this.lastSave > 20000) { if (this.lastSave) this.save(); else this.lastSave = now; }
+      if (this.replay && w.tick >= this.replay.end && !this.over) {
+        this.over = true;
+        this.hud.toast('🎬 Fin de la repetición');
+      }
       if (w.winnerTeam >= 0 && !this.over) {
         this.over = true;
-        setTimeout(() => this.hud.showEnd(w.winnerTeam === w.players[this.me].team), 900);
+        const win = w.winnerTeam === w.players[this.me].team;
+        if (this.replay) this.hud.toast(win ? '🎬 Fin: victoria' : '🎬 Fin: derrota');
+        else {
+          this.sample();
+          this.finish(win);
+          this.sound.play(win ? 'win' : 'lose');
+          setTimeout(() => this.hud.showEnd(win), 900);
+        }
       }
     }
     this.keyPan(dt);
@@ -128,10 +270,12 @@ export class Game {
   }
 
   private consumeEvents() {
-    const w = this.world, R = this.renderer;
+    const w = this.world, R = this.renderer, S = this.sound;
+    const near = (x: number, y: number) => this.onScreen({ x, y } as Entity);
     for (const e of w.events) {
       switch (e.t) {
         case 'shot': {
+          if (near(e.x1, e.y1) || near(e.x2, e.y2)) S.play(e.kind === 'ball' || e.kind === 'stone' ? 'boom' : 'arrow', e.kind === 'ball' || e.kind === 'stone' ? 0.6 : 0.5);
           const d = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
           const life = e.kind === 'stone' ? 0.25 + d / 500 : e.kind === 'ball' ? 0.12 + d / 1400 : e.kind === 'fire' ? 0.25 : 0.2 + d / 900;
           if (R.fx.length < 260) R.fx.push({ kind: 'shot', proj: e.kind, x: e.x1, y: e.y1, x2: e.x2, y2: e.y2, t: this.time, life });
@@ -139,13 +283,15 @@ export class Game {
         }
         case 'blast': R.fx.push({ kind: 'blast', x: e.x, y: e.y, r: e.r, t: this.time, life: 0.5 }); break;
         case 'heal': R.fx.push({ kind: 'heal', x: e.x, y: e.y, t: this.time, life: 0.8 }); break;
-        case 'hit': if (R.fx.length < 200) R.fx.push({ kind: 'hit', x: e.x, y: e.y, t: this.time, life: 0.18 }); break;
-        case 'death': R.fx.push({ kind: e.naval ? 'sink' : 'death', x: e.x, y: e.y, t: this.time, life: e.cat === 'building' ? 1.2 : e.naval ? 1.4 : 0.6 }); break;
+        case 'hit': if (near(e.x, e.y)) S.play('hit', 0.5); if (R.fx.length < 200) R.fx.push({ kind: 'hit', x: e.x, y: e.y, t: this.time, life: 0.18 }); break;
+        case 'death': if (near(e.x, e.y)) S.play('death', 0.7); R.fx.push({ kind: e.naval ? 'sink' : 'death', x: e.x, y: e.y, t: this.time, life: e.cat === 'building' ? 1.2 : e.naval ? 1.4 : 0.6 }); break;
         case 'msg': if (e.p === this.me || e.p === -1) this.hud.toast(e.text); break;
         case 'chat': this.chat.receive(e.from, e.to, e.text); break;
-        case 'attacked': if (e.p === this.me) { this.hud.toast('⚔️ ¡Te están atacando!', true); this.hud.ping(e.x, e.y); } break;
-        case 'built': if (e.p === this.me) { const b = w.get(e.id); if (b) this.hud.toast(`Construcción terminada: ${BUILDINGS[b.type as BuildingType].name}`); } break;
-        case 'age': if (e.p !== this.me) this.hud.toast(`${w.isEnemy(this.me, e.p) ? '⚠️ ' : '🤝 '}${w.players[e.p].name} llegó a la ${AGE_NAME[e.age]}`); break;
+        case 'attacked': if (e.p === this.me) { S.play('alert'); this.hud.toast('⚔️ ¡Te están atacando!', true); this.hud.ping(e.x, e.y); } break;
+        case 'built': if (e.p === this.me) { S.play('built', 0.8); const b = w.get(e.id); if (b) this.hud.toast(`Construcción terminada: ${BUILDINGS[b.type as BuildingType].name}`); } break;
+        case 'trained': if (e.p === this.me) S.play('trained', 0.6); break;
+        case 'tech': if (e.p === this.me) S.play('tech', 0.7); break;
+        case 'age': if (e.p === this.me) S.play('age'); if (e.p !== this.me) this.hud.toast(`${w.isEnemy(this.me, e.p) ? '⚠️ ' : '🤝 '}${w.players[e.p].name} llegó a la ${AGE_NAME[e.age]}`); break;
       }
     }
     this.tutorial?.onEvents(w.events);
@@ -207,7 +353,7 @@ export class Game {
 
   // ------------------------------------------------------------- cámara
   resize() {
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = this.lowRes ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     this.vw = window.innerWidth; this.vh = window.innerHeight;
     this.canvas.width = Math.round(this.vw * this.dpr);
     this.canvas.height = Math.round(this.vh * this.dpr);

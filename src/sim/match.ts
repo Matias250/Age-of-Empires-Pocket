@@ -7,7 +7,7 @@ import { Rng } from './rng.js';
 import { CIV_LIST, CIVS, CivId } from './civs.js';
 
 export type Mode = 'skirmish' | 'coop' | 'tutorial' | 'aivsai' | 'scenario';
-export type MapType = 'continental' | 'rio' | 'lagos' | 'bosque' | 'oasis' | 'mediterraneo' | 'islas' | 'costa' | 'canales' | 'arena';
+export type MapType = 'continental' | 'rio' | 'lagos' | 'bosque' | 'oasis' | 'mediterraneo' | 'islas' | 'islotes' | 'costa' | 'canales' | 'arena';
 export type StartMode = 'normal' | 'imperial';
 export const START_MODES: Record<StartMode, { name: string; desc: string }> = {
   normal: { name: 'Normal', desc: 'Edad Oscura con pocos recursos: economía, avances y ejército' },
@@ -51,6 +51,7 @@ export const MAPS: Record<MapType, { name: string; desc: string }> = {
   oasis: { name: 'Oasis', desc: 'Un lago central rodeado de riquezas' },
   mediterraneo: { name: 'Mediterráneo', desc: 'Un mar en el centro: muelles y batallas navales' },
   islas: { name: 'Archipiélago', desc: 'Cada reino en su isla, unidas por vados de poca agua' },
+  islotes: { name: 'Islas', desc: 'Cada reino en su isla, sin vados: hay que cruzar en barco de transporte' },
   costa: { name: 'Costas', desc: 'Un océano rodea el continente: todos tienen mar' },
   canales: { name: 'Canales', desc: 'Ríos separan a cada reino; se cruzan por vados' },
   arena: { name: 'Arena', desc: 'Cada reino arranca amurallado, con 2 torres y una puerta' },
@@ -114,7 +115,7 @@ export function createMatch(cfg: MatchConfig): Match {
   // ubicación en círculo: los del mismo equipo quedan juntos
   const order = slots.map((s, i) => ({ i, team: s.team > 0 ? s.team : 100 + i })).sort((a, b) => a.team - b.team || a.i - b.i).map((o) => o.i);
   const bases: Base[] = new Array(n);
-  const R = size / 2 - (map === 'costa' ? 14 : map === 'islas' || map === 'arena' ? 12 : 8), c = size / 2;
+  const R = size / 2 - (map === 'costa' ? 14 : map === 'islas' || map === 'islotes' || map === 'arena' ? 12 : 8), c = size / 2;
   order.forEach((pid, k) => {
     const a = Math.PI / 4 + ((k + 0.5) * Math.PI * 2) / n;
     bases[pid] = { tx: Math.round(c + Math.cos(a) * R - 1.5), ty: Math.round(c + Math.sin(a) * R - 1.5) };
@@ -127,7 +128,22 @@ export function createMatch(cfg: MatchConfig): Match {
   if (map === 'continental') makeLakes(w, rng, reserved, Math.max(2, Math.ceil(n / 2)), 2.6);
   if (map === 'oasis') makeOasis(w, rng);
   if (map === 'mediterraneo') makeSea(w, rng, reserved);
-  if (map === 'islas') makeIslands(w, rng, bases);
+  if (map === 'islas' || map === 'islotes') makeIslands(w, rng, bases);
+  if (map === 'islotes') {
+    // estrechos de agua entre cada par de reinos: nadie llega caminando
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      const ax = bases[i].tx + 1.5, ay = bases[i].ty + 1.5, bx = bases[j].tx + 1.5, by = bases[j].ty + 1.5;
+      const mx = (ax + bx) / 2, my = (ay + by) / 2, dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1;
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const along = ((x + 0.5 - mx) * dx + (y + 0.5 - my) * dy) / L;
+        if (Math.abs(along) > 2.2) continue;
+        // solo donde ese par es el más cercano (frontera entre los dos)
+        const di = Math.hypot(x - ax, y - ay), dj = Math.hypot(x - bx, y - by);
+        if (bases.some((b, k) => k !== i && k !== j && Math.hypot(x - b.tx - 1.5, y - b.ty - 1.5) < Math.min(di, dj) - 1)) continue;
+        if (!reserved(x, y, 10)) w.setWater(x, y, 1);
+      }
+    }
+  }
   if (map === 'costa') makeCoast(w, rng, reserved);
   if (map === 'canales') makeCanals(w, rng, bases, reserved);
 
@@ -144,8 +160,8 @@ export function createMatch(cfg: MatchConfig): Match {
       }
   }
   const area = (size * size) / (48 * 48);
-  if (map === 'continental' || map === 'lagos' || map === 'oasis' || map === 'mediterraneo' || map === 'islas' || map === 'costa') smoothWater(w, reserved);
-  const forests = { continental: 11, rio: 8, lagos: 8, bosque: 0, oasis: 9, mediterraneo: 8, islas: 6, costa: 8, canales: 8, arena: 10 }[map] * area;
+  if (map === 'continental' || map === 'lagos' || map === 'oasis' || map === 'mediterraneo' || map === 'islas' || map === 'islotes' || map === 'costa') smoothWater(w, reserved);
+  const forests = { continental: 11, rio: 8, lagos: 8, bosque: 0, oasis: 9, mediterraneo: 8, islas: 6, islotes: 6, costa: 8, canales: 8, arena: 10 }[map] * area;
   scatterForests(w, rng, reserved, Math.round(forests));
   const ci = Math.floor(c);
   if (map === 'oasis' || map === 'mediterraneo') {
@@ -164,7 +180,7 @@ export function createMatch(cfg: MatchConfig): Match {
   }
   // 4) asegurar que todos puedan llegar a todos
   if (map === 'islas') for (let k = 0; k < n; k++) { if (n === 2 && k === 1) break; carve(w, bases[order[k]], bases[order[(k + 1) % n]]); }
-  for (let i = 1; i < n; i++) ensurePath(w, bases[0], bases[i]);
+  if (map !== 'islotes') for (let i = 1; i < n; i++) ensurePath(w, bases[0], bases[i]);
   if (map === 'bosque') for (const b of bases) carve(w, b, { tx: ci - 1, ty: ci - 1 });
   // 5) peces en el agua
   addFish(w, rng);

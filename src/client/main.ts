@@ -5,7 +5,7 @@ import { TILE } from '../sim/data.js';
 import { CIV_LIST, CIVS, CivId } from '../sim/civs.js';
 import { UNITS, UnitType } from '../sim/data.js';
 import { saveSettings, settings, Settings } from './settings.js';
-import { Game } from './game.js';
+import { clearSaved, Game, listReplays, loadSaved, ReplayData, savedInfo } from './game.js';
 import { initI18n, lang, LANGS, setLang } from './i18n/index.js';
 import { CAMPAIGNS, findScenario } from '../sim/campaigns.js';
 import { campaignCount, storyDone, storyOpen } from './scenario.js';
@@ -66,19 +66,20 @@ function renderMenu() {
     <div class="home-top">
       <div class="logo">
         <div class="crest">⚜️</div>
-        <h1>Age of Empires <span>Pocket</span></h1>
-        <p>15 civilizaciones · 25 historias</p>
+        <h1>Imperios <span>Pocket</span></h1>
+        <p>15 civilizaciones · 25 historias</p><p class="fan">Fangame inspirado en Age of Empires II</p>
       </div>
       <div class="home-color"><span>Tu color</span><div class="swatches">${PLAYER_COLORS.map((_, i) => swatch(i)).join('')}</div></div>
     </div>
     <div class="home-main">
+      ${savedInfo() ? `<button class="hbig cont" data-m="continue"><i>▶</i><div><b>Continuar</b><small>${savedInfo()!.title} · ${savedInfo()!.minutes} min</small></div><span class="x" data-m="discard" aria-label="Descartar">✖</span></button>` : ''}
       <button class="hbig" data-m="stories"><i>🗺️</i><div><b>Historias</b></div></button>
       <button class="hbig" data-m="skirmish"><i>⚔️</i><div><b>Escaramuza</b><small>Contra la IA, hasta 8 jugadores</small></div></button>
       <div class="htiles">
         <button class="htile" data-m="tutorial"><i>📜</i><b>Tutorial</b></button>
         <button class="htile" data-m="logros"><i>🏅</i><b>Logros ${achCount()}/${ACHIEVEMENTS.length}</b></button>
         <button class="htile" data-m="civs"><i>🏛️</i><b>Civilizaciones</b></button>
-        <button class="htile soon" disabled><i>🏆</i><b>Online</b><small>Pronto</small></button>
+        <button class="htile" data-m="replays"><i>🎬</i><b>Repeticiones</b></button>
       </div>
     </div>
   </div>`;
@@ -88,6 +89,9 @@ function renderMenu() {
     const c = t.closest('[data-c]')?.getAttribute('data-c');
     if (c) { setMyColor(Number(c)); renderMenu(); return; }
     const m = t.closest('[data-m]')?.getAttribute('data-m');
+    if (m === 'discard') { e.stopPropagation(); clearSaved(); renderMenu(); return; }
+    if (m === 'continue') { const sv = loadSaved(); if (sv) { menu.hidden = true; game = new Game(canvas, sv.cfg, () => { game = null; renderMenu(); }, { resume: sv.json }); } return; }
+    if (m === 'replays') { showReplays(); return; }
     if (m === 'howto') { showHowTo(); return; }
     if (m === 'civs') { showCivs(); return; }
     if (m === 'logros') { showAchievements(); return; }
@@ -284,6 +288,8 @@ function showSettings() {
     <div class="settings">
       <div class="setting langs"><div><b>Idioma</b><small>Language · Idioma</small></div>
         <div class="seg">${LANGS.map((l) => `<button data-lang="${l.id}" class="${l.id === lang ? 'on' : ''}">${l.flag} ${l.name}</button>`).join('')}</div></div>
+      ${row('sound', 'Sonido', 'Golpes, flechas, cañonazos y avisos de la partida.')}
+      ${row('music', 'Música', 'Música medieval de fondo durante las partidas.')}
       ${row('grid', 'Cuadrícula', 'Muestra las casillas del terreno: ayuda a ubicar edificios y murallas.')}
       ${row('hpBars', 'Barras de vida siempre visibles', 'Muestra la vida de todas tus unidades, no solo de las heridas.')}
     </div>
@@ -406,7 +412,31 @@ function showHowTo() {
 
 function start(cfg: MatchConfig) {
   menu.hidden = true;
+  clearSaved(); // empezar otra partida reemplaza la guardada
   game = new Game(canvas, cfg, () => { game = null; renderMenu(); });
+}
+
+function showReplays() {
+  const list = listReplays();
+  const when = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  menu.innerHTML = `<div class="menu-inner">
+    <h2 class="pagetitle">🎬 Repeticiones</h2>
+    <div class="replays">${list.length ? list.map((r, i) => `<button class="replay" data-rp="${i}"><i>${r.win ? '🏆' : '💀'}</i><div><b>${r.title}</b><small>${when(r.date)} · ${Math.floor(r.end / 20 / 60)} min</small></div><span>▶</span></button>`).join('')
+      : '<p class="dim">Acá aparecen tus últimas 5 partidas terminadas. Podés volver a verlas sin niebla y a la velocidad que quieras.</p>'}</div>
+    <button class="big" data-back>Volver</button>
+  </div>`;
+  menu.onchange = null;
+  menu.onclick = (e) => {
+    const t = e.target as HTMLElement;
+    const i = t.closest('[data-rp]')?.getAttribute('data-rp');
+    if (i !== null && i !== undefined) {
+      const r: ReplayData = list[Number(i)];
+      menu.hidden = true;
+      game = new Game(canvas, r.cfg, () => { game = null; showReplays(); menu.hidden = false; }, { replay: r });
+      return;
+    }
+    if (t.closest('[data-back]')) renderMenu();
+  };
 }
 
 // Botón "atrás" del celular: en vez de cerrar la app, vuelve a la pantalla anterior.

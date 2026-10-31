@@ -26,7 +26,7 @@ jobs:
         run: |
           mkdir -p site
           cp -r index.html styles.css icon.svg *.png manifest.webmanifest sw.js dist site/
-          cp build/age-of-empires-pocket.html site/un-archivo.html
+          cp build/imperios-pocket.html site/un-archivo.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

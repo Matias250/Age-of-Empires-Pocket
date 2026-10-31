@@ -84,9 +84,57 @@ export class Hud {
   private pressStart = { x: 0, y: 0 };
   private suppressClick = false;
 
+  /** grupos 1, 2 y 3: tocar selecciona, mantener apretado guarda la selección actual */
+  groups: number[][] = [[], [], []];
+  private groupsEl?: HTMLElement;
+  private buildGroups() {
+    const g = this.g;
+    const el = document.createElement('div');
+    el.id = 'groups';
+    el.innerHTML = [0, 1, 2].map((i) => `<button data-gr="${i}">${i + 1}<small></small></button>`).join('');
+    let timer = 0, held = false;
+    const assign = (i: number) => {
+      const ids = g.sel.filter((id) => { const e = g.world.get(id); return e && e.owner === g.me; });
+      if (!ids.length) { this.toast('Seleccioná unidades y mantené apretado el número para guardarlas'); return; }
+      this.groups[i] = ids; this.toast(`Grupo ${i + 1}: ${ids.length} guardados`); this.paintGroups();
+    };
+    el.addEventListener('pointerdown', (e) => {
+      const b = (e.target as HTMLElement).closest('[data-gr]'); if (!b) return;
+      const i = Number(b.getAttribute('data-gr')); held = false;
+      clearTimeout(timer); timer = window.setTimeout(() => { held = true; assign(i); }, 480);
+    });
+    const cancel = () => clearTimeout(timer);
+    el.addEventListener('pointerleave', cancel); el.addEventListener('pointercancel', cancel);
+    el.addEventListener('pointerup', (e) => {
+      clearTimeout(timer);
+      const b = (e.target as HTMLElement).closest('[data-gr]'); if (!b || held) return;
+      const i = Number(b.getAttribute('data-gr'));
+      const alive = this.groups[i].filter((id) => g.world.entities.has(id));
+      this.groups[i] = alive;
+      if (!alive.length) { if (g.sel.length) assign(i); else this.toast(`Grupo ${i + 1} vacío: mantené apretado para guardar la selección`); return; }
+      const same = alive.length === g.sel.length && alive.every((id) => g.sel.includes(id));
+      g.select(alive);
+      if (same) { const e0 = g.world.get(alive[0]); if (e0) g.centerOn(e0.x, e0.y); } // segundo toque: ir hasta el grupo
+      this.paintGroups();
+    });
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+    document.body.appendChild(el);
+    this.groupsEl = el;
+    this.paintGroups();
+  }
+  private paintGroups() {
+    if (!this.groupsEl) return;
+    this.groupsEl.querySelectorAll<HTMLElement>('[data-gr]').forEach((b, i) => {
+      const n = this.groups[i].filter((id) => this.g.world.entities.has(id)).length;
+      b.classList.toggle('on', n > 0);
+      b.querySelector('small')!.textContent = n ? String(n) : '';
+    });
+  }
+
   constructor(private g: Game) {
     this.root.hidden = false;
     this.minimap = $('minimap') as HTMLCanvasElement;
+    this.buildGroups();
     const clickAction = (e: Event) => {
       if (this.suppressClick) { this.suppressClick = false; e.preventDefault(); return; }
       this.action((e.target as HTMLElement).closest('[data-a]')?.getAttribute('data-a'));
@@ -142,6 +190,7 @@ export class Hud {
   private on(el: EventTarget, n: string, f: EventListener) { el.addEventListener(n, f); this.handlers.push([el, n, f]); }
 
   destroy() {
+    this.groupsEl?.remove();
     for (const [el, n, f] of this.handlers) el.removeEventListener(n, f);
     this.root.hidden = true;
     $('sheet').hidden = true;
@@ -263,7 +312,9 @@ export class Hud {
       <h2>Pausa</h2>
       ${civ ? `<p class="civline">${CIVS[civ].emblem} Jugás con los <b>${CIVS[civ].name}</b>: ${CIVS[civ].bonuses.join(' · ')}. Unidad única: ${UNITS[CIVS[civ].unique].name}.</p>` : ''}
       ${this.playersTable()}
-      <div class="row"><button class="chip ${settings.grid ? 'on' : ''}" data-grid>▦ Cuadrícula: ${settings.grid ? 'Sí' : 'No'}</button></div>
+      <div class="row"><button class="chip ${settings.grid ? 'on' : ''}" data-grid>▦ Cuadrícula: ${settings.grid ? 'Sí' : 'No'}</button>
+        <button class="chip ${settings.sound ? 'on' : ''}" data-snd>🔊 Sonido: ${settings.sound ? 'Sí' : 'No'}</button>
+        <button class="chip ${settings.music ? 'on' : ''}" data-mus>🎵 Música: ${settings.music ? 'Sí' : 'No'}</button></div>
       <div class="row">Velocidad:
         ${[1, 1.5, 2].map((s) => `<button class="chip ${g.speed === s ? 'on' : ''}" data-speed="${s}">${s}×</button>`).join('')}
       </div>
@@ -274,6 +325,8 @@ export class Hud {
     o.onclick = (e) => {
       const t = e.target as HTMLElement;
       if (t.closest('[data-grid]')) { settings.grid = !settings.grid; saveSettings(); g.paused = false; this.togglePause(); return; }
+      if (t.closest('[data-snd]')) { settings.sound = !settings.sound; saveSettings(); g.paused = false; this.togglePause(); return; }
+      if (t.closest('[data-mus]')) { settings.music = !settings.music; saveSettings(); g.sound.music(settings.music); g.paused = false; this.togglePause(); return; }
       const sp = t.getAttribute('data-speed');
       if (sp) { g.speed = Number(sp); g.paused = false; this.togglePause(); return; }
       const a = t.getAttribute('data-o');
@@ -365,10 +418,36 @@ export class Hud {
       <div class="statwrap"><table class="players st"><tr class="hd"><td>Jugador</td>${cols.map((c) => `<td title="${c.title}">${c.icon}</td>`).join('')}</tr>
       ${ps.map((p) => `<tr class="${p.team === winTeam ? 'winner' : 'loser'}"><td><i class="dot" style="background:${p.color}"></i>${p.id === g.me ? 'Vos' : p.name}</td>${cols.map((c, i) => { const v = c.v(p); return `<td class="${v > 0 && v === max[i] ? 'top' : ''}">${v}</td>`; }).join('')}</tr>`).join('')}
       </table></div>
+      ${g.history.length > 1 ? `<div class="chart-tabs">${(['pop', 'army', 'res', 'score'] as const).map((k, i) => `<button data-ch="${k}" class="${i === 0 ? 'on' : ''}">${{ pop: 'Población', army: 'Ejército', res: 'Recursos', score: 'Puntaje' }[k]}</button>`).join('')}</div>
+      <canvas class="chart" width="680" height="240"></canvas>` : ''}
       <div class="end-btns"><button class="big" data-o="back">◂ Volver al resumen</button></div>
     </div>`;
+    const cv = o.querySelector<HTMLCanvasElement>('canvas.chart');
+    const draw = (k: 'pop' | 'army' | 'res' | 'score') => {
+      if (!cv) return;
+      const c = cv.getContext('2d')!, W = cv.width, H = cv.height, L = 46, B = 26, T = 10, R = 10;
+      c.clearRect(0, 0, W, H);
+      const hist = g.history, maxT = hist[hist.length - 1].t || 1;
+      let maxV = 1; for (const h of hist) for (const p of ps) maxV = Math.max(maxV, h.v[p.id]?.[k] ?? 0);
+      const X = (t: number) => L + (t / maxT) * (W - L - R), Y = (v: number) => H - B - (v / maxV) * (H - B - T);
+      c.strokeStyle = 'rgba(243,227,192,.15)'; c.lineWidth = 1; c.fillStyle = 'rgba(243,227,192,.6)'; c.font = '16px Inter, sans-serif'; c.textAlign = 'right'; c.textBaseline = 'middle';
+      for (let i = 0; i <= 4; i++) { const v = (maxV * i) / 4, y = Y(v); c.beginPath(); c.moveTo(L, y); c.lineTo(W - R, y); c.stroke(); c.fillText(String(Math.round(v)), L - 6, y); }
+      c.textAlign = 'center'; c.textBaseline = 'top';
+      const mins = maxT / 20 / 60, stepM = Math.max(1, Math.ceil(mins / 6));
+      for (let m = 0; m <= mins; m += stepM) c.fillText(m + "'", X(m * 1200), H - B + 5);
+      for (const p of ps) {
+        c.strokeStyle = p.color; c.lineWidth = p.id === g.me ? 4 : 2.5; c.lineJoin = 'round';
+        c.beginPath(); hist.forEach((h, i) => { const v = h.v[p.id]?.[k] ?? 0; if (i) c.lineTo(X(h.t), Y(v)); else c.moveTo(X(h.t), Y(v)); }); c.stroke();
+      }
+    };
+    draw('pop');
     this.fitOverlay();
-    o.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-o="back"]')) this.showEnd(win); };
+    o.onclick = (e) => {
+      const t = e.target as HTMLElement;
+      const ch = t.closest('[data-ch]')?.getAttribute('data-ch') as 'pop' | null;
+      if (ch) { o.querySelectorAll('[data-ch]').forEach((b) => b.classList.toggle('on', b.getAttribute('data-ch') === ch)); draw(ch); return; }
+      if (t.closest('[data-o="back"]')) this.showEnd(win);
+    };
   }
 
   // ------------------------------------------------------------------
@@ -479,7 +558,18 @@ export class Hud {
       this.sig = sig;
       const scroll = this.panel.querySelector('.acts')?.scrollLeft ?? 0;
       this.panel.innerHTML = this.render();
-      const acts = this.panel.querySelector('.acts'); if (acts) acts.scrollLeft = scroll;
+      const acts = this.panel.querySelector<HTMLElement>('.acts');
+      if (acts) {
+        acts.scrollLeft = scroll;
+        // flecha "›" cuando hay más botones a la derecha
+        const more = document.createElement('button');
+        more.className = 'more-arrow'; more.textContent = '›'; more.setAttribute('aria-label', 'Más acciones');
+        const upd = () => { const on = acts.scrollLeft + acts.clientWidth < acts.scrollWidth - 4; more.hidden = !on; acts.classList.toggle('fade', on); };
+        more.onclick = (e) => { e.stopPropagation(); acts.scrollBy({ left: acts.clientWidth * 0.8, behavior: 'smooth' }); };
+        acts.addEventListener('scroll', upd, { passive: true });
+        acts.parentElement!.insertBefore(more, acts.nextSibling);
+        requestAnimationFrame(upd);
+      }
       const sheet = $('sheet');
       const show = g.buildMenu && g.selUnits().some((u) => u.type === 'villager');
       sheet.hidden = !show;

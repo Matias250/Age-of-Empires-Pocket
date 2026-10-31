@@ -222,7 +222,7 @@ export class Game {
   }
   /** Partida terminada: muestra todo el mapa sin niebla y aleja la cámara para verlo entero */
   revealed = false;
-  private fitZoom() { return Math.min(0.45, Math.min(this.vw / (this.world.w * TILE), this.vh / (this.world.h * TILE)) * 0.95); }
+  private fitZoom() { const pad = this.measureHud(); return Math.min(0.45, Math.min(this.vw / (this.world.w * TILE), (this.vh - pad.top - pad.bottom) / (this.world.h * TILE)) * 0.95); }
   revealMap() {
     const pl = this.world.players[this.me];
     pl.explored.fill(1); pl.visible.fill(1);
@@ -232,12 +232,30 @@ export class Game {
     this.clampCam();
   }
 
+  /** Cuánto tapan la barra de arriba y el panel de abajo (px de pantalla); se mide cada tanto */
+  private hudPad = { top: 50, bottom: 190, at: -1 };
+  private measureHud() {
+    const now = performance.now();
+    if (now - this.hudPad.at < 400) return this.hudPad;
+    const top = document.getElementById('topbar')?.getBoundingClientRect();
+    const bot = document.getElementById('bottom')?.getBoundingClientRect();
+    if (top && top.height) this.hudPad.top = top.bottom;
+    if (bot && bot.height) this.hudPad.bottom = Math.max(0, this.vh - bot.top);
+    this.hudPad.at = now;
+    return this.hudPad;
+  }
   private clampCam() {
     const W = this.world.w * TILE, H = this.world.h * TILE;
-    const vw = this.vw / this.cam.zoom, vh = this.vh / this.cam.zoom;
-    const m = 120;
-    this.cam.x = vw > W + m * 2 ? (W - vw) / 2 : Math.max(-m, Math.min(W - vw + m, this.cam.x));
-    this.cam.y = vh > H + m * 2 ? (H - vh) / 2 : Math.max(-m, Math.min(H - vh + m + 120, this.cam.y));
+    const z = this.cam.zoom;
+    const vw = this.vw / z, vh = this.vh / z;
+    const pad = this.measureHud();
+    const top = pad.top / z, bot = pad.bottom / z, m = 40 / z, side = 70 / z;
+    // horizontal: se puede ver todo el borde, con un poco de margen
+    const minX = -m, maxX = W - vw + m + side;
+    this.cam.x = maxX < minX ? (W - vw) / 2 : Math.max(minX, Math.min(maxX, this.cam.x));
+    // vertical: el borde de abajo tiene que quedar por encima del panel, aunque alejes el zoom
+    const minY = -top - m, maxY = H - vh + bot + m;
+    this.cam.y = maxY < minY ? (H - (vh - top - bot)) / 2 - top : Math.max(minY, Math.min(maxY, this.cam.y));
   }
   screenToWorld(sx: number, sy: number) { return { x: this.cam.x + sx / this.cam.zoom, y: this.cam.y + sy / this.cam.zoom }; }
   private zoomAt(sx: number, sy: number, z: number) {

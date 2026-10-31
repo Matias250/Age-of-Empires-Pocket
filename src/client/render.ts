@@ -768,86 +768,83 @@ export class Renderer {
       g.restore();
       g.strokeStyle = 'rgba(20,14,8,.5)'; g.lineWidth = 0.9; poly(pts); g.stroke();
     };
-    /** caja: caras de los costados que se ven, frente y tapa; opcionalmente almenas en el borde */
-    const box = (gx: number, gy: number, w: number, d: number, h: number, opts: { crenel?: 'all' | 'front' | 'none'; band?: boolean } = {}) => {
-      const fl = P(gx, gy + d, 0), fr = P(gx + w, gy + d, 0);
-      const tfl = P(gx, gy + d, h), tfr = P(gx + w, gy + d, h), tbl = P(gx, gy, h), tbr = P(gx + w, gy, h);
-      const bl = P(gx, gy, 0), br = P(gx + w, gy, 0);
-      if (gx < cx) textured([bl, fl, tfl, tbl], -0.3); // costado izquierdo (cara de afuera)
-      if (gx + w > cx) textured([fr, br, tbr, tfr], -0.42); // costado derecho, más en sombra
+    /** caja apoyada a la altura z0: caras de los costados que se ven, frente y tapa; almenas en el borde */
+    const box = (gx: number, gy: number, w: number, d: number, h: number, opts: { crenel?: 'all' | 'none'; band?: boolean; z0?: number } = {}) => {
+      const z0 = opts.z0 ?? 0, zt = z0 + h;
+      const fl = P(gx, gy + d, z0), fr = P(gx + w, gy + d, z0);
+      const tfl = P(gx, gy + d, zt), tfr = P(gx + w, gy + d, zt), tbl = P(gx, gy, zt), tbr = P(gx + w, gy, zt);
+      const bl = P(gx, gy, z0), br = P(gx + w, gy, z0);
+      if (gx < cx) textured([bl, fl, tfl, tbl], -0.3);
+      if (gx + w > cx) textured([fr, br, tbr, tfr], -0.42);
       textured([fl, fr, tfr, tfl], 0);
       if (opts.band) {
-        const a1 = P(gx, gy + d, h - 5), a2 = P(gx + w, gy + d, h - 5), a3 = P(gx + w, gy + d, h - 8), a4 = P(gx, gy + d, h - 8);
+        const a1 = P(gx, gy + d, zt - 5), a2 = P(gx + w, gy + d, zt - 5), a3 = P(gx + w, gy + d, zt - 8), a4 = P(gx, gy + d, zt - 8);
         g.fillStyle = col; poly([a1, a2, a3, a4]); g.fill();
       }
       g.fillStyle = topC; poly([tbl, tbr, tfr, tfl]); g.fill();
-      g.fillStyle = 'rgba(0,0,0,.1)';
-      const i1 = P(gx + 2.5, gy + 2.5, h), i2 = P(gx + w - 2.5, gy + 2.5, h), i3 = P(gx + w - 2.5, gy + d - 2.5, h), i4 = P(gx + 2.5, gy + d - 2.5, h);
-      poly([i1, i2, i3, i4]); g.fill();
       g.strokeStyle = 'rgba(20,14,8,.45)'; g.lineWidth = 0.8; poly([tbl, tbr, tfr, tfl]); g.stroke();
-      const cr = opts.crenel ?? 'all';
-      if (cr !== 'none') {
+      if ((opts.crenel ?? 'all') === 'all') {
         const mer = (mx: number, my: number) => {
           const m = 2.6, mh = 4;
-          const q1 = P(mx, my + m, mh + h), q2 = P(mx + m, my + m, mh + h), q3 = P(mx + m, my + m, h), q4 = P(mx, my + m, h);
+          const q1 = P(mx, my + m, mh + zt), q2 = P(mx + m, my + m, mh + zt), q3 = P(mx + m, my + m, zt), q4 = P(mx, my + m, zt);
           g.fillStyle = shade(base, -0.05); poly([q4, q3, q2, q1]); g.fill();
-          const t1 = P(mx, my, mh + h), t2 = P(mx + m, my, mh + h);
+          const t1 = P(mx, my, mh + zt), t2 = P(mx + m, my, mh + zt);
           g.fillStyle = shade(topC, 0.06); poly([t1, t2, q2, q1]); g.fill();
         };
         const step = 5;
-        for (let xx = gx; xx <= gx + w - 2.6; xx += step) { if (cr === 'all') mer(xx, gy); mer(xx, gy + d - 2.6); }
-        if (cr === 'all') for (let yy = gy + step; yy < gy + d - 2.6; yy += step) { mer(gx, yy); mer(gx + w - 2.6, yy); }
+        for (let xx = gx; xx <= gx + w - 2.6; xx += step) { mer(xx, gy); mer(xx, gy + d - 2.6); }
+        for (let yy = gy + step; yy < gy + d - 2.6; yy += step) { mer(gx, yy); mer(gx + w - 2.6, yy); }
       }
       return { tfl, tfr, fl, fr };
     };
-    const m = 4, L = x0 + m, R = x0 + s - m, T = y0 + m + 4, B = y0 + s - m;
-    const H = 22, W = 9, tw = 22, th = 40;
-    // sombra en el suelo
-    g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.moveTo(R, B); g.lineTo(R + 14, B - 10); g.lineTo(R + 14, T + 6); g.lineTo(R, T + 12); g.closePath(); g.fill();
-    // patio empedrado
-    { const a1 = P(L + W, T + W, 0), a2 = P(R - W, T + W, 0), a3 = P(R - W, B - W, 0), a4 = P(L + W, B - W, 0);
-      g.fillStyle = '#8b8577'; poly([a1, a2, a3, a4]); g.fill();
-      let sd = (Math.floor(x0 * 13 + y0 * 7) % 2147483646) + 1;
-      const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
-      for (let i = 0; i < 90; i++) { g.fillStyle = rr() < 0.5 ? 'rgba(0,0,0,.08)' : 'rgba(255,255,255,.07)'; g.beginPath(); g.ellipse(a1[0] + rr() * (a2[0] - a1[0]), a1[1] + rr() * (a4[1] - a1[1]), 2.2, 1.4, 0, 0, 7); g.fill(); } }
-    // de atrás para adelante: torres de atrás, muralla de atrás, murallas de los costados, homenaje, muralla del frente, torres del frente
-    box(L, T, tw, tw, th, { band: true });
-    box(R - tw, T, tw, tw, th, { band: true });
-    box(L + tw, T, R - L - 2 * tw, W, H, { crenel: 'all' });
-    box(L, T + tw, W, B - T - 2 * tw, H, { crenel: 'all' });
-    box(R - W, T + tw, W, B - T - 2 * tw, H, { crenel: 'all' });
-    // torre del homenaje con techo a cuatro aguas
-    const kw = 40, kd = 30, kh = 52, kx = cx - kw / 2, ky = T + W + 6;
-    const k = box(kx, ky, kw, kd, kh, { crenel: 'none' });
-    const apex = P(cx, ky + kd / 2, kh + 26);
-    const c1 = P(kx - 2, ky - 2, kh), c2 = P(kx + kw + 2, ky - 2, kh), c3 = P(kx + kw + 2, ky + kd + 2, kh), c4 = P(kx - 2, ky + kd + 2, kh);
-    g.fillStyle = shade(SLATE_C, -0.35); poly([c1, c2, apex]); g.fill();
-    g.fillStyle = shade(SLATE_C, -0.12); poly([c1, c4, apex]); g.fill();
-    g.fillStyle = shade(SLATE_C, -0.45); poly([c2, c3, apex]); g.fill();
-    g.fillStyle = SLATE_C; poly([c4, c3, apex]); g.fill();
-    g.save(); poly([c4, c3, apex]); g.clip();
-    g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 0.7; g.beginPath();
-    for (let f = 0.15; f < 1; f += 0.15) { const y1 = c4[1] + (apex[1] - c4[1]) * f; g.moveTo(c4[0] - 5, y1); g.lineTo(c3[0] + 5, y1); }
-    g.stroke(); g.restore();
-    g.strokeStyle = 'rgba(20,14,8,.55)'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(c4[0], c4[1]); g.lineTo(apex[0], apex[1]); g.lineTo(c3[0], c3[1]); g.moveTo(c1[0], c1[1]); g.lineTo(apex[0], apex[1]); g.lineTo(c2[0], c2[1]); g.stroke();
-    g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.moveTo(c4[0], c4[1]); g.lineTo(c3[0], c3[1]); g.stroke();
-    this.banner(apex[0], apex[1], col, time, 14);
-    // ventanas y estandarte en el frente del homenaje
-    const fy = k.tfl[1];
-    this.archWindow(k.tfl[0] + 7, fy + 9, 6, 10); this.archWindow(k.tfr[0] - 13, fy + 9, 6, 10);
-    g.fillStyle = col; g.beginPath(); g.moveTo(cx - 6, fy + 5); g.lineTo(cx + 6, fy + 5); g.lineTo(cx + 6, fy + 25); g.lineTo(cx, fy + 21); g.lineTo(cx - 6, fy + 25); g.closePath(); g.fill();
-    g.fillStyle = '#e9c45a'; g.beginPath(); g.arc(cx, fy + 13, 2.4, 0, 7); g.fill();
-    // muralla del frente con portón y reja
-    const f = box(L + tw, B - W, R - L - 2 * tw, W, H, { crenel: 'all' });
-    const gw = 18, gh = 18, gb = f.fl[1];
+    /** techo a cuatro aguas sobre una caja */
+    const roof = (gx: number, gy: number, w: number, d: number, z: number, rh: number, flag: boolean) => {
+      const apex = P(gx + w / 2, gy + d / 2, z + rh);
+      const c1 = P(gx - 2, gy - 2, z), c2 = P(gx + w + 2, gy - 2, z), c3 = P(gx + w + 2, gy + d + 2, z), c4 = P(gx - 2, gy + d + 2, z);
+      g.fillStyle = shade(SLATE_C, -0.35); poly([c1, c2, apex]); g.fill();
+      g.fillStyle = shade(SLATE_C, -0.12); poly([c1, c4, apex]); g.fill();
+      g.fillStyle = shade(SLATE_C, -0.45); poly([c2, c3, apex]); g.fill();
+      g.fillStyle = SLATE_C; poly([c4, c3, apex]); g.fill();
+      g.save(); poly([c4, c3, apex]); g.clip();
+      g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 0.7; g.beginPath();
+      for (let f = 0.15; f < 1; f += 0.17) { const y1 = c4[1] + (apex[1] - c4[1]) * f; g.moveTo(c4[0] - 5, y1); g.lineTo(c3[0] + 5, y1); }
+      g.stroke(); g.restore();
+      g.strokeStyle = 'rgba(20,14,8,.55)'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(c4[0], c4[1]); g.lineTo(apex[0], apex[1]); g.lineTo(c3[0], c3[1]); g.stroke();
+      g.strokeStyle = col; g.lineWidth = 1.8; g.beginPath(); g.moveTo(c4[0], c4[1]); g.lineTo(c3[0], c3[1]); g.stroke();
+      if (flag) this.banner(apex[0], apex[1], col, time, 14);
+      else { g.fillStyle = '#c9a227'; g.beginPath(); g.arc(apex[0], apex[1], 1.6, 0, 7); g.fill(); }
+    };
+    const m = 4, L = x0 + m, R = x0 + s - m, T = y0 + m + 10, B = y0 + s - m;
+    // 1) cuerpo de abajo: macizo, con terraza almenada (sin patio)
+    const H1 = 24, tw = 20, th = 36;
+    const b1 = box(L + 6, T + 6, R - L - 12, B - T - 12, H1);
+    // portón con reja en el frente
+    const gw = 18, gh = 18, gb = b1.fl[1];
     g.fillStyle = '#8f8a81'; g.beginPath(); g.moveTo(cx - gw / 2 - 3, gb); g.lineTo(cx - gw / 2 - 3, gb - gh + gw / 2); g.arc(cx, gb - gh + gw / 2, gw / 2 + 3, Math.PI, 0); g.lineTo(cx + gw / 2 + 3, gb); g.closePath(); g.fill();
     g.save(); g.beginPath(); g.moveTo(cx - gw / 2, gb); g.lineTo(cx - gw / 2, gb - gh + gw / 2); g.arc(cx, gb - gh + gw / 2, gw / 2, Math.PI, 0); g.lineTo(cx + gw / 2, gb); g.closePath(); g.clip();
     this.portcullis(cx - gw / 2, gb - gh, gw, gh, 0.3);
     g.restore();
-    // torres del frente
+    for (const ax of [cx - 30, cx + 28]) { g.fillStyle = '#1c1611'; g.fillRect(ax, gb - 16, 2, 8); }
+    // torres de las esquinas de atrás
+    box(L, T, tw, tw, th, { band: true });
+    box(R - tw, T, tw, tw, th, { band: true });
+    // 2) segundo piso, más chico, apoyado sobre la terraza
+    const w2 = (R - L) * 0.56, d2 = (B - T) * 0.5, x2 = cx - w2 / 2, y2 = T + (B - T) * 0.2;
+    const b2 = box(x2, y2, w2, d2, 22, { z0: H1 });
+    this.archWindow(cx - 16, b2.tfl[1] + 7, 5, 9); this.archWindow(cx + 11, b2.tfr[1] + 7, 5, 9);
+    // torrecitas en las esquinas del segundo piso, con techito
+    for (const [tx2, ty2] of [[x2 - 3, y2 - 3], [x2 + w2 - 9, y2 - 3]] as [number, number][]) { box(tx2, ty2, 12, 12, 32, { z0: H1, crenel: 'none' }); roof(tx2, ty2, 12, 12, H1 + 32, 12, false); }
+    // 3) torre del homenaje que sale del segundo piso
+    const w3 = 26, d3 = 20, x3 = cx - w3 / 2, y3 = y2 + d2 / 2 - d3 / 2;
+    const b3 = box(x3, y3, w3, d3, 26, { z0: H1 + 22, crenel: 'none' });
+    g.fillStyle = col; g.beginPath(); g.moveTo(cx - 5, b3.tfl[1] + 4); g.lineTo(cx + 5, b3.tfl[1] + 4); g.lineTo(cx + 5, b3.tfl[1] + 19); g.lineTo(cx, b3.tfl[1] + 16); g.lineTo(cx - 5, b3.tfl[1] + 19); g.closePath(); g.fill();
+    g.fillStyle = '#e9c45a'; g.beginPath(); g.arc(cx, b3.tfl[1] + 10, 2, 0, 7); g.fill();
+    roof(x3, y3, w3, d3, H1 + 22 + 26, 22, true);
+    for (const [tx2, ty2] of [[x2 - 3, y2 + d2 - 9], [x2 + w2 - 9, y2 + d2 - 9]] as [number, number][]) { box(tx2, ty2, 12, 12, 32, { z0: H1, crenel: 'none' }); roof(tx2, ty2, 12, 12, H1 + 32, 12, false); }
+    // torres de las esquinas del frente
     for (const tx of [L, R - tw]) {
       const t = box(tx, B - tw, tw, tw, th, { band: true });
-      g.fillStyle = '#1c1611'; const mx = (t.tfl[0] + t.tfr[0]) / 2; g.fillRect(mx - 1, t.tfl[1] + 12, 2, 8); g.fillRect(mx - 1, t.tfl[1] + 26, 2, 6);
+      g.fillStyle = '#1c1611'; const mx = (t.tfl[0] + t.tfr[0]) / 2; g.fillRect(mx - 1, t.tfl[1] + 11, 2, 7); g.fillRect(mx - 1, t.tfl[1] + 23, 2, 6);
     }
   }
 

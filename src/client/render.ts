@@ -634,10 +634,16 @@ export class Renderer {
   }
   private windowAt(x: number, y: number) {
     const g = this.ctx;
-    g.fillStyle = '#3a2a1c'; g.fillRect(x - 1, y - 1, 8, 8); // marco
-    g.fillStyle = 'rgba(255,214,120,0.6)'; g.fillRect(x + 0.5, y + 0.5, 5, 5);
-    g.strokeStyle = '#3a2a1c'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(x + 3, y); g.lineTo(x + 3, y + 6); g.moveTo(x, y + 3); g.lineTo(x + 6, y + 3); g.stroke();
-    g.fillStyle = '#8a8378'; g.fillRect(x - 1.5, y + 7, 9, 1.4); // alféizar
+    // postigos de madera a los costados
+    g.fillStyle = '#5b3b22'; g.fillRect(x - 3.2, y - 0.5, 2.6, 8); g.fillRect(x + 6.6, y - 0.5, 2.6, 8);
+    g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x - 3.2, y + 3, 2.6, 0.7); g.fillRect(x + 6.6, y + 3, 2.6, 0.7);
+    g.fillStyle = '#3a2a1c'; g.fillRect(x - 1, y - 1, 8, 8.5); // marco
+    const gl = g.createLinearGradient(0, y, 0, y + 7);
+    gl.addColorStop(0, '#ffe3a0'); gl.addColorStop(1, '#c98a3a');
+    g.fillStyle = gl; g.fillRect(x + 0.5, y + 0.5, 5, 5.5);
+    g.strokeStyle = '#3a2a1c'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(x + 3, y); g.lineTo(x + 3, y + 6.5); g.moveTo(x, y + 3.2); g.lineTo(x + 6, y + 3.2); g.stroke();
+    g.fillStyle = '#9a9488'; g.fillRect(x - 1.5, y + 7.3, 9, 1.6); // alféizar
+    g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(x - 1.5, y + 8.9, 9, 1);
   }
   private banner(x: number, y: number, col: string, time: number, h = 16) {
     const g = this.ctx;
@@ -647,10 +653,115 @@ export class Renderer {
     g.fillStyle = col;
     g.beginPath(); g.moveTo(x, y - h); g.lineTo(x + 11, y - h + 3 + wave); g.lineTo(x, y - h + 7); g.closePath(); g.fill();
   }
+  /** Almenas con cara frontal, tapa iluminada y sombra */
   private crenels(x0: number, y: number, w: number, col: string) {
     const g = this.ctx;
-    g.fillStyle = col;
-    for (let x = x0; x < x0 + w - 3; x += 7) g.fillRect(x, y - 4, 4, 5);
+    const n = Math.max(2, Math.round((w - 4) / 7)), step = (w - 4) / n;
+    for (let i = 0; i <= n; i++) {
+      const x = x0 + i * step;
+      g.fillStyle = shade(col, -0.08); g.fillRect(x, y - 5, 4, 6);
+      g.fillStyle = shade(col, 0.18); g.fillRect(x, y - 5, 4, 1.4);
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x + 3, y - 3.6, 1, 4.6);
+    }
+    g.fillStyle = shade(col, 0.1); g.fillRect(x0, y, w, 1.6);
+  }
+
+  /** Pared de piedra en sillares irregulares, con luz arriba, sombra al pie y contorno */
+  private stoneFace(x: number, y: number, w: number, h: number, base: string, dark = false) {
+    const g = this.ctx;
+    const grd = g.createLinearGradient(0, y, 0, y + h);
+    grd.addColorStop(0, shade(base, dark ? -0.08 : 0.1)); grd.addColorStop(1, shade(base, dark ? -0.32 : -0.16));
+    g.fillStyle = grd; g.fillRect(x, y, w, h);
+    g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+    let sd = (Math.floor(x * 31 + y * 17) % 2147483646) + 1;
+    const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    const rowH = 5;
+    g.strokeStyle = 'rgba(40,32,24,0.32)'; g.lineWidth = 0.7;
+    for (let yy = y + h, row = 0; yy > y; yy -= rowH, row++) {
+      let xx = x - (row % 2 ? 4 : 0);
+      while (xx < x + w) {
+        const bw = 6 + rr() * 6;
+        const q = rr();
+        if (q < 0.3) { g.fillStyle = `rgba(0,0,0,${0.05 + q * 0.2})`; g.fillRect(xx, yy - rowH, bw, rowH); }
+        else if (q > 0.75) { g.fillStyle = `rgba(255,250,235,${(q - 0.75) * 0.5})`; g.fillRect(xx, yy - rowH, bw, rowH); }
+        g.strokeRect(xx + 0.35, yy - rowH + 0.35, bw - 0.7, rowH - 0.7);
+        xx += bw;
+      }
+    }
+    g.restore();
+    g.strokeStyle = 'rgba(20,14,8,0.5)'; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  }
+
+  /** Torre redonda de piedra: cilindro sombreado, aspilleras, almenas y techo cónico opcional */
+  private roundTower(cx: number, baseY: number, r: number, H: number, base: string, col: string, roof?: string, door = false) {
+    const g = this.ctx;
+    const ry = r * 0.35, top = baseY - H;
+    // cuerpo
+    const cg = g.createLinearGradient(cx - r, 0, cx + r, 0);
+    cg.addColorStop(0, shade(base, -0.1)); cg.addColorStop(0.3, shade(base, 0.16)); cg.addColorStop(0.75, shade(base, -0.18)); cg.addColorStop(1, shade(base, -0.38));
+    g.fillStyle = cg;
+    g.beginPath(); g.moveTo(cx - r, top); g.lineTo(cx - r, baseY); g.ellipse(cx, baseY, r, ry, 0, Math.PI, 0, true); g.lineTo(cx + r, top); g.closePath(); g.fill();
+    // hiladas curvas de piedra
+    g.save(); g.beginPath(); g.moveTo(cx - r, top); g.lineTo(cx - r, baseY); g.ellipse(cx, baseY, r, ry, 0, Math.PI, 0, true); g.lineTo(cx + r, top); g.closePath(); g.clip();
+    g.strokeStyle = 'rgba(40,32,24,0.3)'; g.lineWidth = 0.7;
+    let row = 0;
+    for (let yy = baseY; yy > top; yy -= 5, row++) {
+      g.beginPath(); g.ellipse(cx, yy, r, ry, 0, 0, Math.PI); g.stroke();
+      for (let k = -2; k <= 2; k++) {
+        const a = Math.PI / 2 + (k + (row % 2 ? 0.5 : 0)) * 0.55;
+        const px = cx + Math.cos(a) * r, py = yy + Math.sin(a) * ry;
+        g.beginPath(); g.moveTo(px, py); g.lineTo(px, py - 5); g.stroke();
+      }
+    }
+    g.restore();
+    g.strokeStyle = 'rgba(20,14,8,0.5)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(cx - r, top); g.lineTo(cx - r, baseY); g.ellipse(cx, baseY, r, ry, 0, Math.PI, 0, true); g.lineTo(cx + r, top); g.stroke();
+    // aspilleras
+    for (const fy of [0.35, 0.65]) { if (H * fy < 10) continue; g.fillStyle = '#1c1611'; g.fillRect(cx - 1, top + H * fy, 2, 7); g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(cx - 2, top + H * fy + 7, 4, 1); }
+    if (door) this.door(cx, baseY + ry * 0.7, Math.min(9, r * 0.75), Math.min(14, H * 0.3));
+    // franja con el color del dueño
+    g.fillStyle = col; g.globalAlpha = 0.9;
+    g.beginPath(); g.ellipse(cx, top + 6, r, ry, 0, 0, Math.PI); g.lineTo(cx - r, top + 3); g.ellipse(cx, top + 3, r, ry, 0, Math.PI, 0, true); g.closePath(); g.fill();
+    g.globalAlpha = 1;
+    // corona: plataforma y almenas alrededor
+    const cr = r + 2.5;
+    g.fillStyle = shade(base, -0.25); g.beginPath(); g.ellipse(cx, top, cr, cr * 0.35, 0, 0, 7); g.fill();
+    g.fillStyle = shade(base, 0.05); g.beginPath(); g.ellipse(cx, top - 1, cr - 2, (cr - 2) * 0.35, 0, 0, 7); g.fill();
+    const merl = (a: number, back: boolean) => {
+      const mx = cx + Math.cos(a) * cr, my = top + Math.sin(a) * cr * 0.35;
+      g.fillStyle = shade(base, back ? -0.22 : Math.cos(a) < 0 ? 0.1 : -0.15);
+      g.fillRect(mx - 2.2, my - 6, 4.4, 6);
+      g.fillStyle = shade(base, 0.25); g.fillRect(mx - 2.2, my - 6, 4.4, 1.2);
+    };
+    for (let i = 0; i < 10; i++) { const a = Math.PI + (i / 10) * Math.PI; merl(a, true); }
+    if (roof) {
+      const rh = r * 2.1;
+      const rg = g.createLinearGradient(cx - r, 0, cx + r, 0);
+      rg.addColorStop(0, shade(roof, 0.12)); rg.addColorStop(0.6, roof); rg.addColorStop(1, shade(roof, -0.35));
+      g.fillStyle = rg;
+      g.beginPath(); g.moveTo(cx - r - 1, top - 2); g.lineTo(cx, top - 2 - rh); g.lineTo(cx + r + 1, top - 2); g.ellipse(cx, top - 2, r + 1, (r + 1) * 0.35, 0, 0, Math.PI); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 0.6; g.beginPath();
+      for (let k = 1; k < 4; k++) { const yy = top - 2 - rh + (rh * k) / 4, ww = ((r + 1) * k) / 4; g.ellipse(cx, yy, ww, ww * 0.35, 0, 0, Math.PI); }
+      g.stroke();
+      g.strokeStyle = 'rgba(20,14,8,.5)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(cx - r - 1, top - 2); g.lineTo(cx, top - 2 - rh); g.lineTo(cx + r + 1, top - 2); g.stroke();
+      g.strokeStyle = '#3a2a1a'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx, top - 2 - rh); g.lineTo(cx, top - 8 - rh); g.stroke();
+      g.fillStyle = col; g.beginPath(); g.moveTo(cx, top - 8 - rh); g.lineTo(cx + 6, top - 6.5 - rh); g.lineTo(cx, top - 5 - rh); g.fill();
+    } else {
+      for (let i = 0; i <= 10; i++) { const a = (i / 10) * Math.PI; merl(a, false); }
+    }
+  }
+
+  /** Ventana con arco, marco de piedra, vidrio con luz y parteluz */
+  private archWindow(x: number, y: number, w: number, h: number) {
+    const g = this.ctx;
+    const shape = (k: number) => { g.beginPath(); g.moveTo(x - k, y + h + k); g.lineTo(x - k, y + w / 2); g.arc(x + w / 2, y + w / 2, w / 2 + k, Math.PI, 0); g.lineTo(x + w + k, y + h + k); g.closePath(); };
+    g.fillStyle = '#d8d2c4'; shape(1.4); g.fill();
+    g.strokeStyle = 'rgba(30,22,14,.5)'; g.lineWidth = 0.6; g.stroke();
+    const gl = g.createLinearGradient(0, y, 0, y + h);
+    gl.addColorStop(0, '#ffe7a8'); gl.addColorStop(1, '#c9822e');
+    g.fillStyle = gl; shape(0); g.fill();
+    g.strokeStyle = '#3a2a1a'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(x + w / 2, y); g.lineTo(x + w / 2, y + h); g.moveTo(x, y + h * 0.55); g.lineTo(x + w, y + h * 0.55); g.stroke();
+    g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x, y + h, w, 1.2);
   }
 
   private building(e: Entity, time: number) {
@@ -730,15 +841,16 @@ export class Renderer {
       }
       case 'towncenter': {
         // base de piedra + salón de madera + gran techo
-        g.fillStyle = stone; g.fillRect(x0 + 2, y0 + s * 0.5, s - 4, s * 0.5 - 2);
-        g.fillStyle = stoneD; g.fillRect(x0 + s - 12, y0 + s * 0.5, 10, s * 0.5 - 2);
-        this.crenels(x0 + 3, y0 + s * 0.5, s - 6, stone);
+        this.stoneFace(x0 + 4, y0 + s * 0.5, s - 8, s * 0.5 - 2, stone);
+        this.crenels(x0 + 4, y0 + s * 0.5, s - 8, stone);
+        void stoneD;
         const top = this.box(x0 + 10, y0 + 2, s - 20, s * 0.32, timber, TERRA, { trim: col });
         g.strokeStyle = '#6b4a2a'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 + 13, top + 1); g.lineTo(x0 + s - 13, top + 1); g.stroke();
         this.windowAt(x0 + 18, top + 7); this.windowAt(x0 + s - 24, top + 7); this.windowAt(cx - 3, top + 7);
         this.door(cx, bottom, 14, 20);
-        this.windowAt(x0 + 10, y0 + s * 0.65); this.windowAt(x0 + s - 16, y0 + s * 0.65);
-        this.banner(x0 + 6, y0 + s * 0.5 - 2, col, time, 18); this.banner(x0 + s - 8, y0 + s * 0.5 - 2, col, time, 18);
+        this.archWindow(x0 + 19, y0 + s * 0.62, 6, 9); this.archWindow(x0 + s - 25, y0 + s * 0.62, 6, 9);
+        this.roundTower(x0 + 7, bottom, 7, s * 0.6, stone, col, TERRA);
+        this.roundTower(x0 + s - 7, bottom, 7, s * 0.6, stone, col, TERRA);
         break;
       }
       case 'barracks': case 'range': case 'stable': case 'workshop': {
@@ -758,16 +870,23 @@ export class Renderer {
         break;
       }
       case 'mill': {
-        g.fillStyle = stone; g.fillRect(cx - 10, y0 + 18, 20, s - 21);
-        g.fillStyle = stoneD; g.fillRect(cx + 4, y0 + 18, 6, s - 21);
-        g.fillStyle = WOODR; g.beginPath(); g.moveTo(cx - 13, y0 + 20); g.lineTo(cx, y0 + 6); g.lineTo(cx + 13, y0 + 20); g.closePath(); g.fill();
-        g.fillStyle = shade(WOODR, -0.25); g.beginPath(); g.moveTo(cx, y0 + 6); g.lineTo(cx + 13, y0 + 20); g.lineTo(cx + 3, y0 + 20); g.closePath(); g.fill();
-        g.fillStyle = col; g.fillRect(cx - 10, y0 + 30, 20, 3);
-        this.door(cx, bottom, 8, 12);
-        const a = time * (done ? 1.6 : 0);
-        g.strokeStyle = '#efe7d5'; g.lineWidth = 3;
-        for (let i = 0; i < 4; i++) { const b = a + i * Math.PI / 2; g.beginPath(); g.moveTo(cx, y0 + 18); g.lineTo(cx + Math.cos(b) * 20, y0 + 18 + Math.sin(b) * 20); g.stroke(); }
-        g.fillStyle = '#6b4a2a'; g.beginPath(); g.arc(cx, y0 + 18, 3, 0, 7); g.fill();
+        // molino de viento: torre encalada, techo cónico de madera y aspas de enrejado con lona
+        this.roundTower(cx, bottom, 11, s - 14, '#e8e0cf', col, WOODR);
+        this.door(cx, bottom + 2, 8, 12);
+        this.archWindow(cx - 2.5, y0 + 26, 5, 7);
+        const a = time * (done ? 1.4 : 0), hx = cx, hy = y0 + 16;
+        for (let i = 0; i < 4; i++) {
+          const b = a + i * Math.PI / 2, c = Math.cos(b), sn = Math.sin(b), px = -sn, py = c;
+          g.strokeStyle = '#5b3b22'; g.lineWidth = 1.6;
+          g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + c * 24, hy + sn * 24); g.stroke();
+          // lona sobre el enrejado
+          g.fillStyle = 'rgba(244,236,214,0.92)';
+          g.beginPath(); g.moveTo(hx + c * 6, hy + sn * 6); g.lineTo(hx + c * 23, hy + sn * 23); g.lineTo(hx + c * 23 + px * 5, hy + sn * 23 + py * 5); g.lineTo(hx + c * 6 + px * 5, hy + sn * 6 + py * 5); g.closePath(); g.fill();
+          g.strokeStyle = 'rgba(91,59,34,0.7)'; g.lineWidth = 0.6; g.stroke();
+          g.beginPath(); for (let k = 9; k < 23; k += 3.5) { g.moveTo(hx + c * k, hy + sn * k); g.lineTo(hx + c * k + px * 5, hy + sn * k + py * 5); } g.stroke();
+        }
+        g.fillStyle = '#4a3020'; g.beginPath(); g.arc(hx, hy, 3, 0, 7); g.fill();
+        g.fillStyle = '#c9a227'; g.beginPath(); g.arc(hx, hy, 1.2, 0, 7); g.fill();
         break;
       }
       case 'lumbercamp': case 'miningcamp': {
@@ -789,10 +908,21 @@ export class Renderer {
       }
       case 'blacksmith': {
         const top = this.box(x0, y0, s, s * 0.5, stone, SLATE, { stone: true, trim: col });
-        g.fillStyle = stoneD; g.fillRect(x0 + s - 16, y0 - 2, 9, 18);
-        if (done && Math.random() < 0.06) this.fx.push({ kind: 'smoke', x: x0 + s - 11, y: y0 - 4, t: time, life: 2 });
-        g.fillStyle = '#ff9a3c'; g.fillRect(x0 + 8, top + 10, 10, 8);
-        g.fillStyle = '#3a3a3a'; g.fillRect(x0 + 34, bottom - 9, 14, 4); g.fillRect(x0 + 38, bottom - 5, 6, 5);
+        this.stoneFace(x0 + s - 17, y0 - 4, 10, 20, stoneD);
+        g.fillStyle = '#4a4440'; g.fillRect(x0 + s - 18, y0 - 6, 12, 3);
+        if (done && Math.random() < 0.08) this.fx.push({ kind: 'smoke', x: x0 + s - 12, y: y0 - 7, t: time, life: 2 });
+        // fragua: boca en arco con fuego que late
+        const fl = done ? 0.75 + Math.sin(time * 9) * 0.15 + Math.sin(time * 23) * 0.08 : 0.3;
+        g.fillStyle = '#5d584f'; g.beginPath(); g.moveTo(x0 + 6, top + 22); g.lineTo(x0 + 6, top + 12); g.arc(x0 + 13, top + 12, 7, Math.PI, 0); g.lineTo(x0 + 20, top + 22); g.closePath(); g.fill();
+        const fg = g.createRadialGradient(x0 + 13, top + 18, 1, x0 + 13, top + 16, 8);
+        fg.addColorStop(0, `rgba(255,240,170,${fl})`); fg.addColorStop(0.5, `rgba(255,140,40,${fl})`); fg.addColorStop(1, 'rgba(120,30,10,0.9)');
+        g.fillStyle = fg; g.beginPath(); g.moveTo(x0 + 8, top + 22); g.lineTo(x0 + 8, top + 13); g.arc(x0 + 13, top + 13, 5, Math.PI, 0); g.lineTo(x0 + 18, top + 22); g.closePath(); g.fill();
+        g.fillStyle = `rgba(255,150,60,${0.18 * fl})`; g.beginPath(); g.ellipse(x0 + 13, top + 24, 12, 4, 0, 0, 7); g.fill();
+        // yunque sobre un tronco
+        g.fillStyle = '#6d4c30'; g.fillRect(x0 + 37, bottom - 7, 8, 7);
+        g.fillStyle = '#3d3d40'; g.beginPath(); g.moveTo(x0 + 32, bottom - 11); g.lineTo(x0 + 48, bottom - 11); g.lineTo(x0 + 45, bottom - 8); g.lineTo(x0 + 36, bottom - 8); g.closePath(); g.fill();
+        g.fillStyle = '#6e6e74'; g.fillRect(x0 + 33, bottom - 11.5, 14, 1.2);
+        this.windowAt(x0 + s - 22, top + 9);
         break;
       }
       case 'market': {
@@ -844,29 +974,52 @@ export class Renderer {
       }
       case 'monastery': {
         const top = this.box(x0, y0 + 6, s, s * 0.42, '#efe8dc', TERRA, { trim: col, stone: true });
-        g.fillStyle = '#e6dccb'; g.fillRect(x0 + s - 26, y0 - 8, 18, s * 0.6);
+        this.stoneFace(x0 + s - 26, y0 - 8, 18, s * 0.6, '#e6dccb');
+        // campanario: arco abierto con la campana
+        g.fillStyle = '#2a2018'; g.beginPath(); g.moveTo(x0 + s - 21, y0 + 12); g.lineTo(x0 + s - 21, y0 + 4); g.arc(x0 + s - 17, y0 + 4, 4, Math.PI, 0); g.lineTo(x0 + s - 13, y0 + 12); g.closePath(); g.fill();
         g.fillStyle = TERRA; g.beginPath(); g.moveTo(x0 + s - 29, y0 - 6); g.lineTo(x0 + s - 17, y0 - 20); g.lineTo(x0 + s - 5, y0 - 6); g.closePath(); g.fill();
         g.fillStyle = col; g.fillRect(x0 + s - 26, y0 - 6, 18, 2.5);
-        g.fillStyle = '#c9a227'; g.beginPath(); g.arc(x0 + s - 17, y0 + 4, 4, 0, 7); g.fill();
+        g.fillStyle = '#c9a227'; g.beginPath(); g.arc(x0 + s - 17, y0 + 7, 3, Math.PI, 0); g.lineTo(x0 + s - 14, y0 + 10); g.lineTo(x0 + s - 20, y0 + 10); g.closePath(); g.fill();
         this.door(cx - 8, bottom, 12, 18);
-        this.windowAt(x0 + 10, top + 10);
+        this.archWindow(x0 + 9, top + 8, 6, 11); this.archWindow(x0 + 22, top + 8, 6, 11);
         break;
       }
       case 'castle': {
-        // muralla + 4 torres + torre del homenaje
-        g.fillStyle = stone; g.fillRect(x0 + 6, y0 + s * 0.42, s - 12, s * 0.58 - 3);
-        g.fillStyle = stoneD; g.fillRect(x0 + s - 18, y0 + s * 0.42, 12, s * 0.58 - 3);
-        this.crenels(x0 + 6, y0 + s * 0.42, s - 12, stone);
-        g.fillStyle = '#b4b0a8'; g.fillRect(cx - 20, y0 + 6, 40, s * 0.5);
-        this.crenels(cx - 20, y0 + 6, 40, '#b4b0a8');
-        g.fillStyle = col; g.fillRect(cx - 20, y0 + 16, 40, 6);
-        for (const [tx, ty] of [[x0 + 4, y0 + s * 0.36], [x0 + s - 20, y0 + s * 0.36], [x0 + 4, y0 + s - 30], [x0 + s - 20, y0 + s - 30]]) {
-          g.fillStyle = '#9b978f'; g.fillRect(tx, ty, 16, 28);
-          this.crenels(tx, ty, 16, '#9b978f');
-          this.windowAt(tx + 5, ty + 8);
-        }
-        this.door(cx, bottom, 18, 24);
-        this.banner(cx - 12, y0 + 2, col, time, 16); this.banner(cx + 12, y0 + 2, col, time, 16);
+        const base = '#aaa59c';
+        // torres de atrás, muralla trasera y torre del homenaje
+        this.roundTower(x0 + 17, y0 + s * 0.42, 13, 40, base, col);
+        this.roundTower(x0 + s - 17, y0 + s * 0.42, 13, 40, base, col);
+        this.stoneFace(x0 + 22, y0 + s * 0.22, s - 44, 22, base, true);
+        this.crenels(x0 + 22, y0 + s * 0.22, s - 44, base);
+        // homenaje: cara frontal y lateral en sombra para dar volumen
+        const kx = cx - 24, kw = 48, ky = y0 - 18, kh = s * 0.62;
+        g.fillStyle = shade(base, -0.38);
+        g.beginPath(); g.moveTo(kx + kw, ky); g.lineTo(kx + kw + 8, ky - 6); g.lineTo(kx + kw + 8, ky + kh - 6); g.lineTo(kx + kw, ky + kh); g.closePath(); g.fill();
+        g.fillStyle = shade(base, 0.05);
+        g.beginPath(); g.moveTo(kx, ky); g.lineTo(kx + 8, ky - 6); g.lineTo(kx + kw + 8, ky - 6); g.lineTo(kx + kw, ky); g.closePath(); g.fill();
+        this.stoneFace(kx, ky, kw, kh, base);
+        this.crenels(kx, ky, kw, base);
+        // estandarte colgado con el emblema del dueño
+        g.fillStyle = col; g.beginPath(); g.moveTo(cx - 8, ky + 8); g.lineTo(cx + 8, ky + 8); g.lineTo(cx + 8, ky + 34); g.lineTo(cx, ky + 29); g.lineTo(cx - 8, ky + 34); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 0.8; g.stroke();
+        g.fillStyle = '#e9c45a'; g.beginPath(); g.moveTo(cx, ky + 13); g.lineTo(cx + 4, ky + 19); g.lineTo(cx, ky + 25); g.lineTo(cx - 4, ky + 19); g.closePath(); g.fill();
+        g.fillStyle = '#4a3a28'; g.fillRect(cx - 10, ky + 7, 20, 1.6);
+        this.archWindow(kx + 7, ky + 14, 6, 10); this.archWindow(kx + kw - 13, ky + 14, 6, 10);
+        this.banner(cx, ky - 6, col, time, 16);
+        // muralla del frente con la puerta y su reja
+        const wy = y0 + s * 0.6, wh = s * 0.4 - 4;
+        this.stoneFace(x0 + 14, wy, s - 28, wh, base);
+        this.crenels(x0 + 14, wy, s - 28, base);
+        const gw = 22, gh = 24;
+        g.fillStyle = '#8f8a81'; g.beginPath(); g.moveTo(cx - gw / 2 - 4, bottom); g.lineTo(cx - gw / 2 - 4, bottom - gh + gw / 2); g.arc(cx, bottom - gh + gw / 2, gw / 2 + 4, Math.PI, 0); g.lineTo(cx + gw / 2 + 4, bottom); g.closePath(); g.fill();
+        g.save(); g.beginPath(); g.moveTo(cx - gw / 2, bottom); g.lineTo(cx - gw / 2, bottom - gh + gw / 2); g.arc(cx, bottom - gh + gw / 2, gw / 2, Math.PI, 0); g.lineTo(cx + gw / 2, bottom); g.closePath(); g.clip();
+        this.portcullis(cx - gw / 2, bottom - gh, gw, gh, 0.35);
+        g.restore();
+        g.strokeStyle = '#5d584f'; g.lineWidth = 1.2; g.beginPath(); g.arc(cx, bottom - gh + gw / 2, gw / 2 + 2, Math.PI, 0); g.stroke();
+        for (const ax of [x0 + 34, x0 + s - 36]) { g.fillStyle = '#1c1611'; g.fillRect(ax, wy + 12, 2, 8); }
+        // torres del frente con techo cónico
+        this.roundTower(x0 + 15, bottom, 15, 50, base, col, SLATE);
+        this.roundTower(x0 + s - 15, bottom, 15, 50, base, col, SLATE);
         break;
       }
       case 'dock': {
@@ -895,12 +1048,7 @@ export class Renderer {
         break;
       }
       case 'tower': {
-        g.fillStyle = stone; g.fillRect(x0 + 6, y0 - 14, s - 12, s + 10);
-        g.fillStyle = stoneD; g.fillRect(x0 + s - 12, y0 - 14, 6, s + 10);
-        g.fillStyle = '#b4b0a8'; g.fillRect(x0 + 3, y0 - 20, s - 6, 8);
-        this.crenels(x0 + 3, y0 - 20, s - 6, '#b4b0a8');
-        g.fillStyle = col; g.fillRect(x0 + 6, y0 - 4, s - 12, 4);
-        this.windowAt(x0 + s / 2 - 3, y0 + 6);
+        this.roundTower(cx, bottom, 12, s + 14, '#aaa59c', col, SHINGLE, true);
         break;
       }
     }

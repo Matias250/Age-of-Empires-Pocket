@@ -985,41 +985,72 @@ export class Renderer {
         break;
       }
       case 'castle': {
-        const base = '#aaa59c';
-        // torres de atrás, muralla trasera y torre del homenaje
-        this.roundTower(x0 + 17, y0 + s * 0.42, 13, 40, base, col);
-        this.roundTower(x0 + s - 17, y0 + s * 0.42, 13, 40, base, col);
-        this.stoneFace(x0 + 22, y0 + s * 0.22, s - 44, 22, base, true);
-        this.crenels(x0 + 22, y0 + s * 0.22, s - 44, base);
-        // homenaje: cara frontal y lateral en sombra para dar volumen
-        const kx = cx - 24, kw = 48, ky = y0 - 18, kh = s * 0.62;
-        g.fillStyle = shade(base, -0.38);
-        g.beginPath(); g.moveTo(kx + kw, ky); g.lineTo(kx + kw + 8, ky - 6); g.lineTo(kx + kw + 8, ky + kh - 6); g.lineTo(kx + kw, ky + kh); g.closePath(); g.fill();
-        g.fillStyle = shade(base, 0.05);
-        g.beginPath(); g.moveTo(kx, ky); g.lineTo(kx + 8, ky - 6); g.lineTo(kx + kw + 8, ky - 6); g.lineTo(kx + kw, ky); g.closePath(); g.fill();
-        this.stoneFace(kx, ky, kw, kh, base);
-        this.crenels(kx, ky, kw, base);
-        // estandarte colgado con el emblema del dueño
-        g.fillStyle = col; g.beginPath(); g.moveTo(cx - 8, ky + 8); g.lineTo(cx + 8, ky + 8); g.lineTo(cx + 8, ky + 34); g.lineTo(cx, ky + 29); g.lineTo(cx - 8, ky + 34); g.closePath(); g.fill();
-        g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 0.8; g.stroke();
-        g.fillStyle = '#e9c45a'; g.beginPath(); g.moveTo(cx, ky + 13); g.lineTo(cx + 4, ky + 19); g.lineTo(cx, ky + 25); g.lineTo(cx - 4, ky + 19); g.closePath(); g.fill();
-        g.fillStyle = '#4a3a28'; g.fillRect(cx - 10, ky + 7, 20, 1.6);
-        this.archWindow(kx + 7, ky + 14, 6, 10); this.archWindow(kx + kw - 13, ky + 14, 6, 10);
-        this.banner(cx, ky - 6, col, time, 16);
-        // muralla del frente con la puerta y su reja
-        const wy = y0 + s * 0.6, wh = s * 0.4 - 4;
-        this.stoneFace(x0 + 14, wy, s - 28, wh, base);
-        this.crenels(x0 + 14, wy, s - 28, base);
-        const gw = 22, gh = 24;
-        g.fillStyle = '#8f8a81'; g.beginPath(); g.moveTo(cx - gw / 2 - 4, bottom); g.lineTo(cx - gw / 2 - 4, bottom - gh + gw / 2); g.arc(cx, bottom - gh + gw / 2, gw / 2 + 4, Math.PI, 0); g.lineTo(cx + gw / 2 + 4, bottom); g.closePath(); g.fill();
-        g.save(); g.beginPath(); g.moveTo(cx - gw / 2, bottom); g.lineTo(cx - gw / 2, bottom - gh + gw / 2); g.arc(cx, bottom - gh + gw / 2, gw / 2, Math.PI, 0); g.lineTo(cx + gw / 2, bottom); g.closePath(); g.clip();
-        this.portcullis(cx - gw / 2, bottom - gh, gw, gh, 0.35);
+        // fortaleza cuadrada vista en 3/4: muralla con adarve, cuatro torres cuadradas y torre del homenaje con techo
+        const base = '#a9a398', topC = '#c9c3b6';
+        const H = 24, T = 10, m = 4;            // alto de muralla, espesor, margen
+        const L = x0 + m, R = x0 + s - m, Tp = y0 + m + 6, B = y0 + s - m;
+        const block = (bx: number, by: number, bw: number, bd: number, h: number, crenel: boolean) => {
+          // tapa (vista desde arriba, corrida hacia arriba por la altura) y cara frontal
+          g.fillStyle = topC; g.fillRect(bx, by - h, bw, bd);
+          g.fillStyle = 'rgba(0,0,0,.08)'; g.fillRect(bx + 2, by - h + 2, bw - 4, bd - 4);
+          this.stoneFace(bx, by + bd - h, bw, h, base);
+          g.strokeStyle = 'rgba(20,14,8,.45)'; g.lineWidth = 1; g.strokeRect(bx + 0.5, by - h + 0.5, bw - 1, bd - 1);
+          if (crenel) {
+            g.fillStyle = shade(base, 0.05);
+            const step = 5;
+            for (let xx = bx; xx < bx + bw - 2; xx += step) { g.fillRect(xx, by - h - 3, 3, 3); g.fillRect(xx, by + bd - h - 3, 3, 3); }
+            for (let yy = by; yy < by + bd - 2; yy += step) { g.fillRect(bx, yy - h - 3, 3, 3); g.fillRect(bx + bw - 3, yy - h - 3, 3, 3); }
+            g.fillStyle = shade(base, 0.25);
+            for (let xx = bx; xx < bx + bw - 2; xx += step) g.fillRect(xx, by + bd - h - 3, 3, 1);
+          }
+        };
+        // patio
+        g.fillStyle = '#8f8a7c'; g.fillRect(L + T, Tp + T - H, R - L - 2 * T, B - Tp - 2 * T + H);
+        g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(L + T, Tp + T - H, R - L - 2 * T, 8);
+        { // empedrado del patio
+          let sd = (Math.floor(x0 * 13 + y0 * 7) % 2147483646) + 1;
+          const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+          for (let i = 0; i < 120; i++) {
+            g.fillStyle = rr() < 0.5 ? 'rgba(0,0,0,.08)' : 'rgba(255,255,255,.07)';
+            g.beginPath(); g.ellipse(L + T + rr() * (R - L - 2 * T), Tp + T - H + 8 + rr() * (B - Tp - 2 * T + H - 8), 2.2, 1.5, 0, 0, 7); g.fill();
+          }
+          // carro y barriles del patio
+          g.fillStyle = '#6d4c30'; for (const [bx2, by2] of [[L + T + 8, B - T - 12], [L + T + 14, B - T - 10], [R - T - 12, B - T - 12]]) { g.beginPath(); g.ellipse(bx2, by2, 3.2, 4, 0, 0, 7); g.fill(); g.fillStyle = '#3a2a1a'; g.fillRect(bx2 - 3.2, by2 - 1, 6.4, 1); g.fillStyle = '#6d4c30'; }
+        }
+        // muralla de atrás y de los costados
+        block(L, Tp, R - L, T, H, true);
+        block(L, Tp, T, B - Tp - T, H, true);
+        block(R - T, Tp, T, B - Tp - T, H, true);
+        // torre del homenaje en el patio
+        const kw = 40, kd = 30, kx = cx - kw / 2, ky = Tp + T + 4, kh = 56;
+        g.fillStyle = shade(base, -0.05); g.fillRect(kx, ky - kh, kw, kd);
+        this.stoneFace(kx, ky + kd - kh, kw, kh, base);
+        // techo a cuatro aguas de pizarra con cumbrera del color del dueño
+        const rt = ky - kh, rb = ky - kh + kd, rp = 18;
+        g.fillStyle = shade(SLATE, -0.15); g.beginPath(); g.moveTo(kx - 2, rb); g.lineTo(kx + 10, rt - rp + kd / 2); g.lineTo(kx + kw - 10, rt - rp + kd / 2); g.lineTo(kx + kw + 2, rb); g.closePath(); g.fill();
+        g.fillStyle = SLATE; g.beginPath(); g.moveTo(kx - 2, rb); g.lineTo(kx + 10, rt - rp + kd / 2); g.lineTo(cx, rt - rp + kd / 2); g.lineTo(cx, rb); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(0,0,0,.2)'; g.lineWidth = 0.7; g.beginPath(); for (let yy = rb - 4; yy > rt - rp + kd / 2; yy -= 4) { g.moveTo(kx, yy); g.lineTo(kx + kw, yy); } g.stroke();
+        g.strokeStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(kx + 10, rt - rp + kd / 2); g.lineTo(kx + kw - 10, rt - rp + kd / 2); g.stroke();
+        g.strokeStyle = 'rgba(20,14,8,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(kx - 2, rb); g.lineTo(kx + 10, rt - rp + kd / 2); g.lineTo(kx + kw - 10, rt - rp + kd / 2); g.lineTo(kx + kw + 2, rb); g.closePath(); g.stroke();
+        this.banner(cx, rt - rp + kd / 2 - 1, col, time, 14);
+        this.archWindow(kx + 7, ky + kd - kh + 10, 6, 10); this.archWindow(kx + kw - 13, ky + kd - kh + 10, 6, 10);
+        g.fillStyle = col; g.beginPath(); g.moveTo(cx - 6, ky + kd - kh + 6); g.lineTo(cx + 6, ky + kd - kh + 6); g.lineTo(cx + 6, ky + kd - kh + 26); g.lineTo(cx, ky + kd - kh + 22); g.lineTo(cx - 6, ky + kd - kh + 26); g.closePath(); g.fill();
+        g.fillStyle = '#e9c45a'; g.beginPath(); g.arc(cx, ky + kd - kh + 14, 2.4, 0, 7); g.fill();
+        // muralla del frente con el portón
+        block(L, B - T, R - L, T, H, true);
+        const gw = 20, gh = 20;
+        g.fillStyle = '#8f8a81'; g.beginPath(); g.moveTo(cx - gw / 2 - 3, B); g.lineTo(cx - gw / 2 - 3, B - gh + gw / 2); g.arc(cx, B - gh + gw / 2, gw / 2 + 3, Math.PI, 0); g.lineTo(cx + gw / 2 + 3, B); g.closePath(); g.fill();
+        g.save(); g.beginPath(); g.moveTo(cx - gw / 2, B); g.lineTo(cx - gw / 2, B - gh + gw / 2); g.arc(cx, B - gh + gw / 2, gw / 2, Math.PI, 0); g.lineTo(cx + gw / 2, B); g.closePath(); g.clip();
+        this.portcullis(cx - gw / 2, B - gh, gw, gh, 0.3);
         g.restore();
-        g.strokeStyle = '#5d584f'; g.lineWidth = 1.2; g.beginPath(); g.arc(cx, bottom - gh + gw / 2, gw / 2 + 2, Math.PI, 0); g.stroke();
-        for (const ax of [x0 + 34, x0 + s - 36]) { g.fillStyle = '#1c1611'; g.fillRect(ax, wy + 12, 2, 8); }
-        // torres del frente con techo cónico
-        this.roundTower(x0 + 15, bottom, 15, 50, base, col, SLATE);
-        this.roundTower(x0 + s - 15, bottom, 15, 50, base, col, SLATE);
+        for (const ax of [L + 26, R - 28]) { g.fillStyle = '#1c1611'; g.fillRect(ax, B - 17, 2, 8); }
+        // cuatro torres cuadradas, más altas, con almenas y franja del color del dueño
+        const tw = 20, th = H + 16;
+        for (const [tx, ty] of [[L - 3, Tp - 3], [R - tw + 3, Tp - 3], [L - 3, B - tw + 3], [R - tw + 3, B - tw + 3]] as [number, number][]) {
+          block(tx, ty, tw, tw, th, true);
+          g.fillStyle = col; g.fillRect(tx, ty + tw - th + 4, tw, 3);
+          g.fillStyle = '#1c1611'; g.fillRect(tx + tw / 2 - 1, ty + tw - th + 12, 2, 7);
+        }
         break;
       }
       case 'dock': {

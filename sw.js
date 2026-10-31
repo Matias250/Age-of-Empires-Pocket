@@ -1,5 +1,5 @@
 // Service worker simple: guarda el juego para abrirlo sin conexión.
-const CACHE = 'imperios-pocket-v14';
+const CACHE = 'imperios-pocket-v15';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', (e) => {

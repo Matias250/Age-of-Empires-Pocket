@@ -194,7 +194,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
     desc: 'Cruza unidades de tierra por el agua: lleva 5 (10 con su mejora). Si se hunde, se hunden con él.',
   },
   tradecog: {
-    name: 'Coca mercante', hp: 80, atk: 0, atkType: 'melee', cooldown: 1, range: 4, armorMelee: 0, armorPierce: 2,
+    name: 'Barca mercante', hp: 80, atk: 0, atkType: 'melee', cooldown: 1, range: 4, armorMelee: 0, armorPierce: 2,
     speed: 66, radius: 11, sight: 5, cost: { wood: 100, gold: 50 }, trainTime: 20, age: 2, cls: 'ship', naval: true, trade: true,
     desc: 'Navega hasta el muelle de un aliado y vuelve con oro.',
   },
@@ -455,7 +455,7 @@ const UP_UNIT_NAME: Partial<Record<UnitType, string>> = {
   skirmisher: 'Escaramuzador de élite', cavarcher: 'Arquero a caballo pesado', handcannon: 'Cañonero veterano', scout: 'Caballería ligera',
   knight: 'Paladín', camel: 'Camello pesado', ram: 'Ariete blindado', mangonel: 'Onagro', bombard: 'Cañón reforzado',
   trebuchet: 'Fundíbulo de contrapeso', monk: 'Monje herbolario', fishship: 'Barco de arrastre', galleon: 'Galeón de guerra',
-  fireship: 'Barco de fuego griego', cannongalleon: 'Galeón cañonero de élite', tradecart: 'Caravana', tradecog: 'Coca mercante pesada', transport: 'Transporte pesado',
+  fireship: 'Barco de fuego griego', cannongalleon: 'Galeón cañonero de élite', tradecart: 'Caravana', tradecog: 'Barca mercante avanzada', transport: 'Transporte pesado',
 };
 for (const u of Object.keys(UNITS) as UnitType[]) {
   const d = UNITS[u];

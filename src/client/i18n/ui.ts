@@ -51,7 +51,7 @@ export const UI: Record<string, [string, string]> = {
   "Seleccionar ejército": ["Select army", "Selecionar exército"], "Seleccionar flota": ["Select fleet", "Selecionar frota"],
   "Pausa ": ["Pause", "Pausa"], "Quitar": ["Remove", "Remover"], "Cambiar color": ["Change color", "Mudar cor"], "Construyendo ": ["Building", "Construindo"],
   // ---------- v1.0: comercio, reliquias, chat, historias
-  "Carreta mercante": ["Trade cart", "Carroça mercante"], "Barca mercante": ["Trade cog", "Barca mercante"], "Coca mercante pesada": ["Heavy trade cog", "Coca mercante pesada"],
+  "Carreta mercante": ["Trade cart", "Carroça mercante"], "Barca mercante": ["Trade boat", "Barca mercante"], "Coca mercante pesada": ["Heavy trade cog", "Coca mercante pesada"],
   "Viaja hasta el mercado de un aliado y vuelve con oro. Cuanto más lejos, más oro.": ["Travels to an ally's market and returns with gold. The farther, the more gold.", "Viaja até o mercado de um aliado e volta com ouro. Quanto mais longe, mais ouro."],
   "Navega hasta el muelle de un aliado y vuelve con oro.": ["Sails to an ally's dock and returns with gold.", "Navega até o porto de um aliado e volta com ouro."],
   "Comprá y vendé recursos por oro. Entrena carretas mercantes para comerciar con aliados.": ["Buy and sell resources for gold. Trains trade carts to trade with allies.", "Compre e venda recursos por ouro. Treina carroças mercantes para comerciar com aliados."],
@@ -469,4 +469,6 @@ export const UI: Record<string, [string, string]> = {
   "🔔 ¡A refugiarse! Los aldeanos entran al centro urbano y las torres": ["🔔 Take cover! Villagers garrison in the town center and towers", "🔔 Abriguem-se! Os aldeões entram no centro da cidade e nas torres"],
   "🔔 A trabajar: los aldeanos vuelven a sus tareas": ["🔔 Back to work: villagers return to their tasks", "🔔 Ao trabalho: os aldeões voltam às tarefas"],
   "Coca mercante: +20% de vida y 20% más rápida.": ["Trade cog: +20% HP and 20% faster.", "Coca mercante: +20% de vida e 20% mais rápida."],
+  "Barca mercante avanzada": ["Advanced trade boat", "Barca mercante avançada"],
+  "Barca mercante: +20% de vida y 20% más rápida.": ["Trade boat: +20% HP and 20% faster.", "Barca mercante: +20% de vida e 20% mais rápida."],
 };

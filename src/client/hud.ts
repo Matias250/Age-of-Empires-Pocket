@@ -469,10 +469,10 @@ export class Hud {
       case 'train': g.train(arg as UnitType); break;
       case 'age': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'age', p: g.me, bid: b.id }); break; }
       case 'cancel': { const b = arg === 'tech' ? w.get(g.sel[0]) : g.sel.map((id) => w.get(id)).filter((x): x is Entity => !!x).sort((a2, b2) => b2.queue.length - a2.queue.length)[0]; if (b) w.issue({ t: 'cancel', p: g.me, bid: b.id, what: arg === 'tech' ? 'tech' : 'unit' }); break; }
-      case 'rally': g.mode = 'rally'; this.toast('Tocá el mapa para marcar el punto de reunión'); break;
       case 'stop': w.issue({ t: 'stop', p: g.me, ids: selIds() }); break;
       case 'explore': w.issue({ t: 'explore', p: g.me, ids: selIds() }); this.toast('🧭 Explorando el mapa por su cuenta'); break;
-      case 'unload': w.issue({ t: 'unload', p: g.me, ids: selIds() }); break;
+      case 'unload': w.issue({ t: 'unload', p: g.me, ids: [...g.sel] }); break;
+      case 'bell': w.issue({ t: 'bell', p: g.me }); this.sig = ''; break;
       case 'stance': w.issue({ t: 'stance', p: g.me, ids: selIds(), stance: arg as Stance }); this.toast(`Actitud ${STANCE_NAME[arg as Stance]}`); break;
       case 'queue': g.queueMode = !g.queueMode; this.toast(g.queueMode ? '➕ Las próximas órdenes se agregan a la cola' : 'Cola apagada: las órdenes reemplazan a la actual'); break;
       case 'gatelock': { const b = w.get(g.sel[0]); if (b) w.issue({ t: 'gateLock', p: g.me, bid: b.id }); break; }
@@ -602,12 +602,12 @@ export class Hud {
 
   private signature(): string {
     const g = this.g, w = g.world, pl = w.players[g.me];
-    const parts: (string | number)[] = [w.popOf(g.me) >= w.popCap(g.me) ? 1 : 0, this.delAt ? 1 : 0, g.placedInQueue, g.sel.join(','), g.mode, g.buildMenu ? 1 : 0, g.placing ?? '', g.ghostVertical ? 1 : 0, pl.age, w.isResearchingAge(g.me) ? 1 : 0, pl.techs.size, g.queueMode ? 1 : 0];
+    const parts: (string | number)[] = [w.popOf(g.me) >= w.popCap(g.me) ? 1 : 0, this.delAt ? 1 : 0, g.placedInQueue, g.sel.join(','), g.mode, g.buildMenu ? 1 : 0, g.placing ?? '', g.ghostVertical ? 1 : 0, pl.age, w.isResearchingAge(g.me) ? 1 : 0, pl.techs.size, g.queueMode ? 1 : 0, pl.bell ? 1 : 0];
     parts.push(RES_LIST.map((r) => Math.floor(pl.res[r] / 25)).join('.'));
     if (g.sel.length >= 1) {
       const e = w.get(g.sel[0]);
       if (e) parts.push(e.queue.join(''), e.progress >= 1 ? 1 : 0, e.ageT >= 0 ? 1 : 0, e.order?.t ?? '', e.carry > 0 ? 1 : 0, e.tech ?? '', e.techQueue.join(''), e.locked ? 1 : 0, e.cmdQueue.length);
-      parts.push(g.selUnits().map((u) => u.stance).join(''));
+      parts.push(g.selUnits().map((u) => u.stance).join(''), g.sel.map((id) => w.get(id)?.cargo?.length ?? 0).join('.'));
       parts.push(g.sel.map((id) => w.get(id)?.queue.length ?? 0).join('.'));
     }
     return parts.join('|');
@@ -662,7 +662,9 @@ export class Hud {
       else if (allQ.length) html += `<div class="prow"><span>${UNIT_ICON[(b.queue[0] ?? allQ[0])]} ${w.unitName(b.owner, b.queue[0] ?? allQ[0])}${allQ.length > 1 ? ` <em>+${allQ.length - 1}</em>` : ''}</span>${bar('data-progress')}</div>`;
       if (b.tech) html += `<div class="prow"><span>📜 ${TECHS[b.tech].name}${b.techQueue.length ? ` <em>+${b.techQueue.length}</em>` : ''}</span>${bar('data-tprogress', true)}</div>`;
       if (mine && allQ.length && b.trainT === 0 && w.popOf(g.me) >= w.popCap(g.me)) html += '<div class="sub warn">⚠️ Sin población: construí casas</div>';
-      if (!b.tech && b.progress >= 1 && b.ageT < 0 && !b.queue.length) html += `<div class="sub dim">${d.desc}</div>`;
+      const gcap = mine && b.progress >= 1 ? w.capacityOf(b) : 0;
+      if (gcap) html += `<div class="sub">🛡️ ${b.cargo?.length ?? 0}/${gcap} refugiados${b.cargo?.length ? `<span> · +${b.cargo.length} flechas</span>` : ''}</div>`;
+      if (!b.tech && b.progress >= 1 && b.ageT < 0 && !b.queue.length) html += `<div class="sub dim">${mine && d.trains ? 'Tocá el mapa para marcar el punto de reunión' : d.desc}</div>`;
       html += `</div><div class="acts">`;
       if (mine && b.progress >= 1) {
         // unidades arriba y, debajo de cada una, su mejora de línea
@@ -710,7 +712,8 @@ export class Hud {
         if (b.type === 'gate') html += `<button class="act ${b.locked ? 'on' : ''}" data-a="gatelock"><i>${b.locked ? '🔓' : '🔒'}</i><span>${b.locked ? 'Desbloquear' : 'Bloquear'}</span></button>`;
         if (b.queue.length || (b.ageT >= 0 && !b.queue.length)) html += `<button class="act" data-a="cancel"><i>↩️</i><span>Cancelar ${b.queue.length ? 'unidad' : 'edad'}</span></button>`;
         if (b.tech) html += `<button class="act" data-a="cancel:tech"><i>↩️</i><span>Cancelar invest.</span></button>`;
-        if (d.trains) html += `<button class="act" data-a="rally"><i>🚩</i><span>Reunión</span></button>`;
+        if (b.type === 'towncenter') html += `<button class="act ${pl.bell ? 'on' : ''}" data-a="bell"><i>🔔</i><span>${pl.bell ? 'A trabajar' : 'Campana'}</span></button>`;
+        if (b.cargo?.length) html += `<button class="act" data-a="unload"><i>🚪</i><span>Sacar (${b.cargo.length})</span></button>`;
       }
       if (mine) html += this.delBtn('Destruir');
       html += `</div>`;

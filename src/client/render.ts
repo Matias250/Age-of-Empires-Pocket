@@ -331,7 +331,15 @@ export class Renderer {
 
     for (const e of list) {
       if (e.cat === 'node') this.node(e, time);
-      else if (e.cat === 'building') this.building(e, time);
+      else if (e.cat === 'building') {
+        this.building(e, time);
+        if (e.cargo?.length) { // refugiados adentro
+          const bx = e.x + e.fw * TILE * 0.38, by = e.y - e.fh * TILE * 0.55;
+          g.fillStyle = 'rgba(20,14,8,.88)'; g.beginPath(); g.arc(bx, by, 7.5, 0, 7); g.fill();
+          g.strokeStyle = '#c9a227'; g.lineWidth = 1; g.stroke();
+          g.fillStyle = '#ffe08a'; g.font = 'bold 9px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(e.cargo.length), bx, by + 0.5);
+        }
+      }
       else this.unit(e, time);
     }
     this.drawRelics(this.exOf(pl.explored), time, vx0, vy0, vx1, vy1);

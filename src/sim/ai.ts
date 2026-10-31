@@ -425,19 +425,7 @@ export class AI {
     return this.island === 1;
   }
 
-  /** Casilla de agua navegable pegada a la costa de una región, lo más cerca posible de un punto */
-  private shoreSpot(region: number, near: { x: number; y: number }): { x: number; y: number } | null {
-    const w = this.w;
-    let best: { x: number; y: number } | null = null, bd = Infinity;
-    for (let y = 1; y < w.h - 1; y++) for (let x = 1; x < w.w - 1; x++) {
-      const i = y * w.w + x;
-      if (w.terrain[i] !== 1 || w.nav.solid[i]) continue;
-      if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => w.regionAt(x + dx, y + dy) === region && !w.tileSolid(x + dx, y + dy))) continue;
-      const d = Math.hypot(x * TILE - near.x, y * TILE - near.y);
-      if (d < bd) { bd = d; best = { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 }; }
-    }
-    return best;
-  }
+  private shoreSpot(region: number, near: { x: number; y: number }) { return this.w.shoreSpot(region, near); }
 
   /** Lleva el ejército en barco hasta la isla del objetivo: cargar, navegar y desembarcar */
   private amphibious(fighters: Entity[], target: Entity, tc: Entity) {

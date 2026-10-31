@@ -636,13 +636,15 @@ export class Game {
       }
     }
     const hit = this.pick(p.x, p.y);
-    if (this.mode === 'rally') {
-      for (const id of this.sel) { const b = w.get(id); if (b && b.cat === 'building') w.issue({ t: 'rally', p: this.me, bid: b.id, x: p.x, y: p.y }); }
+    const units = this.selUnits();
+    // edificios que entrenan elegidos + tocar el mapa (o un recurso) = punto de reunión
+    const trainers = units.length ? [] : this.sel.map((id) => w.get(id)).filter((b): b is Entity => !!b && b.cat === 'building' && b.owner === this.me && !!BUILDINGS[b.type as BuildingType].trains);
+    if (trainers.length && (!hit || hit.cat === 'node')) {
+      for (const b of trainers) w.issue({ t: 'rally', p: this.me, bid: b.id, x: p.x, y: p.y });
       this.mark(p.x, p.y, '#fff');
-      this.mode = 'normal';
+      this.hud.toast('🚩 Punto de reunión marcado');
       return;
     }
-    const units = this.selUnits();
     if (units.length && (rightClick || this.shouldCommand(hit, units))) {
       if (!hit) {
         const attack = this.mode === 'attack';
@@ -682,6 +684,8 @@ export class Game {
     if (hit.cat === 'node') return true;
     if (w.isEnemy(this.me, hit.owner)) return true;
     if (hit.cat === 'unit') return hit.owner === this.me && units.some((u) => w.canBoardInto(u, hit));
+    // soldados + tocar un castillo, centro urbano o torre propios = refugiarse adentro
+    if (hit.owner === this.me && units.some((u) => u.type !== 'villager' && w.canBoardInto(u, hit))) return true;
     // edificio propio o aliado
     const vills = units.some((u) => u.type === 'villager');
     if (!vills) return false;

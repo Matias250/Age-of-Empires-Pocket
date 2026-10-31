@@ -61,6 +61,8 @@ export interface Entity {
   home?: { x: number; y: number };
   /** infantería que va adentro (ariete) */
   cargo?: Entity[];
+  /** lo que hacía el aldeano antes de la campana */
+  prevOrder?: Order;
   // edificios
   locked?: boolean;
   techQueue: TechType[];
@@ -85,6 +87,8 @@ export interface Player {
   explored: Uint8Array; visible: Uint8Array;
   stats: { gathered: ResBag; kills: number; lost: number; trained: number; built: number; killValue: number; techValue: number };
   lastPopMsg: number; lastAttackMsg: number;
+  /** sonó la campana del centro urbano */
+  bell?: boolean;
   /** soldados sin dueño de las historias: nadie los ataca y se unen al héroe */
   neutral?: boolean;
   /** solo ejército: pierde cuando no le quedan unidades */
@@ -113,7 +117,8 @@ export type Command =
   | { t: 'chat'; p: number; to: 'all' | 'allies' | number; text: string }
   | { t: 'tribute'; p: number; to: number; res: Res; n: number }
   | { t: 'unload'; p: number; ids: number[] }
-  | { t: 'explore'; p: number; ids: number[] };
+  | { t: 'explore'; p: number; ids: number[] }
+  | { t: 'bell'; p: number };
 
 export type GEvent =
   | { t: 'shot'; x1: number; y1: number; x2: number; y2: number; kind: Projectile }
@@ -133,6 +138,8 @@ export type GEvent =
 const INTERACT = 14; // px de distancia para recolectar/construir/depositar
 const CELL = TILE * 4; // celda del índice espacial
 export const RAM_CAPACITY = 5; // infantería que entra en un ariete
+/** cuántas unidades se refugian en cada edificio (y cada una suma una flecha) */
+export const GARRISON: Partial<Record<BuildingType, number>> = { towncenter: 15, castle: 20, tower: 5 };
 
 export class World implements Grid {
   readonly w: number; readonly h: number;
@@ -528,6 +535,7 @@ export class World implements Grid {
       } else if (e.cat === 'building') {
         this.ownBuildings[e.owner].push(e);
         this.allBuildings.push(e);
+        if (e.cargo?.length) this.popCache[e.owner] += e.cargo.length;
         if (e.progress >= 1) {
           let pop = BUILDINGS[e.type as BuildingType].pop ?? 0;
           if (e.type === 'towncenter' && (tcSeen[e.owner] = (tcSeen[e.owner] ?? 0) + 1) > 1) pop = 25; // centros urbanos nuevos: +25
@@ -626,6 +634,19 @@ export class World implements Grid {
     if (tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return -1;
     return this.landReg[ty * this.w + tx];
   }
+  /** Casilla de agua navegable pegada a la costa de una región, lo más cerca posible de un punto */
+  shoreSpot(region: number, near: { x: number; y: number }): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null, bd = Infinity;
+    for (let y = 1; y < this.h - 1; y++) for (let x = 1; x < this.w - 1; x++) {
+      const i = y * this.w + x;
+      if (this.terrain[i] !== 1 || this.nav.solid[i]) continue;
+      const d = Math.hypot(x * TILE - near.x, y * TILE - near.y);
+      if (d >= bd) continue;
+      if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => this.regionAt(x + dx, y + dy) === region && !this.tileSolid(x + dx, y + dy))) continue;
+      bd = d; best = { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 };
+    }
+    return best;
+  }
   /** Región de tierra de una entidad (los edificios: la de su casilla) */
   regionOf(e: { x: number; y: number }): number { return this.regionAt(Math.floor(e.x / TILE), Math.floor(e.y / TILE)); }
 
@@ -675,8 +696,31 @@ export class World implements Grid {
         break;
       }
       case 'unload':
-        for (const u of own(c.ids)) this.unload(u);
+        for (const id of c.ids) { const e = this.entities.get(id); if (e && e.owner === c.p && e.cargo?.length) this.unload(e); }
         break;
+      case 'bell': {
+        // campana: los aldeanos corren a refugiarse; otro toque y vuelven a lo que hacían
+        if (pl.bell) {
+          pl.bell = false;
+          for (const b of this.buildingsOf(c.p)) if (b.cargo?.some((u) => u.type === 'villager')) this.unload(b);
+          for (const v of this.unitsOf(c.p, 'villager')) if (v.order?.t === 'board') { const back = v.prevOrder; v.prevOrder = undefined; this.setOrder(v, back); }
+          msg('🔔 A trabajar: los aldeanos vuelven a sus tareas');
+        } else {
+          pl.bell = true;
+          const shelters = this.buildingsOf(c.p, undefined, true).filter((b) => GARRISON[b.type as BuildingType]);
+          const room = new Map(shelters.map((b) => [b.id, this.capacityOf(b) - (b.cargo?.length ?? 0)]));
+          for (const v of this.unitsOf(c.p, 'villager')) {
+            const best = shelters.filter((b) => (room.get(b.id) ?? 0) > 0).sort((a, b2) => Math.hypot(a.x - v.x, a.y - v.y) - Math.hypot(b2.x - v.x, b2.y - v.y))[0];
+            if (!best) break;
+            room.set(best.id, room.get(best.id)! - 1);
+            v.prevOrder = v.order?.t === 'board' ? v.prevOrder : v.order;
+            v.cmdQueue = [];
+            this.setOrder(v, { t: 'board', target: best.id });
+          }
+          msg('🔔 ¡A refugiarse! Los aldeanos entran al centro urbano y las torres');
+        }
+        break;
+      }
       case 'explore':
         for (const u of own(c.ids)) if (World.canExplore(u)) { u.cmdQueue = []; this.setOrder(u, this.exploreOrder(u)); }
         break;
@@ -689,7 +733,17 @@ export class World implements Grid {
       case 'target': {
         const t = this.entities.get(c.target);
         if (!t) return;
-        for (const u of own(c.ids)) this.give(u, this.orderFor(u, t), c.queue);
+        const us = own(c.ids);
+        for (const u of us) this.give(u, this.orderFor(u, t), c.queue);
+        // barco de transporte lejos de la costa: se acerca solo a buscarlos
+        if (t.type === 'transport' && t.owner === c.p) {
+          const riders = us.filter((u) => u.order?.t === 'board');
+          if (riders.length) {
+            const cx = riders.reduce((n, u) => n + u.x, 0) / riders.length, cy = riders.reduce((n, u) => n + u.y, 0) / riders.length;
+            const spot = this.shoreSpot(this.regionOf(riders[0]), { x: cx, y: cy });
+            if (spot && Math.hypot(spot.x - t.x, spot.y - t.y) > TILE * 2) { t.cmdQueue = []; this.setOrder(t, { t: 'move', x: spot.x, y: spot.y }); }
+          }
+        }
         break;
       }
       case 'stance':
@@ -849,7 +903,7 @@ export class World implements Grid {
       return near;
     }
     if (this.isEnemy(u.owner, t.owner)) return this.canTarget(u, t) ? { t: 'attack', target: t.id } : near;
-    if (t.owner === u.owner && this.canBoardInto(u, t)) return { t: 'board', target: t.id };
+    if (t.owner === u.owner && (t.cat === 'unit' || !isVill) && this.canBoardInto(u, t)) return { t: 'board', target: t.id };
     if (t.cat === 'building' && isVill && this.players[t.owner].team === this.players[u.owner].team) {
       if (t.progress < 1 || t.hp < t.maxHp) return { t: 'build', target: t.id };
       if (t.type === 'farm' && t.owner === u.owner) {
@@ -866,6 +920,7 @@ export class World implements Grid {
       }
     }
     if (t.cat === 'building' && t.type === 'dock' && d.gathers && t.owner === u.owner && u.carry > 0) return { t: 'gather', target: u.lastNode, res: 'food', phase: 'return' };
+    if (t.cat === 'building' && t.owner === u.owner && this.canBoardInto(u, t)) return { t: 'board', target: t.id };
     return near;
   }
 
@@ -1009,9 +1064,24 @@ export class World implements Grid {
           const atk = bd.attack.atk + (this.hasTech(b.owner, 'murderholes') ? 3 : 0) + (this.hasTech(b.owner, 'fletching') ? 1 : 0);
           this.dealDamage(b, tgt, atk, 'pierce', undefined);
           this.events.push({ t: 'shot', x1: b.x, y1: b.y - 10, x2: tgt.x, y2: tgt.y, kind: 'arrow' });
+          // una flecha extra por cada unidad refugiada (los arqueros, dos), repartidas entre enemigos cercanos
+          const inside = b.cargo ?? [];
+          const extra = inside.reduce((n, u) => n + (UNITS[u.type as UnitType].cls === 'archer' ? 2 : 1), 0);
+          if (extra) {
+            const foes: Entity[] = [];
+            this.forUnitsNear(b.x, b.y, range + b.size * TILE, (e) => { if (e.hp > 0 && this.isEnemy(b.owner, e.owner) && this.edgeDist(e, b) + e.radius <= range) foes.push(e); });
+            for (let k = 0; k < extra && foes.length; k++) {
+              const f = foes[k % foes.length];
+              if (f.hp <= 0) continue;
+              this.dealDamage(b, f, Math.max(1, atk - 2), 'pierce', undefined);
+              if (k < 6) this.events.push({ t: 'shot', x1: b.x + (this.rng.next() - 0.5) * 20, y1: b.y - 12, x2: f.x, y2: f.y, kind: 'arrow' });
+            }
+          }
         } else b.cooldown = 0.3;
       }
     }
+    // los refugiados se curan de a poco
+    if (b.cargo?.length && this.tick % 10 === 0) for (const u of b.cargo) u.hp = Math.min(u.maxHp, u.hp + 1);
   }
 
   private spawnSpot(b: Entity, naval: Grid): { x: number; y: number } {
@@ -1154,6 +1224,11 @@ export class World implements Grid {
       case 'board': {
         const r = this.entities.get(o.target);
         if (!r || r.hp <= 0 || r.owner !== u.owner || (r.cargo?.length ?? 0) >= this.capacityOf(r)) { this.setOrder(u, undefined); break; }
+        if (r.cat === 'building') {
+          if (this.edgeDist(u, r) <= TILE * 0.9) { this.board(u, r); break; }
+          this.moveTo(u, r.x, r.y + r.fh * TILE * 0.5 + 10);
+          break;
+        }
         if (Math.hypot(u.x - r.x, u.y - r.y) <= r.radius + u.radius + (r.type === 'ram' ? 10 : TILE * 1.6)) { this.board(u, r); break; }
         this.moveTo(u, r.x, r.y);
         break;
@@ -1535,12 +1610,20 @@ export class World implements Grid {
   }
   /** ¿Esta unidad puede subir a ese ariete o barco de transporte? */
   canBoardInto(u: Entity, r: Entity): boolean {
-    if (u.id === r.id || u.cat !== 'unit' || r.cat !== 'unit') return false;
+    if (u.id === r.id || u.cat !== 'unit') return false;
+    if (r.cat === 'building') {
+      if (!GARRISON[r.type as BuildingType] || r.progress < 1 || r.owner !== u.owner) return false;
+      const d = UNITS[u.type as UnitType];
+      if (d.naval || d.cls === 'siege' || d.trade) return false;
+      return r.type === 'castle' || !d.mounted; // a caballo solo entran al castillo
+    }
+    if (r.cat !== 'unit') return false;
     if (r.type === 'ram') return World.canBoard(u);
     if (r.type === 'transport') return !UNITS[u.type as UnitType].naval;
     return false;
   }
   capacityOf(r: Entity): number {
+    if (r.cat === 'building') return GARRISON[r.type as BuildingType] ?? 0;
     if (r.type === 'ram') return RAM_CAPACITY;
     const d = UNITS[r.type as UnitType];
     return d.carries ? d.carries * (this.hasTech(r.owner, `up_${r.type as UnitType}`) ? 2 : 1) : 0;
@@ -1568,6 +1651,7 @@ export class World implements Grid {
       const spot = this.nearestFree(tx, ty, ship ? 4 : 12) ?? this.nearestFree(Math.floor(r.x / TILE), Math.floor(r.y / TILE), 4) ?? { x: Math.floor(r.x / TILE), y: Math.floor(r.y / TILE) };
       u.x = spot.x * TILE + TILE / 2; u.y = spot.y * TILE + TILE / 2;
       this.entities.set(u.id, u);
+      if (u.prevOrder) { const back = u.prevOrder; u.prevOrder = undefined; u.order = undefined; this.setOrder(u, back); }
     });
     this.dirty = true;
   }

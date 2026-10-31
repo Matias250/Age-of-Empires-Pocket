@@ -174,3 +174,57 @@ test('mapa Islas: cada reino en su isla y la IA cruza en barco de transporte', (
   }
   assert.ok(landed > 0, 'desembarcó en la isla enemiga');
 });
+
+test('refugiarse en torres y centro urbano: más flechas, se curan y salen', () => {
+  const { w, p, tc } = setup();
+  const tw = w.placeBuilding(0, 'tower', tc.tx + 6, tc.ty + 6, true);
+  const arch = Array.from({ length: 5 }, () => w.spawnUnit(0, 'archer', tw.x + 40, tw.y + 40));
+  arch.push(w.spawnUnit(0, 'knight', tw.x + 40, tw.y + 40));
+  w.issue({ t: 'target', p: 0, ids: arch.map((u) => u.id), target: tw.id });
+  for (let i = 0; i < 20 * 8; i++) w.step();
+  assert.equal(tw.cargo?.length, 5, 'entran 5 y el caballero no (solo al castillo)');
+  // un enemigo cerca recibe muchas más flechas
+  const foe = w.spawnUnit(1, 'champion', tw.x + 60, tw.y);
+  const hp0 = foe.hp;
+  for (let i = 0; i < 20 * 2; i++) w.step();
+  assert.ok(hp0 - foe.hp > 30, 'daño ' + (hp0 - foe.hp));
+  w.issue({ t: 'unload', p: 0, ids: [tw.id] });
+  w.step();
+  assert.equal(arch.filter((u) => w.get(u.id)).length, 6);
+  void p;
+});
+
+test('campana: los aldeanos se refugian y después vuelven a sus tareas', () => {
+  const { w, p, tc } = setup();
+  const vs = w.unitsOf(0, 'villager');
+  const tree = [...w.entities.values()].filter((e) => e.type === 'tree').sort((a, b) => Math.hypot(a.x - tc.x, a.y - tc.y) - Math.hypot(b.x - tc.x, b.y - tc.y))[0];
+  w.issue({ t: 'target', p: 0, ids: vs.map((v) => v.id), target: tree.id });
+  for (let i = 0; i < 20 * 3; i++) w.step();
+  w.issue({ t: 'bell', p: 0 });
+  for (let i = 0; i < 20 * 15; i++) w.step();
+  assert.equal(tc.cargo?.length, vs.length, 'todos adentro');
+  assert.equal(w.popOf(0) >= vs.length, true);
+  w.issue({ t: 'bell', p: 0 });
+  w.step();
+  assert.ok(vs.every((v) => w.get(v.id) && v.order?.t === 'gather'), 'vuelven a cortar madera');
+  assert.ok(!p.bell);
+});
+
+test('el barco de transporte lejos de la costa se acerca solo a buscar a los que llamás', () => {
+  const m = createMatch({ mode: 'skirmish', difficulty: 'easy', seed: 1, map: 'islotes', biome: 'templado' });
+  const w = m.world; w.players[0].explored.fill(1);
+  const tc = w.buildingsOf(0, 'towncenter')[0];
+  const shore = w.shoreSpot(w.regionOf(tc), tc);
+  // agua abierta a unas 8 casillas de esa costa
+  let far = null;
+  for (let r = 8; r < 14 && !far; r++) for (let a = 0; a < 6.28 && !far; a += 0.3) {
+    const x = Math.floor(shore.x / 32 + Math.cos(a) * r), y = Math.floor(shore.y / 32 + Math.sin(a) * r);
+    if (w.terrain[y * w.w + x] === 1 && !w.nav.solid[y * w.w + x]) far = { x: x * 32 + 16, y: y * 32 + 16 };
+  }
+  const ship = w.spawnUnit(0, 'transport', far.x, far.y);
+  const land = w.nearestFree(Math.floor(shore.x / 32), Math.floor(shore.y / 32), 4);
+  const us = [0, 1, 2].map(() => w.spawnUnit(0, 'militia', land.x * 32 + 16, land.y * 32 + 16));
+  w.issue({ t: 'target', p: 0, ids: us.map((u) => u.id), target: ship.id });
+  for (let i = 0; i < 20 * 20; i++) w.step();
+  assert.equal(ship.cargo?.length, 3);
+});

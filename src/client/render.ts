@@ -1179,8 +1179,8 @@ export class Renderer {
     if (d.naval) {
       this.ship(e, col, time);
       if (e.cargo?.length) {
-        g.fillStyle = 'rgba(20,14,8,.85)'; g.beginPath(); g.arc(x + 14, y - 22, 6.5, 0, 7); g.fill();
-        g.fillStyle = '#ffe08a'; g.font = 'bold 8px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(e.cargo.length), x + 14, y - 21.5);
+        g.fillStyle = 'rgba(20,14,8,.85)'; g.beginPath(); g.arc(x + 26, y - 30, 6.5, 0, 7); g.fill();
+        g.fillStyle = '#ffe08a'; g.font = 'bold 8px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(e.cargo.length), x + 26, y - 29.5);
       }
       return;
     }
@@ -1702,78 +1702,150 @@ export class Renderer {
     const t = e.type as UnitType;
     const x = e.x, y = e.y;
     const cg = t === 'cannongalleon';
-    const big = cg ? 1.35 : t === 'galleon' ? 1.1 : t === 'fireship' ? 1.05 : t === 'tradecog' ? 0.95 : t === 'transport' ? 1.08 : 0.8;
-    const roll = Math.sin(time * 2 + e.id) * 0.05;
+    const big = cg ? 1.6 : t === 'galleon' ? 1.38 : t === 'transport' ? 1.7 : t === 'fireship' ? 1.2 : t === 'tradecog' ? 1.15 : 0.95;
+    const L = 19 * big, Wd = (t === 'transport' ? 10 : 7.5) * big; // medio largo y medio ancho del casco (el transporte es más ancho, tipo barcaza)
+    const roll = Math.sin(time * 2 + e.id) * 0.04;
+    const moving = e.path.length > 0;
     g.save(); g.translate(x, y); g.rotate(e.facing + roll);
-    // estela
-    if (e.path.length) { g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-14 * big, -5); g.lineTo(-24 * big, -9); g.moveTo(-14 * big, 5); g.lineTo(-24 * big, 9); g.stroke(); }
-    g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(2, 3, 17 * big, 7 * big, 0, 0, 7); g.fill();
-    // casco
-    g.fillStyle = t === 'fireship' ? '#4e342e' : cg ? '#1f1a17' : '#8a6440';
-    g.beginPath(); g.moveTo(18 * big, 0); g.quadraticCurveTo(8 * big, -9 * big, -14 * big, -7 * big); g.lineTo(-14 * big, 7 * big); g.quadraticCurveTo(8 * big, 9 * big, 18 * big, 0); g.fill();
-    g.fillStyle = cg ? '#6d4c2e' : '#b08a5c'; g.beginPath(); g.moveTo(14 * big, 0); g.quadraticCurveTo(6 * big, -6 * big, -11 * big, -4.5 * big); g.lineTo(-11 * big, 4.5 * big); g.quadraticCurveTo(6 * big, 6 * big, 14 * big, 0); g.fill();
-    g.fillStyle = col; g.fillRect(-14 * big, -7 * big, 3, 14 * big);
+    // estela y ola de proa
+    if (moving) {
+      g.strokeStyle = 'rgba(255,255,255,0.45)'; g.lineWidth = 1.6; g.lineCap = 'round';
+      const ph = (time * 3) % 1;
+      for (const sd of [-1, 1]) {
+        g.beginPath(); g.moveTo(L * 0.9, sd * 2); g.quadraticCurveTo(L * 0.6, sd * (Wd + 3), L * 0.1, sd * (Wd + 4)); g.stroke();
+        g.beginPath(); g.moveTo(-L * 0.85, sd * Wd * 0.6); g.quadraticCurveTo(-L * 1.4, sd * (Wd + 2 + ph * 3), -L * 2, sd * (Wd + 6 + ph * 4)); g.stroke();
+      }
+    }
+    g.fillStyle = 'rgba(0,10,30,0.28)'; g.beginPath(); g.ellipse(2, 3, L * 1.05, Wd * 1.05, 0, 0, 7); g.fill();
+    // casco: proa en punta y popa cuadrada
+    const hullCol = t === 'fireship' ? '#3d2a20' : cg ? '#241c16' : t === 'transport' ? '#7a5a38' : '#8a6440';
+    const hull = (k: number) => {
+      g.beginPath(); g.moveTo(L * k, 0);
+      g.bezierCurveTo(L * 0.7 * k, -Wd * 1.05 * k, -L * 0.3 * k, -Wd * k, -L * 0.92 * k, -Wd * 0.82 * k);
+      g.lineTo(-L * k, -Wd * 0.55 * k); g.lineTo(-L * k, Wd * 0.55 * k); g.lineTo(-L * 0.92 * k, Wd * 0.82 * k);
+      g.bezierCurveTo(-L * 0.3 * k, Wd * k, L * 0.7 * k, Wd * 1.05 * k, L * k, 0); g.closePath();
+    };
+    const hg = g.createLinearGradient(0, -Wd, 0, Wd);
+    hg.addColorStop(0, shade(hullCol, -0.35)); hg.addColorStop(0.5, shade(hullCol, 0.08)); hg.addColorStop(1, shade(hullCol, -0.4));
+    g.fillStyle = hg; hull(1); g.fill();
+    g.strokeStyle = 'rgba(15,8,4,.8)'; g.lineWidth = 1.2; g.stroke();
+    // franja con el color del jugador a lo largo de la borda
+    g.save(); hull(1); g.clip();
+    g.strokeStyle = col; g.lineWidth = 2.2 * Math.min(1.3, big);
+    hull(0.93); g.stroke();
+    g.restore();
+    // cubierta de tablones
+    const deckCol = cg ? '#7a5634' : t === 'fireship' ? '#5a4030' : '#b8915e';
+    g.fillStyle = deckCol; hull(0.8); g.fill();
+    g.save(); hull(0.8); g.clip();
+    g.strokeStyle = 'rgba(60,36,16,.45)'; g.lineWidth = 0.6; g.beginPath();
+    for (let yy = -Wd; yy <= Wd; yy += 2.2) { g.moveTo(-L, yy); g.lineTo(L, yy); }
+    let sd = e.id * 97 + 13;
+    const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    for (let yy = -Wd; yy <= Wd; yy += 2.2) { const xx = -L + rr() * L * 2; g.moveTo(xx, yy); g.lineTo(xx, yy + 2.2); }
+    g.stroke();
+    g.fillStyle = 'rgba(255,240,210,.12)'; g.fillRect(-L, -Wd * 0.6, L * 2, Wd * 0.35);
+    g.restore();
+    // castillo de popa (barcos grandes)
+    if (t === 'galleon' || cg || t === 'transport' || t === 'tradecog') {
+      const sx = -L * 0.92, sw = L * (cg ? 0.42 : 0.34), sh = Wd * 1.25;
+      g.fillStyle = shade(hullCol, cg ? 0.05 : -0.05); g.fillRect(sx, -sh / 2, sw, sh);
+      g.strokeStyle = 'rgba(15,8,4,.75)'; g.lineWidth = 0.9; g.strokeRect(sx, -sh / 2, sw, sh);
+      g.fillStyle = shade(deckCol, 0.05); g.fillRect(sx + 1.2, -sh / 2 + 1.2, sw - 2.4, sh - 2.4);
+      g.strokeStyle = cg ? '#c9a227' : '#4e3420'; g.lineWidth = 0.9; g.strokeRect(sx + 1.2, -sh / 2 + 1.2, sw - 2.4, sh - 2.4);
+      g.fillStyle = '#ffd36b'; g.fillRect(sx + 0.4, -1.4, 1, 1.1); g.fillRect(sx + 0.4, 0.5, 1, 1.1); // farolitos
+    }
     if (cg) {
-      // franja dorada, castillo de popa y cañones asomando por las troneras
-      g.strokeStyle = '#c9a227'; g.lineWidth = 1.2;
-      g.beginPath(); g.moveTo(16 * big, 0); g.quadraticCurveTo(8 * big, -7.6 * big, -13 * big, -6 * big); g.moveTo(16 * big, 0); g.quadraticCurveTo(8 * big, 7.6 * big, -13 * big, 6 * big); g.stroke();
-      g.fillStyle = '#3a2a1c'; g.fillRect(-13 * big, -5 * big, 7 * big, 10 * big);
-      g.fillStyle = '#c9a227'; g.fillRect(-13 * big, -5 * big, 7 * big, 1.2); g.fillRect(-13 * big, 5 * big - 1.2, 7 * big, 1.2);
-      g.fillStyle = '#ffd36b'; g.fillRect(-12 * big, -1.2, 1.6, 1.2); g.fillRect(-12 * big, 0.6, 1.6, 1.2);
+      g.strokeStyle = '#c9a227'; g.lineWidth = 1;
+      hull(0.97); g.stroke();
       const since = (this.w.tick - e.lastAtk) / 20;
-      const rec = since >= 0 && since < 0.3 ? 1.5 : 0;
-      for (const sd of [-1, 1]) for (let i = -7; i <= 9; i += 4) {
-        g.fillStyle = '#111'; g.fillRect(i * big - 1.4, sd * 7.2 * big - 1.1, 2.8, 2.2);
-        g.fillStyle = '#4a4a4a'; g.fillRect(i * big - 0.9, sd * (7.2 * big + 1) - (sd < 0 ? 3.2 - rec : rec), 1.8, 3.2);
+      const rec = since >= 0 && since < 0.3 ? 1.6 : 0;
+      for (const side of [-1, 1]) for (let i = -L * 0.35; i <= L * 0.55; i += L * 0.18) {
+        g.fillStyle = '#111'; g.fillRect(i - 1.5, side * Wd * 0.93 - 1.2, 3, 2.4);
+        g.fillStyle = '#4a4a4a'; g.fillRect(i - 1, side * (Wd * 0.93 + 1.2) - (side < 0 ? 3.6 - rec : rec), 2, 3.6);
       }
       if (since >= 0 && since < 0.5) {
-        g.fillStyle = `rgba(200,200,200,${0.7 * (1 - since / 0.5)})`;
-        for (let i = -7; i <= 9; i += 4) for (const sd of [-1, 1]) { g.beginPath(); g.arc(i * big, sd * (11 + since * 14), 2.5 + since * 6, 0, 7); g.fill(); }
+        g.fillStyle = `rgba(210,210,210,${0.7 * (1 - since / 0.5)})`;
+        for (let i = -L * 0.35; i <= L * 0.55; i += L * 0.18) for (const side of [-1, 1]) { g.beginPath(); g.arc(i, side * (Wd + 4 + since * 16), 2.6 + since * 7, 0, 7); g.fill(); }
       }
     }
     if (t === 'tradecog') {
-      // barca mercante: cajones y barriles en cubierta
-      g.fillStyle = '#a07a50'; g.fillRect(-9 * big, -4, 6, 5); g.fillRect(-2 * big, 0, 6, 5);
-      g.fillStyle = '#7a5634'; g.beginPath(); g.arc(6 * big, -2, 3, 0, 7); g.fill();
-      if (e.carry > 0) { g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(-4 * big, -1, 2.5, 0, 7); g.fill(); }
+      g.fillStyle = '#a07a50'; g.strokeStyle = '#5a3d22'; g.lineWidth = 0.7;
+      for (const [cx, cy] of [[-2, -3], [4, 2], [9, -2]]) { g.fillRect(cx * big, cy, 5, 4.5); g.strokeRect(cx * big, cy, 5, 4.5); }
+      g.fillStyle = '#6d4c30'; g.beginPath(); g.ellipse(-5 * big, 3, 2.6, 2.6, 0, 0, 7); g.fill();
+      if (e.carry > 0) { g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(4 * big + 2.5, 4.3, 2.2, 0, 7); g.fill(); }
     }
     if (t === 'galleon') {
-      // galeón: cubierta clara y arqueros en cubierta
-      g.fillStyle = '#f0c8a0'; for (const i of [-4, 4]) { g.beginPath(); g.arc(i * big, 0, 1.8, 0, 7); g.fill(); }
-      g.fillStyle = col; for (const i of [-4, 4]) { g.beginPath(); g.arc(i * big, 0, 1, 0, 7); g.fill(); }
+      for (const i of [-3, 3, 9]) { g.fillStyle = col; g.beginPath(); g.arc(i * big, -Wd * 0.45, 1.6, 0, 7); g.arc(i * big, Wd * 0.45, 1.6, 0, 7); g.fill(); g.fillStyle = '#e9bf98'; g.beginPath(); g.arc(i * big + 0.6, -Wd * 0.45, 0.9, 0, 7); g.arc(i * big + 0.6, Wd * 0.45, 0.9, 0, 7); g.fill(); }
     }
     if (t === 'transport') {
-      // barco de transporte: cubierta ancha con baranda, rampa en la proa y la gente a bordo
-      g.strokeStyle = '#5a3e22'; g.lineWidth = 1.2;
-      g.beginPath(); g.moveTo(13 * big, 0); g.quadraticCurveTo(6 * big, -6 * big, -11 * big, -5 * big); g.moveTo(13 * big, 0); g.quadraticCurveTo(6 * big, 6 * big, -11 * big, 5 * big); g.stroke();
-      g.fillStyle = '#6f4e2c'; g.fillRect(12 * big, -2.5, 5 * big, 5); // rampa
-      g.strokeStyle = 'rgba(60,40,20,.6)'; g.lineWidth = 0.6; g.beginPath(); for (let i = -9; i < 12; i += 3) { g.moveTo(i * big, -4.5 * big); g.lineTo(i * big, 4.5 * big); } g.stroke();
+      // rampa en la proa y la gente a bordo
+      g.fillStyle = '#6f4e2c'; g.fillRect(L * 0.72, -3, L * 0.32, 6); g.strokeStyle = '#3e2a16'; g.lineWidth = 0.7; g.strokeRect(L * 0.72, -3, L * 0.32, 6);
       const n = e.cargo?.length ?? 0;
       for (let k = 0; k < Math.min(n, 10); k++) {
-        const px = (-7 + (k % 5) * 4) * big, py = (k < 5 ? -1.8 : 1.8) * big;
-        g.fillStyle = col; g.beginPath(); g.arc(px, py, 1.7, 0, 7); g.fill();
-        g.fillStyle = '#e9bf98'; g.beginPath(); g.arc(px + 0.6, py, 0.9, 0, 7); g.fill();
+        const px = (-L * 0.45 + (k % 5) * L * 0.24), py = (k < 5 ? -1 : 1) * Wd * 0.38;
+        g.fillStyle = shade(col, -0.2); g.beginPath(); g.arc(px, py, 2.2, 0, 7); g.fill();
+        g.fillStyle = '#e9bf98'; g.beginPath(); g.arc(px + 0.7, py, 1.2, 0, 7); g.fill();
       }
     }
-    if (t === 'fishship') { g.strokeStyle = 'rgba(240,240,240,0.6)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(-10, 0); g.lineTo(-20, 6); g.stroke(); }
+    if (t === 'fishship') {
+      g.strokeStyle = 'rgba(235,235,225,0.7)'; g.lineWidth = 0.6;
+      g.beginPath(); for (let k = 0; k < 4; k++) { g.moveTo(-L * 0.9, -2 + k * 1.5); g.lineTo(-L * 1.6, -5 + k * 3); } g.stroke();
+      g.fillStyle = 'rgba(235,235,225,0.4)'; g.beginPath(); g.arc(-L * 1.6, 0, 4, 0, 7); g.fill();
+    }
     g.restore();
-    // vela (no rota con el barco, siempre hacia arriba)
-    const masts = cg ? [-8, 0, 8] : t === 'galleon' ? [-5, 5] : t === 'transport' ? [-7] : [0];
+    // mástiles y velas (siempre verticales en pantalla)
+    const masts = cg ? [-0.5, 0.05, 0.5] : t === 'galleon' ? [-0.35, 0.3] : t === 'transport' ? [-0.15] : t === 'fishship' ? [0.1] : [0];
+    const fx = Math.cos(e.facing), fy = Math.sin(e.facing);
+    const H = 24 * Math.min(1.35, big);
     for (const m of masts) {
-      const mx = x + Math.cos(e.facing) * m * big, my = y + Math.sin(e.facing) * m * big;
-      g.strokeStyle = '#4e342e'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(mx, my); g.lineTo(mx, my - 20 * big); g.stroke();
-      const billow = Math.sin(time * 3 + e.id) * 1.5;
-      g.fillStyle = t === 'fireship' ? '#3a2a20' : cg ? '#d9caa4' : '#f8f3e6';
-      g.beginPath(); g.moveTo(mx - 7 * big, my - 18 * big); g.quadraticCurveTo(mx + billow, my - 13 * big, mx - 7 * big, my - 6 * big); g.lineTo(mx + 7 * big, my - 6 * big); g.quadraticCurveTo(mx + 3 + billow, my - 13 * big, mx + 7 * big, my - 18 * big); g.closePath(); g.fill();
-      if (cg) { g.fillStyle = col; g.fillRect(mx - 1.2, my - 18 * big, 2.4, 12 * big); g.fillRect(mx - 7 * big, my - 13 * big, 14 * big, 2.4); } else { g.fillStyle = col; g.fillRect(mx - 7 * big, my - 13 * big, 14 * big, 2.5); }
-      g.beginPath(); g.moveTo(mx, my - 20 * big); g.lineTo(mx + 7, my - 18 * big); g.lineTo(mx, my - 16 * big); g.fill();
+      const mx = x + fx * m * L, my = y + fy * m * L;
+      g.strokeStyle = '#3e2a1e'; g.lineWidth = 2; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(mx, my); g.lineTo(mx, my - H - 3); g.stroke();
+      // jarcias
+      g.strokeStyle = 'rgba(40,28,18,.55)'; g.lineWidth = 0.6;
+      g.beginPath(); g.moveTo(mx, my - H - 2); g.lineTo(x + fx * L, y + fy * L); g.moveTo(mx, my - H - 2); g.lineTo(x - fx * L * 0.9, y - fy * L * 0.9); g.stroke();
+      const billow = Math.sin(time * 2.6 + e.id + m) * 1.6;
+      const sw2 = 8.5 * Math.min(1.4, big), top = my - H, bot = my - H * 0.32;
+      if (t === 'fishship') {
+        // vela latina triangular
+        g.fillStyle = '#efe6d2';
+        g.beginPath(); g.moveTo(mx, top); g.quadraticCurveTo(mx + 9 + billow, (top + bot) / 2, mx + 1, bot); g.lineTo(mx - 9, bot - 1); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(80,60,40,.5)'; g.lineWidth = 0.7; g.stroke();
+      } else {
+        // verga y vela cuadrada con costuras y sombra
+        g.strokeStyle = '#3e2a1e'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(mx - sw2 - 1.5, top); g.lineTo(mx + sw2 + 1.5, top); g.stroke();
+        const sailCol = t === 'fireship' ? '#4a3428' : cg ? '#e4d6b0' : '#f6efdd';
+        const sg = g.createLinearGradient(mx - sw2, 0, mx + sw2, 0);
+        sg.addColorStop(0, shade(sailCol, -0.18)); sg.addColorStop(0.45, sailCol); sg.addColorStop(1, shade(sailCol, -0.25));
+        g.fillStyle = sg;
+        g.beginPath(); g.moveTo(mx - sw2, top + 1);
+        g.quadraticCurveTo(mx - sw2 - 2 + billow * 0.4, (top + bot) / 2, mx - sw2 + 1, bot);
+        g.quadraticCurveTo(mx + billow, bot + 3, mx + sw2 - 1, bot);
+        g.quadraticCurveTo(mx + sw2 + 2 + billow * 0.4, (top + bot) / 2, mx + sw2, top + 1);
+        g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(70,52,34,.45)'; g.lineWidth = 0.7; g.stroke();
+        g.save(); g.clip();
+        g.strokeStyle = 'rgba(90,70,50,.22)'; g.lineWidth = 0.6; g.beginPath();
+        for (let xx = mx - sw2 + 3.5; xx < mx + sw2; xx += 3.5) { g.moveTo(xx, top); g.lineTo(xx + billow * 0.3, bot + 3); } g.stroke();
+        // emblema: franja o cruz con el color del jugador
+        g.fillStyle = col; g.globalAlpha = 0.9;
+        if (cg) { g.fillRect(mx - 1.4, top, 2.8, bot - top + 3); g.fillRect(mx - sw2, (top + bot) / 2 - 1.4, sw2 * 2, 2.8); }
+        else g.fillRect(mx - sw2, (top + bot) / 2 - 1.5, sw2 * 2, 3);
+        g.globalAlpha = 1;
+        g.restore();
+      }
+      // banderín en la punta, flameando
+      const wv = Math.sin(time * 6 + e.id) * 1.5;
+      g.fillStyle = col; g.beginPath(); g.moveTo(mx, my - H - 3); g.quadraticCurveTo(mx + 5, my - H - 4 + wv, mx + 9, my - H - 1.5 + wv); g.lineTo(mx, my - H); g.closePath(); g.fill();
     }
     if (t === 'fireship') {
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         const fl = Math.sin(time * 9 + i * 2 + e.id) * 2;
         g.fillStyle = i % 2 ? 'rgba(255,170,40,0.9)' : 'rgba(255,90,20,0.85)';
-        g.beginPath(); g.arc(x + Math.cos(e.facing) * 14 + fl, y + Math.sin(e.facing) * 14 - 3 - i * 2, 3 - i * 0.6, 0, 7); g.fill();
+        g.beginPath(); g.arc(x + fx * L * 0.85 + fl, y + fy * L * 0.85 - 3 - i * 2.4, 3.4 - i * 0.6, 0, 7); g.fill();
       }
+      g.fillStyle = 'rgba(80,80,80,.35)'; g.beginPath(); g.arc(x + fx * L * 0.8 + Math.sin(time * 2) * 2, y + fy * L * 0.8 - 14, 4, 0, 7); g.fill();
     }
   }
 

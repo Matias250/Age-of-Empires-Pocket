@@ -190,7 +190,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
   },
   transport: {
     name: 'Barco de transporte', hp: 150, atk: 0, atkType: 'melee', cooldown: 1, range: 4, armorMelee: 0, armorPierce: 4,
-    speed: 64, radius: 12, sight: 5, cost: { wood: 125 }, trainTime: 15, age: 2, cls: 'ship', naval: true, carries: 5,
+    speed: 64, radius: 17, sight: 5, cost: { wood: 125 }, trainTime: 15, age: 2, cls: 'ship', naval: true, carries: 5,
     desc: 'Cruza unidades de tierra por el agua: lleva 5 (10 con su mejora). Si se hunde, se hunden con él.',
   },
   tradecog: {
@@ -200,7 +200,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
   },
   galleon: {
     name: 'Galeón', hp: 140, atk: 7, atkType: 'pierce', cooldown: 2.5, range: 6 * T, armorMelee: 0, armorPierce: 6,
-    speed: 66, radius: 14, sight: 8, cost: { wood: 90, gold: 30 }, trainTime: 20, age: 2, cls: 'ship', naval: true,
+    speed: 66, radius: 16, sight: 8, cost: { wood: 90, gold: 30 }, trainTime: 20, age: 2, cls: 'ship', naval: true,
     bonus: { ship: 4, building: 2 }, projectile: 'arrow', desc: 'Barco de guerra que dispara a distancia.',
   },
   fireship: {
@@ -210,7 +210,7 @@ export const UNITS: Record<UnitType, UnitDef> = {
   },
   cannongalleon: {
     name: 'Galeón cañonero', hp: 120, atk: 35, atkType: 'pierce', cooldown: 9, range: 12 * T, armorMelee: 0, armorPierce: 6,
-    speed: 50, radius: 15, sight: 12, cost: { wood: 200, gold: 150 }, trainTime: 30, age: 4, cls: 'ship', naval: true,
+    speed: 50, radius: 18, sight: 12, cost: { wood: 200, gold: 150 }, trainTime: 30, age: 4, cls: 'ship', naval: true,
     gunpowder: true, requires: 'chemistry', bonus: { building: 40 }, projectile: 'ball', desc: 'Bombardea la costa desde muy lejos.',
   },
   // ---------------------------------------------------------------- únicas
